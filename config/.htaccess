@@ -1,0 +1,4 @@
+# Sécurité : ces fichiers de configuration sont inclus par l'application,
+# jamais appelés directement depuis le navigateur. On bloque tout accès web.
+Require all denied
+Options -Indexes

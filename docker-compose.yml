@@ -1,0 +1,59 @@
+# ============================================================================
+#  DÉPLOIEMENT — Groupe Helisce
+#  ----------------------------------------------------------------------------
+#  TOUT EST DÉJÀ RENSEIGNÉ : vous n'avez AUCUNE variable à créer dans Dokploy.
+#  Cliquez simplement sur « Deploy ». Le site fonctionne immédiatement.
+#
+#  Vous pourrez personnaliser plus tard (mots de passe, domaine) en modifiant
+#  les valeurs ci-dessous, puis en redéployant.
+#
+#  Les volumes « db_data » et « uploads_data » sont PERSISTANTS : vos clients,
+#  factures et fichiers survivent à tous les redéploiements.
+# ============================================================================
+services:
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy      # on attend que la base soit VRAIMENT prête
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: traiteur_db
+      DB_USER: traiteur
+      DB_PASS: Helisce2026Traiteur
+      # Adresse publique du site — à renseigner après avoir branché votre domaine.
+      # Laissez vide au premier déploiement : l'application la détecte toute seule.
+      SITE_URL: "${SITE_URL:-}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+    volumes:
+      - uploads_data:/var/www/html/uploads     # logos, tampons, photos — PERSISTANT
+    expose:
+      - "80"
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: traiteur_db
+      MARIADB_USER: traiteur
+      MARIADB_PASSWORD: Helisce2026Traiteur
+      MARIADB_ROOT_PASSWORD: RootHelisce2026Base
+    volumes:
+      - db_data:/var/lib/mysql                 # LA BASE — le cœur à protéger
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  db_data:
+  uploads_data:

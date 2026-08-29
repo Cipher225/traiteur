@@ -1,0 +1,485 @@
+/* ============================================================
+   LIQUID GLASS — Système de design iOS 26
+   Tokens partagés (site public + espace admin)
+   ============================================================ */
+:root {
+  /* ===== Palette « Site public » — Marine profond & Or ===== */
+  --navy-900: #060f22;   /* fond de page, marine très sombre */
+  --navy-800: #0a1f44;   /* marine principal */
+  --navy-700: #0e2952;   /* marine moyen */
+  --navy-600: #143264;   /* marine clair */
+  --navy-card: #0d2148;  /* marine des cartes/blocs */
+
+  --bg: #060f22;
+  --bg-2: #0a1f44;
+
+  --ink: #e7ecf5;                    /* blanc cassé, jamais blanc pur */
+  --ink-dim: #aab6cc;                /* secondaire adouci */
+  --ink-faint: #6b7a96;              /* discret, légendes */
+
+  --gold: #d4a526;                   /* or principal */
+  --gold-2: #b8870f;                 /* or profond (dégradés, ombres) */
+  --gold-light: #f0c14b;             /* or clair (survol, highlights) */
+  --gold-deep: #b8870f;
+  --gold-halo: rgba(212, 165, 38, 0.25);
+
+  --teal: #1fd1a5;
+  --violet: #7c5cff;
+  --rose: #ff6bb3;
+  --danger: #e24b4a;
+
+  /* Verre — posé sur le marine */
+  --glass: rgba(20, 50, 100, 0.38);
+  --glass-strong: rgba(13, 33, 72, 0.72);
+  --glass-border: rgba(212, 165, 38, 0.16);
+  --glass-border-soft: rgba(231, 236, 245, 0.09);
+  --glass-blur: blur(26px) saturate(160%);
+  --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+
+  /* Rayons généreux (16-22px) & rythme */
+  --r-xl: 22px;
+  --r-lg: 20px;
+  --r-md: 16px;
+  --r-sm: 12px;
+  --r-pill: 999px;
+
+  --font-display: 'Sora', -apple-system, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --font-body: -apple-system, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  --ease-ios: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   MODE CLAIR — palette « Espace connecté » (marine & or, version claire)
+   ============================================================ */
+[data-theme="light"] {
+  --bg: #f4f6f9;
+  --bg-2: #ffffff;
+
+  --ink: #1a2744;        /* texte principal */
+  --ink-dim: #4a5568;    /* secondaire */
+  --ink-faint: #8a9ab5;  /* discret */
+  --line: #e8ecf2;
+  --line-2: #c4cdd9;
+
+  --gold: #c8960c;       /* or ambré de l'espace connecté */
+  --gold-2: #e8b423;     /* or clair */
+  --gold-light: #e8b423;
+  --gold-halo: rgba(200, 150, 12, 0.22);
+
+  --glass: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-border: #e8ecf2;
+  --glass-border-soft: #f0f3f7;
+  --glass-blur: blur(0px);
+  --glass-shadow: 0 6px 24px rgba(26, 39, 68, 0.07);
+  --glass-inset: none;
+}
+[data-theme="light"] .aurora {
+  background:
+    radial-gradient(ellipse 80% 55% at 80% -10%, rgba(200, 150, 12, 0.07), transparent 62%),
+    #f4f6f9;
+}
+[data-theme="light"] .aurora::before,
+[data-theme="light"] .aurora::after { display: none; }
+[data-theme="light"] .input { background: #fafbfc; border-color: var(--line); }
+[data-theme="light"] .input:focus { background: #fff; border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-halo); }
+[data-theme="light"] .side-nav a:hover,
+[data-theme="light"] tbody tr:hover { background: #fafbfc; }
+[data-theme="light"] .stat .s-ico,
+[data-theme="light"] .thumb-ph,
+[data-theme="light"] .param-group .pg-count { background: #f4f6f9; }
+[data-theme="light"] .switch input { background: var(--line-2); }
+[data-theme="light"] .btn-glass { color: var(--ink); background: #fff; border: 1px solid var(--line); }
+[data-theme="light"] .topbar,
+[data-theme="light"] .tabbar { box-shadow: 0 6px 24px rgba(26, 39, 68, 0.07); }
+
+/* Bouton bascule de thème */
+.theme-toggle {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  cursor: pointer; font-size: 17px; flex-shrink: 0;
+  background: var(--glass-strong); border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  transition: transform 0.3s var(--ease-ios), background 0.3s;
+}
+.theme-toggle:hover { transform: translateY(-2px) rotate(-15deg); }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+img { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ---------- Fond aurora animé ---------- */
+.aurora {
+  position: fixed; inset: 0; z-index: -2; overflow: hidden;
+  background:
+    radial-gradient(ellipse 90% 60% at 70% -10%, rgba(212, 165, 38, 0.13), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 15% 110%, rgba(20, 50, 100, 0.55), transparent 62%),
+    var(--bg);
+}
+.aurora::before, .aurora::after {
+  content: ''; position: absolute; border-radius: 50%; filter: blur(110px);
+  animation: drift 26s var(--ease-ios) infinite alternate;
+}
+.aurora::before {
+  width: 55vw; height: 55vw; top: -18vw; right: -12vw;
+  background: radial-gradient(circle, rgba(212, 165, 38, 0.18), transparent 65%);
+}
+.aurora::after {
+  width: 48vw; height: 48vw; bottom: -20vw; left: -10vw;
+  background: radial-gradient(circle, rgba(20, 50, 100, 0.55), transparent 65%);
+  animation-delay: -13s;
+}
+@keyframes drift {
+  to { transform: translate(6vw, 5vh) scale(1.15); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aurora::before, .aurora::after { animation: none; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ---------- Surfaces en verre ---------- */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  border-radius: var(--r-lg);
+}
+.glass-strong {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+  border-radius: var(--r-lg);
+}
+
+/* ---------- Boutons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 26px; border-radius: var(--r-pill); border: 1px solid transparent;
+  font-weight: 600; font-size: 15px; cursor: pointer; white-space: nowrap;
+  transition: transform 0.35s var(--ease-ios), box-shadow 0.35s var(--ease-ios), background 0.3s;
+}
+.btn:active { transform: scale(0.96); }
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold-light), var(--gold));
+  color: #0a1f44;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(212, 165, 38, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(212, 165, 38, 0.42), inset 0 1px 0 rgba(255,255,255,0.4); }
+.btn-glass {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-border);
+  color: var(--ink);
+  box-shadow: var(--glass-inset);
+}
+.btn-glass:hover { background: rgba(255, 255, 255, 0.14); transform: translateY(-2px); }
+.btn-danger { background: rgba(255, 107, 107, 0.14); border-color: rgba(255, 107, 107, 0.35); color: #ffb1b1; }
+.btn-danger:hover { background: rgba(255, 107, 107, 0.24); }
+.btn-sm { padding: 8px 16px; font-size: 13px; }
+
+/* ---------- Champs ---------- */
+.field { display: flex; flex-direction: column; gap: 7px; }
+.field label { font-size: 13px; font-weight: 600; color: var(--ink-dim); letter-spacing: 0.02em; }
+.input {
+  width: 100%; padding: 13px 16px; border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--ink); outline: none;
+  transition: border-color 0.25s, background 0.25s, box-shadow 0.25s;
+}
+.input::placeholder { color: var(--ink-faint); }
+.input:focus {
+  border-color: rgba(212, 165, 38, 0.65);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 4px rgba(212, 165, 38, 0.25);
+}
+select.input option { background: var(--bg-2); }
+textarea.input { resize: vertical; min-height: 110px; }
+
+/* ---------- Badges & divers ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--r-pill);
+  font-size: 12px; font-weight: 600;
+  background: var(--glass-strong); border: 1px solid var(--glass-border);
+}
+.badge-gold { background: rgba(212, 165, 38, 0.14); border-color: rgba(212, 165, 38, 0.32); color: var(--gold); }
+.badge-teal { background: rgba(62, 219, 193, 0.12); border-color: rgba(62, 219, 193, 0.3); color: var(--teal); }
+.badge-violet { background: rgba(139, 124, 246, 0.14); border-color: rgba(139, 124, 246, 0.35); color: #b9aefc; }
+.badge-rose { background: rgba(244, 114, 182, 0.12); border-color: rgba(244, 114, 182, 0.3); color: var(--rose); }
+.badge-danger { background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.3); color: #ffb1b1; }
+
+.flash {
+  padding: 14px 18px; border-radius: var(--r-md); margin-bottom: 20px;
+  background: rgba(62, 219, 193, 0.1); border: 1px solid rgba(62, 219, 193, 0.35); color: var(--teal);
+  font-weight: 500; font-size: 14px;
+}
+.flash.error { background: rgba(255, 107, 107, 0.1); border-color: rgba(255, 107, 107, 0.35); color: #ffb1b1; }
+
+::selection { background: rgba(212, 165, 38, 0.32); }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; border-radius: 6px; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); }
+
+/* ============================================================
+   ✦✦ COUCHE DE RAFFINEMENT — texture, lumière, matière
+   ============================================================ */
+
+/* --- Grain fin : donne de la matière au marine (effet « imprimé ») --- */
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  opacity: .035; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-theme="light"] body::after { opacity: .02; }
+
+/* --- Filets dorés dégradés : motif de luxe récurrent --- */
+.hairline {
+  height: 1px; border: 0; margin: 0;
+  background: linear-gradient(90deg, transparent, rgba(212,165,38,.55) 20%, rgba(240,193,75,.85) 50%, rgba(212,165,38,.55) 80%, transparent);
+}
+
+/* --- Boutons or : relief, profondeur et éclat qui balaie --- */
+.btn-gold { position: relative; overflow: hidden; isolation: isolate; }
+.btn-gold::before {
+  content: ''; position: absolute; inset: 0 0 auto; height: 45%;
+  background: linear-gradient(180deg, rgba(255,255,255,.42), transparent);
+  pointer-events: none;
+}
+.btn-gold::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: skewX(-18deg); transition: left .65s cubic-bezier(0.4,0,0.2,1);
+  pointer-events: none;
+}
+.btn-gold:hover::after { left: 125%; }
+
+/* --- Boutons verre : liseré doré au survol --- */
+.btn-glass { transition: all .3s cubic-bezier(0.4,0,0.2,1); }
+.btn-glass:hover { border-color: rgba(212,165,38,.45); box-shadow: 0 6px 20px rgba(212,165,38,.16); }
+
+/* --- Cartes : lumière rasante sur l'arête supérieure --- */
+.glass { position: relative; }
+.glass::before {
+  content: ''; position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,165,38,.30), transparent);
+  pointer-events: none;
+}
+[data-theme="light"] .glass::before { background: linear-gradient(90deg, transparent, rgba(200,150,12,.22), transparent); }
+
+/* --- Champs : anneau doré au focus --- */
+.input { transition: border-color .25s, box-shadow .25s, background .25s; }
+.input:focus { border-color: rgba(212,165,38,.6); box-shadow: 0 0 0 4px rgba(212,165,38,.16); outline: none; }
+
+/* --- Barre de défilement assortie --- */
+* { scrollbar-width: thin; scrollbar-color: rgba(212,165,38,.45) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(6,15,34,.35); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(212,165,38,.65), rgba(184,135,15,.55));
+  border-radius: 999px; border: 2px solid transparent; background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #f0c14b, #d4a526); background-clip: padding-box; }
+[data-theme="light"] ::-webkit-scrollbar-track { background: #eef1f6; }
+
+/* --- Sélection de texte --- */
+::selection { background: rgba(212,165,38,.32); color: inherit; }
+
+/* ============================================================
+   ✦ VERROU DE PALETTE — le site public garde son ambiance
+   marine & or premium, quel que soit le thème mémorisé.
+   ============================================================ */
+[data-space="public"],
+[data-space="public"][data-theme="light"],
+[data-space="public"][data-theme="dark"] {
+  --bg: #060f22;
+  --bg-2: #0a1f44;
+  --ink: #e7ecf5;
+  --ink-dim: #aab6cc;
+  --ink-faint: #6b7a96;
+  --gold: #d4a526;
+  --gold-2: #b8870f;
+  --gold-light: #f0c14b;
+  --gold-halo: rgba(212, 165, 38, 0.25);
+  --glass: rgba(20, 50, 100, 0.38);
+  --glass-strong: rgba(13, 33, 72, 0.72);
+  --glass-border: rgba(212, 165, 38, 0.16);
+  --glass-border-soft: rgba(231, 236, 245, 0.09);
+  --glass-blur: blur(26px) saturate(160%);
+  --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+/* Le fond et les blocs restent marine sur les pages publiques */
+[data-space="public"] .aurora {
+  background:
+    radial-gradient(ellipse 85% 55% at 75% -8%, rgba(212, 165, 38, 0.10), transparent 60%),
+    radial-gradient(ellipse 75% 60% at 12% 108%, #0e2952, transparent 62%),
+    linear-gradient(178deg, #060f22 0%, #0a1f44 55%, #0e2952 100%) !important;
+}
+[data-space="public"] .aurora::before,
+[data-space="public"] .aurora::after { display: block; }
+[data-space="public"] .panel,
+[data-space="public"] .glass,
+[data-space="public"] .glass-strong {
+  background: var(--glass); border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow), var(--glass-inset);
+}
+[data-space="public"] .input { background: rgba(231, 236, 245, 0.05); color: var(--ink); }
+[data-space="public"] .btn-glass { color: var(--ink); background: var(--glass-strong); border: 1px solid var(--glass-border); }
+/* Le bouton de bascule clair/sombre est désormais visible partout */
+
+/* ============================================================
+   ✦✦✦ FINITIONS MÉTALLIQUES
+   Or poli brillant & marine métallisé : dégradés à bandes de
+   réflexion, comme sur du métal réellement poli.
+   ============================================================ */
+:root {
+  /* Or métallique brillant — bandes sombres/claires = reflets */
+  --metal-gold: linear-gradient(135deg,
+      #8a6a12 0%, #c9971f 11%, #f3d270 25%,
+      #fff3c4 35%, #f0c14b 45%, #d4a526 56%,
+      #a8790f 68%, #e6bf58 82%, #b8870f 100%);
+  --metal-gold-soft: linear-gradient(135deg,
+      #b8870f 0%, #d4a526 22%, #f0c14b 40%,
+      #ffe9a8 50%, #d4a526 64%, #b8870f 100%);
+  /* Marine métallisé — reflet froid sur bleu profond */
+  --metal-navy: linear-gradient(135deg,
+      #06122b 0%, #0e2952 16%, #1a3f7a 32%,
+      #27548f 41%, #12305e 54%, #0a1f44 70%,
+      #16386e 86%, #071630 100%);
+  --metal-navy-deep: linear-gradient(160deg,
+      #071730 0%, #0e2952 26%, #16386e 44%,
+      #0a1f44 62%, #0d2148 80%, #060f22 100%);
+  /* Reflets internes qui donnent l'épaisseur du métal */
+  --metal-inset: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.28);
+  --metal-inset-navy: inset 0 1px 0 rgba(255,255,255,.14), inset 0 -1px 0 rgba(0,0,0,.45);
+}
+
+/* --- Boutons or : métal poli --- */
+.btn-gold {
+  background: var(--metal-gold) !important;
+  color: #23180a !important;
+  text-shadow: 0 1px 0 rgba(255,255,255,.28);
+  box-shadow: var(--metal-inset), 0 8px 22px rgba(184,135,15,.34) !important;
+  border: 1px solid rgba(138,106,18,.55) !important;
+}
+.btn-gold:hover {
+  background: var(--metal-gold-soft) !important;
+  box-shadow: var(--metal-inset), 0 12px 30px rgba(212,165,38,.46) !important;
+}
+.btn-gold::before { background: linear-gradient(180deg, rgba(255,255,255,.5), transparent); }
+
+/* --- Pastilles & médaillons dorés --- */
+.brand-dot, .badge-gold.solid, .nav-badge {
+  background: var(--metal-gold) !important;
+  color: #23180a !important;
+  box-shadow: var(--metal-inset), 0 4px 12px rgba(184,135,15,.3) !important;
+}
+
+/* --- Surfaces marine métallisées --- */
+.metal-navy {
+  background: var(--metal-navy) !important;
+  box-shadow: var(--metal-inset-navy), 0 10px 34px rgba(4,12,30,.42) !important;
+  border: none !important;
+  color: #e7ecf5 !important;
+}
+
+/* --- Filet métallique (séparateur brillant) --- */
+.hairline, .metal-rule {
+  background: linear-gradient(90deg, transparent, #8a6a12 12%, #f0c14b 34%,
+              #fff3c4 50%, #f0c14b 66%, #8a6a12 88%, transparent) !important;
+  height: 1.5px;
+}
+
+/* Logo de l'entreprise — rendu image cohérent partout */
+img.brand-dot{width:38px;height:38px;object-fit:contain;border-radius:10px;padding:0;background:none;display:inline-block;vertical-align:middle}
+img.login-logo-img{width:64px;height:64px;object-fit:contain;display:block;margin:0 auto}
+img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;display:inline-block}
+
+/* Bouton d'installation de l'application (PWA) */
+.pwa-install-btn{
+  position:fixed; bottom:22px; right:22px; z-index:9999;
+  display:inline-flex; align-items:center; gap:8px;
+  padding:12px 20px; border:none; border-radius:999px; cursor:pointer;
+  background:linear-gradient(135deg,#e9c15c,#d4a526,#b8870f); color:#0a1020;
+  font-weight:800; font-size:14px; box-shadow:0 8px 26px rgba(212,165,38,.45);
+  transition:transform .15s, box-shadow .15s;
+}
+.pwa-install-btn:hover{ transform:translateY(-2px); box-shadow:0 12px 32px rgba(212,165,38,.6); }
+.pwa-install-btn .pwa-install-ico{ font-size:16px; }
+@media (max-width:640px){ .pwa-install-btn{ bottom:80px; right:16px; padding:11px 16px; font-size:13px; } }
+
+/* Fenêtre d'aide à l'installation PWA */
+.pwa-aide{ position:fixed; inset:0; z-index:10000; background:rgba(2,7,20,.75);
+  display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(6px) }
+.pwa-aide-carte{ position:relative; max-width:380px; width:100%; background:#fff; color:#0a1f44;
+  border-radius:20px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,.4);
+  border:1px solid rgba(10,31,68,.15) }
+.pwa-aide-titre{ font-size:19px; font-weight:800; margin-bottom:14px; color:#0a1f44 }
+#pwa-aide-texte{ font-size:14.5px; line-height:1.7; color:#334155 }
+#pwa-aide-texte strong{ color:#0a1f44 }
+.pwa-aide-fermer{ position:absolute; top:14px; right:16px; border:none; background:transparent;
+  font-size:18px; cursor:pointer; color:#94a3b8; line-height:1 }
+.pwa-aide-fermer:hover{ color:#0a1f44 }
+
+/* ============================================================
+   ESPACE CLIENT — champs de saisie sur fond blanc (lisibilité + confort)
+   ============================================================ */
+[data-space="app"] .input{
+  background:#ffffff;
+  border:1px solid #d9dfea;
+  color:#0f1b30;
+  border-radius:14px;
+  box-shadow:0 1px 2px rgba(10,31,68,.04), inset 0 1px 0 rgba(255,255,255,.6);
+  transition:border-color .2s, box-shadow .2s, background .2s;
+  font-size:15px;
+}
+[data-space="app"] .input::placeholder{ color:#9aa3b2; }
+[data-space="app"] .input:hover{ border-color:#c3ccdb; }
+[data-space="app"] .input:focus{
+  background:#ffffff;
+  border-color:var(--gold, #d4a526);
+  box-shadow:0 0 0 3px rgba(212,165,38,.18), 0 2px 8px rgba(10,31,68,.06);
+}
+[data-space="app"] textarea.input{ min-height:120px; line-height:1.6; padding:14px 16px; }
+[data-space="app"] select.input option{ background:#fff; color:#0f1b30; }
+[data-space="app"] .input:disabled{ background:#f1f3f7; color:#8a94a6; }
+
+/* Zone de saisie de la messagerie : fond blanc + relief léger */
+[data-space="app"] .chat-composer{
+  background:rgba(255,255,255,.06);
+  border:1px solid var(--glass-border);
+  border-radius:18px;
+  padding:8px;
+}
+[data-space="app"] .chat-composer .input{
+  background:#fff;
+  border-radius:12px;
+}
+[data-space="app"] .chat-attach{
+  background:#fff;
+  border:1px solid #d9dfea;
+  border-radius:12px;
+  color:#0f1b30;
+}
+[data-space="app"] .chat-attach.has{ border-color:var(--gold); color:var(--gold); }

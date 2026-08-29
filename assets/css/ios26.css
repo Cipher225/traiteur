@@ -1,0 +1,937 @@
+/* ============================================================================
+   iOS 26 — LIQUID GLASS · Site vitrine Groupe Helisce
+   Réinvention complète : navy profond, verre liquide, reflets, profondeur iPad.
+   ============================================================================ */
+
+:root[data-space="public"]{
+  --lg-blur: 40px;
+  --lg-blur-strong: 64px;
+  --lg-radius: 28px;
+  --lg-radius-lg: 40px;
+  --lg-radius-pill: 999px;
+  --lg-ease: cubic-bezier(.22,1,.36,1);
+  --lg-gold: #e9c15c;
+  --lg-gold-soft: rgba(233,193,92,.85);
+  --lg-hair: rgba(255,255,255,.16);
+  --lg-hair-soft: rgba(255,255,255,.07);
+  --lg-ink: #eaf0fb;
+  --lg-ink-dim: #c4d0e6;
+}
+
+/* ============ FOND : navy profond liquide avec orbes ============ */
+[data-space="public"]{ overflow-x:hidden; scroll-behavior:smooth; }
+[data-space="public"] body{
+  overflow-x:hidden; color: var(--lg-ink);
+  background: #020714;
+}
+/* Couche de fond fixe (ne casse pas les enfants position:fixed comme la tabbar) */
+[data-space="public"] body > .site-bg,
+[data-space="public"]::after{ }
+[data-space="public"]{
+  background:
+    radial-gradient(38% 30% at 82% 4%,  rgba(233,193,92,.10) 0%, transparent 60%),
+    radial-gradient(50% 45% at 6% 10%,  rgba(38,86,170,.30) 0%, transparent 62%),
+    radial-gradient(70% 55% at 50% 116%, rgba(12,34,74,.60) 0%, transparent 60%),
+    linear-gradient(178deg, #020714 0%, #05122b 48%, #020814 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+[data-space="public"] body::before,
+[data-space="public"] body::after{
+  content:''; position:fixed; z-index:0; pointer-events:none; border-radius:50%;
+  filter: blur(110px); mix-blend-mode:screen;
+}
+[data-space="public"] body::before{
+  width:48vw; height:48vw; left:-12vw; top:6vh; opacity:.6;
+  background: radial-gradient(circle, rgba(42,96,190,.95), transparent 70%);
+  animation: lg-float-1 26s var(--lg-ease) infinite;
+}
+[data-space="public"] body::after{
+  width:40vw; height:40vw; right:-10vw; top:28vh; opacity:.42;
+  background: radial-gradient(circle, rgba(233,193,92,.55), transparent 70%);
+  animation: lg-float-2 32s var(--lg-ease) infinite;
+}
+@keyframes lg-float-1{
+  0%,100%{ transform:translate(0,0) scale(1); }
+  33%{ transform:translate(14vw,10vh) scale(1.15); }
+  66%{ transform:translate(6vw,26vh) scale(.92); }
+}
+@keyframes lg-float-2{
+  0%,100%{ transform:translate(0,0) scale(1); }
+  50%{ transform:translate(-16vw,20vh) scale(1.2); }
+}
+[data-space="public"] .aurora{
+  position:fixed; inset:0; z-index:0; pointer-events:none;
+  background: radial-gradient(32vw 32vw at 70% 78%, rgba(60,120,220,.22), transparent 66%);
+  animation: lg-float-3 30s var(--lg-ease) infinite;
+}
+@keyframes lg-float-3{
+  0%,100%{ transform:translate(0,0); }
+  50%{ transform:translate(-10vw,-14vh); }
+}
+[data-space="public"] .wrap,
+[data-space="public"] section,
+[data-space="public"] header{ position:relative; z-index:1; }
+
+/* ============ TYPOGRAPHIE ============ */
+[data-space="public"] h1,
+[data-space="public"] h2,
+[data-space="public"] h3{ color:#fff; letter-spacing:-.02em; }
+[data-space="public"] .hero h1{
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
+  line-height: 1.03; font-weight: 800; color:#fff;
+  text-shadow: 0 2px 30px rgba(0,0,0,.35);
+}
+[data-space="public"] .hero h1 em{
+  font-style: normal;
+  color: var(--lg-gold) !important;
+  background: none !important;
+  -webkit-text-fill-color: var(--lg-gold) !important;
+  text-shadow: 0 0 34px rgba(233,193,92,.4);
+}
+[data-space="public"] .eyebrow{
+  color: var(--lg-gold); font-weight:700; letter-spacing:.16em; font-size:12.5px;
+  text-transform:uppercase;
+}
+[data-space="public"] .eyebrow::before{ background: var(--lg-gold) !important; opacity:.9; }
+[data-space="public"] .lede,
+[data-space="public"] .hero .lede{ color: var(--lg-ink-dim); font-size: clamp(1rem,1.4vw,1.18rem); line-height:1.6; }
+
+/* ============ VERRE LIQUIDE (base) ============ */
+[data-space="public"] .glass,
+[data-space="public"] .glass-strong,
+[data-space="public"] .topbar,
+[data-space="public"] .service-card,
+[data-space="public"] .dish,
+[data-space="public"] .temo,
+[data-space="public"] .avis-form,
+[data-space="public"] .gal-item,
+[data-space="public"] .video-card,
+[data-space="public"] .hero-chip{
+  background:
+    linear-gradient(150deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 40%, rgba(255,255,255,.05) 100%) !important;
+  backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(180%);
+  border: 1px solid var(--lg-hair) !important;
+  box-shadow:
+    0 10px 40px rgba(0,0,0,.35),
+    inset 0 1px 0 rgba(255,255,255,.22),
+    inset 0 -1px 0 rgba(255,255,255,.04) !important;
+  position: relative;
+}
+[data-space="public"] .service-card::before,
+[data-space="public"] .dish::before,
+[data-space="public"] .temo::before,
+[data-space="public"] .video-card::before,
+[data-space="public"] .avis-form::before{
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background: linear-gradient(150deg, rgba(255,255,255,.16), transparent 42%);
+  opacity:.7;
+}
+
+/* ============ NAV FLOTTANTE (Dynamic Island) ============ */
+[data-space="public"] .topbar{
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  width: min(1180px, calc(100% - 28px));
+  border-radius: var(--lg-radius-pill) !important;
+  padding: 9px 14px 9px 18px !important;
+  backdrop-filter: blur(var(--lg-blur-strong)) saturate(190%);
+  -webkit-backdrop-filter: blur(var(--lg-blur-strong)) saturate(190%);
+  box-shadow: 0 12px 44px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.28) !important;
+  transition: box-shadow .4s var(--lg-ease), background .4s;
+}
+[data-space="public"] .topbar .brand{ color:#fff; font-weight:800; letter-spacing:-.01em; }
+[data-space="public"] .login-pill{
+  border-radius: var(--lg-radius-pill); border:1px solid var(--lg-hair);
+  background: rgba(255,255,255,.08); color:#fff; font-weight:600; backdrop-filter: blur(20px);
+}
+[data-space="public"] .login-pill:hover{ background: rgba(255,255,255,.15); }
+[data-space="public"] .hero{ padding-top: 138px; }
+
+/* ============ BOUTONS ============ */
+[data-space="public"] .btn-gold{
+  background: linear-gradient(135deg, #f3d074 0%, var(--lg-gold) 55%, #d3a53a 100%) !important;
+  color:#0a1020 !important; font-weight:700; border:none;
+  border-radius: var(--lg-radius-pill);
+  box-shadow: 0 8px 26px rgba(233,193,92,.4), inset 0 1px 0 rgba(255,255,255,.5);
+  transition: transform .3s var(--lg-ease), box-shadow .3s;
+}
+[data-space="public"] .btn-gold:hover{ transform: translateY(-2px); box-shadow: 0 14px 36px rgba(233,193,92,.5); }
+[data-space="public"] .btn-glass{
+  border-radius: var(--lg-radius-pill); border:1px solid var(--lg-hair);
+  background: rgba(255,255,255,.08) !important; color:#fff !important; font-weight:600;
+  backdrop-filter: blur(24px);
+  transition: transform .3s var(--lg-ease), background .3s;
+}
+[data-space="public"] .btn-glass:hover{ transform: translateY(-2px); background: rgba(255,255,255,.16) !important; }
+
+/* ============ CARTES ============ */
+[data-space="public"] .service-card,
+[data-space="public"] .dish,
+[data-space="public"] .temo,
+[data-space="public"] .video-card,
+[data-space="public"] .gal-item{
+  border-radius: var(--lg-radius) !important;
+  transition: transform .45s var(--lg-ease), box-shadow .45s, border-color .45s;
+}
+[data-space="public"] .service-card:hover,
+[data-space="public"] .dish:hover,
+[data-space="public"] .temo:hover,
+[data-space="public"] .video-card:hover{
+  transform: translateY(-6px);
+  border-color: var(--lg-gold-soft) !important;
+  box-shadow: 0 22px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(233,193,92,.3), inset 0 1px 0 rgba(255,255,255,.3) !important;
+}
+[data-space="public"] .service-card h3,
+[data-space="public"] .dish h4{ color:#fff; }
+[data-space="public"] .service-card p,
+[data-space="public"] .dish p{ color: var(--lg-ink-dim); }
+[data-space="public"] .dish-price{ color: var(--lg-gold) !important; }
+[data-space="public"] .service-ic,
+[data-space="public"] .service-card .ic{
+  background: linear-gradient(135deg, rgba(233,193,92,.22), rgba(233,193,92,.08)) !important;
+  border:1px solid rgba(233,193,92,.3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+}
+
+/* ============ GALERIE ============ */
+[data-space="public"] .gal-item{ overflow:hidden; border-radius: var(--lg-radius) !important; }
+[data-space="public"] .gal-item img{ transition: transform .6s var(--lg-ease); }
+[data-space="public"] .gal-item:hover img{ transform: scale(1.08); }
+
+/* ============ CHIPS HERO ============ */
+[data-space="public"] .hero-chip{
+  border-radius: var(--lg-radius-pill) !important; color:#fff; font-weight:600;
+  box-shadow: 0 10px 30px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.3) !important;
+}
+[data-space="public"] .hero-chip span{ color: var(--lg-gold); }
+
+/* ============ SECTIONS ============ */
+[data-space="public"] section{ padding: 84px 0; }
+[data-space="public"] .sec-head h2,
+[data-space="public"] section h2{ font-size: clamp(2rem, 4vw, 3rem); font-weight:800; color:#fff; }
+[data-space="public"] .sec-sub,
+[data-space="public"] section .lede{ color: var(--lg-ink-dim); }
+[data-space="public"] #services,
+[data-space="public"] #menu,
+[data-space="public"] #galerie,
+[data-space="public"] #videos,
+[data-space="public"] #avis,
+[data-space="public"] #devis{ background: transparent !important; }
+
+/* ============ FORMULAIRES ============ */
+[data-space="public"] .avis-form,
+[data-space="public"] .devis-form,
+[data-space="public"] #devis form{ border-radius: var(--lg-radius-lg) !important; }
+[data-space="public"] input,
+[data-space="public"] textarea,
+[data-space="public"] select{
+  background: rgba(255,255,255,.06) !important;
+  border:1px solid var(--lg-hair) !important;
+  color:#fff !important; border-radius:16px !important; backdrop-filter: blur(20px);
+}
+[data-space="public"] input::placeholder,
+[data-space="public"] textarea::placeholder{ color: rgba(200,214,240,.5); }
+[data-space="public"] input:focus,
+[data-space="public"] textarea:focus,
+[data-space="public"] select:focus{
+  border-color: var(--lg-gold-soft) !important;
+  box-shadow: 0 0 0 3px rgba(233,193,92,.2) !important; outline:none;
+}
+
+/* ============ FOOTER ============ */
+[data-space="public"] .site-footer{
+  background: linear-gradient(180deg, transparent, rgba(3,10,26,.6)) !important;
+  border-top: 1px solid var(--lg-hair-soft); color: var(--lg-ink-dim);
+}
+[data-space="public"] .site-footer strong,
+[data-space="public"] .foot-col h4{ color:#fff; }
+[data-space="public"] .foot-col a{ color: var(--lg-ink-dim); }
+[data-space="public"] .foot-col a:hover{ color: var(--lg-gold); }
+
+/* ============ RÉVÉLATION SCROLL ============ */
+[data-space="public"] .reveal{
+  opacity:0; transform: translateY(28px);
+  transition: opacity .7s var(--lg-ease), transform .7s var(--lg-ease);
+}
+[data-space="public"] .reveal.in{ opacity:1; transform:none; }
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 900px){
+  [data-space="public"] .topbar{ top:10px; width: calc(100% - 20px); padding:8px 10px 8px 14px !important; }
+  [data-space="public"] .hero{ padding-top: 132px; }
+  [data-space="public"] section{ padding: 60px 0; }
+}
+
+/* ============ ENRICHISSEMENTS « DU LOURD » ============ */
+
+/* Grain de lumière subtil (texture iPad Pro) */
+[data-space="public"] body{
+  position: relative;
+}
+[data-space="public"] .aurora::after{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Séparateur lumineux entre sections (fil doré translucide) */
+[data-space="public"] section + section::before{
+  content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width: min(680px, 80%); height:1px;
+  background: linear-gradient(90deg, transparent, rgba(233,193,92,.4), transparent);
+}
+
+/* Cartes services : plus de profondeur, dégradé de verre plus marqué */
+[data-space="public"] .service-card{
+  background:
+    linear-gradient(155deg, rgba(255,255,255,.13) 0%, rgba(70,110,190,.08) 45%, rgba(255,255,255,.04) 100%) !important;
+  padding: 30px 26px !important;
+}
+[data-space="public"] .service-ic,
+[data-space="public"] .service-card .ic{
+  width:60px; height:60px; border-radius:18px; font-size:26px;
+}
+
+/* Plats du menu : accent verre + prix or lumineux */
+[data-space="public"] .dish{ padding:22px !important; }
+[data-space="public"] .dish-price{
+  text-shadow: 0 0 16px rgba(233,193,92,.4); font-size:15px !important;
+}
+
+/* Titres de section avec halo lumineux discret */
+[data-space="public"] section h2{
+  text-shadow: 0 4px 40px rgba(60,120,220,.3);
+}
+
+/* Chip hero : reflet animé façon verre liquide */
+[data-space="public"] .hero-chip{
+  overflow:hidden;
+}
+[data-space="public"] .hero-chip::after{
+  content:''; position:absolute; top:0; left:-60%; width:50%; height:100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.28), transparent);
+  transform: skewX(-18deg);
+  animation: lg-shine 6s ease-in-out infinite;
+}
+@keyframes lg-shine{
+  0%, 60%{ left:-60%; }
+  85%, 100%{ left:130%; }
+}
+
+/* Boutons CTA hero : halo lumineux au repos */
+[data-space="public"] .hero-cta .btn-gold{
+  animation: lg-glow 4s ease-in-out infinite;
+}
+@keyframes lg-glow{
+  0%,100%{ box-shadow: 0 8px 26px rgba(233,193,92,.35), inset 0 1px 0 rgba(255,255,255,.5); }
+  50%{ box-shadow: 0 8px 34px rgba(233,193,92,.6), inset 0 1px 0 rgba(255,255,255,.6); }
+}
+
+/* Scrollbar élégante (WebKit) */
+[data-space="public"] ::-webkit-scrollbar{ width:10px; }
+[data-space="public"] ::-webkit-scrollbar-track{ background: transparent; }
+[data-space="public"] ::-webkit-scrollbar-thumb{
+  background: linear-gradient(180deg, rgba(233,193,92,.5), rgba(60,120,220,.5));
+  border-radius: 10px; border:2px solid transparent; background-clip: padding-box;
+}
+
+/* ============ LOGO : taille maîtrisée sur le site public ============ */
+[data-space="public"] .brand-dot.logo-img{
+  width:38px; height:38px; border-radius:12px; padding:0;
+  display:inline-grid; place-items:center; overflow:hidden; flex-shrink:0;
+  background: radial-gradient(circle at 50% 45%, #ffffff, #eef1f6);
+  box-shadow: 0 4px 14px rgba(0,0,0,.3), 0 0 0 1px rgba(233,193,92,.4);
+}
+[data-space="public"] .brand-dot.logo-img img{
+  width:100%; height:100%; object-fit:contain; display:block;
+}
+[data-space="public"] .foot-brand .brand-dot.logo-img{ width:44px; height:44px; }
+[data-space="public"] .brand{ gap:12px; font-size:18px; }
+[data-space="public"] .foot-brand{ gap:12px; }
+
+/* ============ CORRECTIFS FOND (écrase style.css) ============ */
+/* .aurora ne doit PAS remplir l'écran d'un bleu medium : juste une orbe douce */
+[data-space="public"] .aurora{
+  background: radial-gradient(32vw 32vw at 70% 78%, rgba(60,120,220,.20), transparent 66%) !important;
+}
+
+/* Sections : fond transparent (le navy profond du body traverse) */
+[data-space="public"] #services,
+[data-space="public"] #galerie,
+[data-space="public"] #avis,
+[data-space="public"] #menu,
+[data-space="public"] #devis,
+[data-space="public"] #videos{
+  background: transparent !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* Cartes : verre translucide, PAS de fond bleu plein ni au survol */
+[data-space="public"] .service-card,
+[data-space="public"] .dish-card,
+[data-space="public"] .hero-card,
+[data-space="public"] .video-card,
+[data-space="public"] .dish{
+  background:
+    linear-gradient(155deg, rgba(255,255,255,.11) 0%, rgba(90,130,210,.06) 50%, rgba(255,255,255,.04) 100%) !important;
+}
+[data-space="public"] .service-card:hover,
+[data-space="public"] .dish-card:hover,
+[data-space="public"] .video-card:hover,
+[data-space="public"] .dish:hover{
+  background:
+    linear-gradient(155deg, rgba(255,255,255,.16) 0%, rgba(120,160,240,.10) 50%, rgba(255,255,255,.06) 100%) !important;
+  border-color: rgba(233,193,92,.5) !important;
+  box-shadow: 0 20px 54px rgba(0,0,0,.5), 0 0 0 1px rgba(233,193,92,.3), inset 0 1px 0 rgba(255,255,255,.28) !important;
+}
+
+/* ============ NAVIGATION : ancres sous la barre fixe ============ */
+[data-space="public"] section[id],
+[data-space="public"] #accueil{
+  scroll-margin-top: 96px;  /* compense la barre flottante fixe */
+}
+/* La barre ne doit pas bloquer les clics ailleurs */
+[data-space="public"] .topbar{ pointer-events:auto; }
+
+
+/* ============================================================================
+   NAVIGATION UNIQUE — barre du bas flottante, identique sur tous les appareils
+   ============================================================================ */
+
+/* Le topbar ne contient plus que le nom + connexion */
+[data-space="public"] .topbar{ justify-content: space-between !important; }
+
+/* Fonds décoratifs : strictement derrière et non-cliquables (sécurité clics) */
+[data-space="public"] body::before,
+[data-space="public"] body::after,
+[data-space="public"] .aurora,
+[data-space="public"] .aurora::after{
+  z-index: -1 !important;
+  pointer-events: none !important;
+}
+/* Tout le contenu réel au-dessus des décorations */
+[data-space="public"] header,
+[data-space="public"] .wrap,
+[data-space="public"] section,
+[data-space="public"] footer,
+[data-space="public"] .topbar{ z-index: 50; }
+
+/* --- LA BARRE DU BAS (unique, tous appareils) --- */
+
+/* Espace en bas pour ne pas masquer le contenu/footer sous la barre */
+[data-space="public"] footer{ padding-bottom: 30px !important; }
+
+/* Ancres : compenser la barre du haut fixe */
+[data-space="public"] section[id],
+[data-space="public"] #accueil{ scroll-margin-top: 90px; }
+
+/* Logo : pastille blanche partout */
+[data-space="public"] .brand-dot.logo-img{
+  width:38px; height:38px; border-radius:12px; padding:0; overflow:hidden;
+  display:inline-grid; place-items:center; flex-shrink:0;
+  background:#fff !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28), 0 0 0 1px rgba(233,193,92,.5) !important;
+}
+[data-space="public"] .brand-dot.logo-img img{ width:100%; height:100%; object-fit:contain; display:block; }
+[data-space="public"] .foot-brand .brand-dot.logo-img{ width:44px; height:44px; }
+[data-space="public"] .brand{ gap:12px; font-size:18px; }
+[data-space="public"] .foot-brand{ gap:12px; }
+
+/* Petits écrans : barre un peu plus compacte mais MÊME structure */
+
+/* ============================================================================
+   BARRE DE NAVIGATION UNIFIÉE — identique sur TOUS les appareils
+   Flottante en bas, arrondie, centrée. Pilotée par les liens du HTML.
+   ============================================================================ */
+
+/* --- Décorations : TOUJOURS derrière le contenu, jamais cliquables --- */
+[data-space="public"] body::before,
+[data-space="public"] body::after,
+[data-space="public"] .aurora,
+[data-space="public"] .aurora::after{
+  z-index: -1 !important;
+  pointer-events: none !important;
+}
+
+/* --- Contenu & éléments interactifs : toujours au-dessus, cliquables --- */
+[data-space="public"] header,
+[data-space="public"] section,
+[data-space="public"] footer,
+[data-space="public"] .wrap,
+[data-space="public"] .topbar,
+[data-space="public"] .tabbar{
+  position: relative;
+  z-index: 1;
+}
+[data-space="public"] a,
+[data-space="public"] button,
+[data-space="public"] input,
+[data-space="public"] textarea,
+[data-space="public"] select,
+[data-space="public"] .btn,
+[data-space="public"] .login-pill{
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+/* --- Barre du haut : nom à gauche, Connexion à droite (partout pareil) --- */
+[data-space="public"] .topbar{
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  width: min(1180px, calc(100% - 28px));
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 10px 18px !important;
+  border-radius: 999px !important;
+  z-index: 50;
+}
+[data-space="public"] .topbar .brand{ color:#fff; font-weight:800; font-size:18px; }
+
+/* --- LA BARRE DU BAS : identique sur tous les écrans --- */
+[data-space="public"] .tabbar{
+  display: flex !important;
+  position: fixed !important;
+  left: 50% !important;
+  bottom: 18px !important;
+  transform: translateX(-50%) translateZ(0) !important;
+  -webkit-transform: translateX(-50%) translateZ(0) !important;
+  width: auto;
+  max-width: calc(100% - 24px);
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px !important;
+  border-radius: 999px !important;
+  z-index: 100 !important;
+  background: linear-gradient(150deg, rgba(16,38,78,.82), rgba(8,22,52,.88)) !important;
+  backdrop-filter: blur(48px) saturate(190%);
+  -webkit-backdrop-filter: blur(48px) saturate(190%);
+  border: 1px solid rgba(233,193,92,.22) !important;
+  box-shadow: 0 14px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.14) !important;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+[data-space="public"] .tabbar::-webkit-scrollbar{ display: none; }
+[data-space="public"] .tabbar a{
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 8px 16px; min-width: 62px;
+  border-radius: 999px;
+  color: #dbe4f5; font-size: 12px; font-weight: 600;
+  text-decoration: none; white-space: nowrap;
+  transition: color .2s, background .2s;
+}
+[data-space="public"] .tabbar a .tico{ font-size: 20px; line-height: 1; }
+[data-space="public"] .tabbar a:hover{ color: #fff; }
+[data-space="public"] .tabbar a.active{
+  color: #0a1020 !important;
+  background: linear-gradient(135deg, #f3d074, var(--lg-gold)) !important;
+  box-shadow: 0 4px 14px rgba(233,193,92,.4);
+}
+[data-space="public"] .tabbar a.active .tico{ filter: none; }
+
+/* Espace en bas pour ne pas cacher le contenu derrière la barre */
+[data-space="public"] footer{ padding-bottom: 30px !important; }
+
+/* Logo : pastille blanche partout */
+[data-space="public"] .brand-dot.logo-img{
+  width:38px; height:38px; border-radius:12px; padding:0; overflow:hidden;
+  display:inline-grid; place-items:center; flex-shrink:0;
+  background:#fff !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.28), 0 0 0 1px rgba(233,193,92,.5) !important;
+}
+[data-space="public"] .brand-dot.logo-img img{ width:100%; height:100%; object-fit:contain; display:block; }
+[data-space="public"] .foot-brand .brand-dot.logo-img{ width:44px; height:44px; }
+
+/* Sur petit écran, barre légèrement plus compacte MAIS même structure */
+@media (max-width: 560px){
+  [data-space="public"] .tabbar a{ min-width: 54px; padding: 7px 11px; font-size: 10.5px; }
+  [data-space="public"] .tabbar a .tico{ font-size: 18px; }
+}
+
+/* ============ INTERVALLE DE PRIX PAR CATÉGORIE (packages) ============ */
+[data-space="public"] .cat-prix{
+  display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  padding:16px 22px; border-radius:18px; margin-bottom:6px;
+  background: linear-gradient(135deg, rgba(233,193,92,.16), rgba(233,193,92,.05)) !important;
+  border:1px solid rgba(233,193,92,.3) !important;
+}
+[data-space="public"] .cat-prix-label{ color:#fff; font-weight:700; font-size:15px; }
+[data-space="public"] .cat-prix-val{
+  color: var(--lg-gold); font-weight:800; font-size:17px;
+  text-shadow: 0 0 18px rgba(233,193,92,.35);
+}
+
+/* ============================================================================
+   MENU — cartes de plats redessinées (petites, élégantes, nom SOUS la carte)
+   ============================================================================ */
+[data-space="public"] .menu-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 22px 18px;
+}
+[data-space="public"] .dish{
+  margin: 0; padding: 0; background: none !important; border: none !important;
+  box-shadow: none !important; display: flex; flex-direction: column; gap: 10px;
+}
+[data-space="public"] .dish::before{ display: none !important; }
+
+/* La carte-image : carrée, verre, arrondie */
+[data-space="public"] .dish-card{
+  position: relative; aspect-ratio: 1/1; border-radius: 22px; overflow: hidden;
+  display: grid; place-items: center;
+  background: linear-gradient(155deg, rgba(255,255,255,.12), rgba(90,130,210,.06)) !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.22) !important;
+  transition: transform .4s var(--lg-ease), box-shadow .4s, border-color .4s;
+}
+[data-space="public"] .dish:hover .dish-card{
+  transform: translateY(-6px) scale(1.02);
+  border-color: rgba(233,193,92,.55) !important;
+  box-shadow: 0 20px 48px rgba(0,0,0,.5), 0 0 0 1px rgba(233,193,92,.3), inset 0 1px 0 rgba(255,255,255,.3) !important;
+}
+[data-space="public"] .dish-card img{
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  transition: transform .6s var(--lg-ease);
+}
+[data-space="public"] .dish:hover .dish-card img{ transform: scale(1.08); }
+[data-space="public"] .dish-emoji{ font-size: 52px; opacity: .85; }
+
+/* Badge "Populaire" en surimpression */
+[data-space="public"] .dish-pop{
+  position: absolute; top: 10px; left: 10px; z-index: 2;
+  background: linear-gradient(135deg, #f3d074, var(--lg-gold));
+  color: #0a1020; font-size: 10.5px; font-weight: 800; padding: 4px 10px;
+  border-radius: 999px; box-shadow: 0 4px 12px rgba(233,193,92,.4);
+}
+
+/* Le nom SOUS la carte */
+[data-space="public"] .dish-caption{
+  display: flex; flex-direction: column; gap: 3px; text-align: center; padding: 0 4px;
+}
+[data-space="public"] .dish-name{
+  color: #fff; font-weight: 700; font-size: 15px; line-height: 1.25;
+  letter-spacing: -.01em;
+}
+[data-space="public"] .dish-desc{
+  color: var(--lg-ink-dim); font-size: 12px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+@media (max-width: 560px){
+  [data-space="public"] .menu-grid{ grid-template-columns: repeat(2, 1fr); gap: 16px 12px; }
+  [data-space="public"] .dish-name{ font-size: 13.5px; }
+}
+
+/* ============================================================================
+   MODE CLAIR — site public (élégant : crème lumineux, verre clair, navy & or)
+   ============================================================================ */
+[data-space="public"][data-theme="light"]{
+  --lg-ink:#1a2744; --lg-ink-dim:#3d4d6b; --lg-gold:#b8870f;
+  --lg-hair:rgba(20,40,90,.12); --lg-hair-soft:rgba(20,40,90,.06);
+  background:
+    radial-gradient(46% 40% at 82% 4%, rgba(212,165,38,.14), transparent 60%),
+    radial-gradient(52% 46% at 6% 10%, rgba(90,140,220,.16), transparent 62%),
+    linear-gradient(175deg, #f6f8fc 0%, #eef2f9 50%, #f4f6fb 100%) !important;
+}
+[data-space="public"][data-theme="light"] body{ color:#1a2744; background:transparent !important; }
+
+/* Orbes plus douces en clair */
+[data-space="public"][data-theme="light"] body::before{ opacity:.28; }
+[data-space="public"][data-theme="light"] body::after{ opacity:.3; }
+[data-space="public"][data-theme="light"] .aurora{ opacity:.5; }
+
+/* Titres navy */
+[data-space="public"][data-theme="light"] h1,
+[data-space="public"][data-theme="light"] h2,
+[data-space="public"][data-theme="light"] h3,
+[data-space="public"][data-theme="light"] .hero h1{ color:#0a1f44 !important; text-shadow:none; }
+[data-space="public"][data-theme="light"] .hero h1 em{ color:#b8870f !important; -webkit-text-fill-color:#b8870f !important; }
+[data-space="public"][data-theme="light"] .eyebrow{ color:#b8870f; }
+[data-space="public"][data-theme="light"] .lede,
+[data-space="public"][data-theme="light"] .hero .lede,
+[data-space="public"][data-theme="light"] section .lede,
+[data-space="public"][data-theme="light"] .sec-sub{ color:#3d4d6b; }
+
+/* Verre clair : blanc translucide, ombre douce */
+[data-space="public"][data-theme="light"] .glass,
+[data-space="public"][data-theme="light"] .glass-strong,
+[data-space="public"][data-theme="light"] .topbar,
+[data-space="public"][data-theme="light"] .service-card,
+[data-space="public"][data-theme="light"] .dish-card,
+[data-space="public"][data-theme="light"] .temo,
+[data-space="public"][data-theme="light"] .video-card,
+[data-space="public"][data-theme="light"] .avis-form,
+[data-space="public"][data-theme="light"] .hero-chip,
+[data-space="public"][data-theme="light"] .tabbar,
+[data-space="public"][data-theme="light"] .cat-prix{
+  background:linear-gradient(155deg, rgba(255,255,255,.85), rgba(255,255,255,.65)) !important;
+  border:1px solid rgba(20,40,90,.1) !important;
+  box-shadow:0 10px 34px rgba(20,40,90,.1), inset 0 1px 0 rgba(255,255,255,.9) !important;
+}
+[data-space="public"][data-theme="light"] .topbar .brand{ color:#0a1f44 !important; }
+
+/* Nav / tabbar en clair */
+[data-space="public"][data-theme="light"] .tabbar a{ color:#3d4d6b; }
+[data-space="public"][data-theme="light"] .tabbar a:hover{ color:#0a1f44; }
+[data-space="public"][data-theme="light"] .tabbar a.active{ color:#3a2800 !important; }
+[data-space="public"][data-theme="light"] .login-pill{ background:rgba(20,40,90,.06); color:#0a1f44; border-color:rgba(20,40,90,.12); }
+
+/* Cartes : texte navy */
+[data-space="public"][data-theme="light"] .service-card h3,
+[data-space="public"][data-theme="light"] .dish-name{ color:#0a1f44 !important; }
+[data-space="public"][data-theme="light"] .service-card p,
+[data-space="public"][data-theme="light"] .dish-desc,
+[data-space="public"][data-theme="light"] .temo p{ color:#3d4d6b !important; }
+[data-space="public"][data-theme="light"] .cat-prix-label{ color:#0a1f44 !important; }
+[data-space="public"][data-theme="light"] .cat-prix-val{ color:#b8870f !important; }
+
+/* Champs clairs */
+[data-space="public"][data-theme="light"] input,
+[data-space="public"][data-theme="light"] textarea,
+[data-space="public"][data-theme="light"] select{
+  background:rgba(255,255,255,.9) !important; color:#0a1f44 !important;
+  border:1px solid rgba(20,40,90,.15) !important;
+}
+[data-space="public"][data-theme="light"] input::placeholder,
+[data-space="public"][data-theme="light"] textarea::placeholder{ color:rgba(90,107,140,.6); }
+
+/* Footer clair */
+[data-space="public"][data-theme="light"] .site-footer{
+  background:linear-gradient(180deg, transparent, rgba(255,255,255,.5)) !important;
+  border-top:1px solid rgba(20,40,90,.1); color:#3d4d6b;
+}
+[data-space="public"][data-theme="light"] .site-footer strong,
+[data-space="public"][data-theme="light"] .foot-col h4{ color:#0a1f44; }
+[data-space="public"][data-theme="light"] .foot-col a{ color:#3d4d6b; }
+[data-space="public"][data-theme="light"] .foot-col a:hover{ color:#b8870f; }
+
+/* Logo pastille reste blanche (déjà bien en clair) */
+[data-space="public"][data-theme="light"] .brand-dot.logo-img{ box-shadow:0 4px 14px rgba(20,40,90,.18), 0 0 0 1px rgba(184,135,15,.4) !important; }
+
+/* ============ MODE CLAIR : forcer TOUS les textes secondaires lisibles ============ */
+[data-space="public"][data-theme="light"] .hero .lede,
+[data-space="public"][data-theme="light"] .lede,
+[data-space="public"][data-theme="light"] section .lede,
+[data-space="public"][data-theme="light"] .sec-sub,
+[data-space="public"][data-theme="light"] .service-card p,
+[data-space="public"][data-theme="light"] .dish-desc,
+[data-space="public"][data-theme="light"] .dish p,
+[data-space="public"][data-theme="light"] .temo p,
+[data-space="public"][data-theme="light"] .foot-col a,
+[data-space="public"][data-theme="light"] .foot-col p,
+[data-space="public"][data-theme="light"] .site-footer,
+[data-space="public"][data-theme="light"] .site-footer p,
+[data-space="public"][data-theme="light"] p{
+  color:#3d4d6b !important;
+}
+[data-space="public"][data-theme="light"] .service-card h3,
+[data-space="public"][data-theme="light"] .dish-name,
+[data-space="public"][data-theme="light"] .foot-col h4,
+[data-space="public"][data-theme="light"] .site-footer strong{
+  color:#0a1f44 !important;
+}
+
+
+/* ============ CORRECTIONS LISIBILITÉ CLAIR ============ */
+[data-space="public"][data-theme="light"] .lede,
+[data-space="public"][data-theme="light"] .hero .lede,
+[data-space="public"][data-theme="light"] section .lede,
+[data-space="public"][data-theme="light"] .sec-sub,
+[data-space="public"][data-theme="light"] .service-card p,
+[data-space="public"][data-theme="light"] .dish-desc,
+[data-space="public"][data-theme="light"] .temo p{ color:#3d4a67 !important; }
+[data-space="public"][data-theme="light"] .site-footer,
+[data-space="public"][data-theme="light"] .foot-col a,
+[data-space="public"][data-theme="light"] .foot-desc,
+[data-space="public"][data-theme="light"] .foot-legal,
+[data-space="public"][data-theme="light"] .site-footer p,
+[data-space="public"][data-theme="light"] .site-footer li,
+[data-space="public"][data-theme="light"] .site-footer a{ color:#3d4a67 !important; }
+[data-space="public"][data-theme="light"] .foot-bottom,
+[data-space="public"][data-theme="light"] .foot-bottom div,
+[data-space="public"][data-theme="light"] .foot-bottom-in{ color:#4a577340 !important; }
+[data-space="public"][data-theme="light"] .foot-bottom,
+[data-space="public"][data-theme="light"] .foot-bottom div{ color:#4a5773 !important; }
+[data-space="public"][data-theme="light"] .site-footer strong,
+[data-space="public"][data-theme="light"] .foot-col h4{ color:#0a1f44 !important; }
+
+/* Logo WhatsApp dans les boutons */
+.wa-btn .wa-ico{ vertical-align:middle; margin-right:6px; flex-shrink:0 }
+.wa-ico{ display:inline-block }
+
+/* ============================================================
+   BANDEAU DÉFILANT DES SERVICES (blanc & or)
+   ============================================================ */
+.svc-ticker{
+  position:relative;
+  width:100%;
+  overflow:hidden;
+  margin-top:8px;
+  padding-top:8px;
+  border-top:1px solid rgba(212,165,38,.22);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.svc-ticker-track{
+  display:inline-flex;
+  align-items:center;
+  gap:0;
+  white-space:nowrap;
+  animation:svc-defile 34s linear infinite;
+  will-change:transform;
+}
+.svc-ticker:hover .svc-ticker-track{ animation-play-state:paused; }
+@keyframes svc-defile{
+  from{ transform:translateX(0); }
+  to{ transform:translateX(-50%); }   /* -50% car la liste est dupliquée 2× */
+}
+.svc-ticker-item{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  padding:0 6px;
+  text-decoration:none;
+  color:#fff;
+  font-weight:600;
+  font-size:14.5px;
+  letter-spacing:.2px;
+}
+.svc-ticker-ico{
+  font-size:17px;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));
+}
+.svc-ticker-nom{
+  background:linear-gradient(180deg,#ffffff 0%,#fbeec4 35%,#e9c15c 70%,#d4a526 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  -webkit-text-fill-color:transparent;
+  color:transparent;
+  text-shadow:0 0 22px rgba(233,193,92,.28);
+  font-weight:700;
+}
+.svc-ticker-sep{
+  color:var(--gold, #d4a526);
+  font-size:11px;
+  margin:0 14px 0 18px;
+  opacity:.65;
+}
+/* Thème clair : lisibilité sur fond crème */
+[data-space="public"][data-theme="light"] .svc-ticker-item{ color:#0a1f44; }
+[data-space="public"][data-theme="light"] .svc-ticker-nom{
+  background:linear-gradient(180deg,#0a1f44 0%,#8a6a12 55%,#b8870f 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+  text-shadow:none;
+}
+/* Respect des préférences d'accessibilité (pas d'animation si demandé) */
+@media (prefers-reduced-motion:reduce){
+  .svc-ticker-track{ animation:none; }
+}
+
+/* ---- Structure de la barre : première rangée (marque + actions) puis ticker ----
+   Fonctionne sur TOUS les écrans : le ticker est sur sa propre ligne, pleine
+   largeur, donc il ne déborde jamais et reste visible partout. */
+[data-space="public"] .topbar{ flex-direction:column; align-items:stretch; }
+[data-space="public"] .topbar-row{
+  display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%;
+}
+[data-space="public"] .topbar-actions{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
+[data-space="public"] .topbar .brand{ min-width:0; flex-shrink:1; }
+
+/* Petits écrans : on resserre la première rangée pour qu'elle respire */
+@media (max-width:560px){
+  [data-space="public"] .topbar{ padding:8px 10px 8px 12px !important; }
+  [data-space="public"] .topbar-row{ gap:8px; }
+  [data-space="public"] .brand{ font-size:15px !important; gap:8px !important; }
+  [data-space="public"] .brand-dot{ flex-shrink:0; }
+  [data-space="public"] .login-pill{ padding:8px !important; }
+  [data-space="public"] .login-pill-txt{ display:none; }  /* garde l'icône, cache le mot */
+  [data-space="public"] .svc-ticker-item{ font-size:13px; }
+  [data-space="public"] .svc-ticker-sep{ margin:0 10px 0 12px; }
+}
+
+
+
+
+
+/* ============================================================
+   SIGNATURE DÉVELOPPEUR (bandeau tout en bas, discret & élégant)
+   ============================================================ */
+.dev-sign{
+  background:linear-gradient(180deg, #020714, #0a1428);
+  border-top:1px solid rgba(212,165,38,.22);
+  padding:22px 0 156px;
+  position:relative;
+}
+.dev-sign::before{
+  content:""; position:absolute; top:-1px; left:50%; transform:translateX(-50%);
+  width:120px; height:2px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, #d4a526, transparent);
+}
+.dev-sign-in{ text-align:center; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.dev-sign-label{
+  font-size:10.5px; letter-spacing:.28em; text-transform:uppercase;
+  color:rgba(233,193,92,.65); font-weight:600;
+}
+.dev-sign-name{
+  font-size:19px; font-weight:800; letter-spacing:.01em;
+  background:linear-gradient(180deg,#ffffff 0%,#f3e3b3 55%,#e9c15c 100%);
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+  text-shadow:0 0 22px rgba(233,193,92,.2);
+}
+.dev-sign-links{
+  display:flex; flex-wrap:wrap; justify-content:center; align-items:center;
+  gap:10px 22px; margin-top:6px;
+}
+.dev-sign-link{
+  display:inline-flex; align-items:center; gap:7px;
+  color:rgba(255,255,255,.72); text-decoration:none; font-size:13.5px; font-weight:500;
+  transition:color .15s, transform .15s;
+}
+.dev-sign-link svg{ opacity:.85; flex-shrink:0; }
+a.dev-sign-link:hover{ color:#e9c15c; transform:translateY(-1px); }
+.dev-sign-loc{ color:rgba(255,255,255,.55); cursor:default; }
+/* Thème clair */
+[data-space="public"][data-theme="light"] .dev-sign{
+  background:linear-gradient(180deg,#0a1428,#0a1f44);
+}
+@media (max-width:560px){
+  .dev-sign-links{ flex-direction:column; gap:9px; }
+  .dev-sign-name{ font-size:17px; }
+}
+
+/* ============================================================
+   NOM DE L'ENTREPRISE EN GRAND (accueil) — police élégante Playfair
+   ============================================================ */
+[data-space="public"] .hero-brand-name{
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(38px, 7vw, 82px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+  background: linear-gradient(120deg, #f4e6c0 0%, #d4a526 45%, #b8870f 75%, #e9c15c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #d4a526;
+  text-shadow: 0 2px 30px rgba(212,165,38,.22);
+  display: block;
+}
+[data-space="public"][data-theme="light"] .hero-brand-name{
+  background: linear-gradient(120deg, #b8870f 0%, #d4a526 50%, #8a6410 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+@media (max-width: 640px){
+  [data-space="public"] .hero-brand-name{ font-size: clamp(34px, 11vw, 52px); margin-bottom: 10px; }
+}
+
+/* Options des menus deroulants : lisibles dans les deux themes */
+[data-space="public"] select option{ background:#0d1b34; color:#ffffff; }
+[data-space="public"][data-theme="light"] select,
+[data-space="public"][data-theme="light"] select option{ background:#ffffff; color:#0a1f44; }

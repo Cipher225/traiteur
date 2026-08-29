@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+*.log
+*.bak
+database.sql.bak
+node_modules
+.vscode
+.idea
