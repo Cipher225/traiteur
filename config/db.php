@@ -188,6 +188,81 @@ function doc_nettoyer_html(string $html): string {
     return mb_substr($html, 0, 800000);
 }
 
+/* ============================================================================
+   SÉCURITÉ — protection contre les tentatives de connexion en série
+   ----------------------------------------------------------------------------
+   La protection s'appuie sur la base de données et non sur la session : un
+   robot qui n'accepte pas les cookies est ainsi bloqué lui aussi.
+   ============================================================================ */
+
+function adresse_ip(): string {
+    foreach (['HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'] as $k) {
+        if (!empty($_SERVER[$k])) {
+            $ip = trim(explode(',', $_SERVER[$k])[0]);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) return mb_substr($ip, 0, 64);
+        }
+    }
+    return 'inconnue';
+}
+
+/* Nombre d'essais autorisés avant blocage, et durée du blocage */
+const CONNEXION_MAX_ESSAIS = 6;
+const CONNEXION_BLOCAGE_MIN = 15;
+
+function enregistrer_tentative(PDO $pdo, string $identifiant, bool $reussi): void {
+    try {
+        $pdo->prepare('INSERT INTO tentatives_connexion (ip, identifiant, reussi) VALUES (?,?,?)')
+            ->execute([adresse_ip(), mb_substr($identifiant, 0, 120), $reussi ? 1 : 0]);
+        // Ménage : on ne conserve pas d'historique inutile
+        if (random_int(1, 20) === 1) {
+            $pdo->exec("DELETE FROM tentatives_connexion WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)");
+        }
+    } catch (Throwable $e) { /* la connexion ne doit jamais échouer à cause du journal */ }
+}
+
+/* Renvoie le nombre de minutes restantes si l'adresse est bloquée, 0 sinon. */
+function connexion_bloquee(PDO $pdo): int {
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM tentatives_connexion
+                             WHERE ip = ? AND reussi = 0
+                               AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)");
+        $st->execute([adresse_ip(), CONNEXION_BLOCAGE_MIN]);
+        $echecs = (int)$st->fetchColumn();
+        if ($echecs < CONNEXION_MAX_ESSAIS) return 0;
+
+        $st = $pdo->prepare("SELECT TIMESTAMPDIFF(MINUTE, NOW(), DATE_ADD(MAX(created_at), INTERVAL ? MINUTE))
+                             FROM tentatives_connexion WHERE ip = ? AND reussi = 0");
+        $st->execute([CONNEXION_BLOCAGE_MIN, adresse_ip()]);
+        return max(1, (int)$st->fetchColumn());
+    } catch (Throwable $e) { return 0; }
+}
+
+/* Après une connexion réussie, on efface les échecs de cette adresse. */
+function reinitialiser_tentatives(PDO $pdo): void {
+    try {
+        $pdo->prepare('DELETE FROM tentatives_connexion WHERE ip = ? AND reussi = 0')
+            ->execute([adresse_ip()]);
+    } catch (Throwable $e) {}
+}
+
+/* ============================================================================
+   JOURNAL DES ACTIONS
+   Trace les opérations sensibles : qui, quoi, quand. Indispensable dès que
+   plusieurs personnes ont accès à la facturation.
+   ============================================================================ */
+function journaliser(PDO $pdo, string $action, string $cible = '', ?int $cibleId = null, string $detail = ''): void {
+    try {
+        $uid = (int)($_SESSION['admin_id'] ?? 0) ?: null;
+        $nom = (string)($_SESSION['admin_nom'] ?? '');
+        $role = (string)($_SESSION['admin_role'] ?? '');
+        $pdo->prepare('INSERT INTO journal (user_id, acteur, role, action, cible, cible_id, detail, ip)
+                       VALUES (?,?,?,?,?,?,?,?)')
+            ->execute([$uid, mb_substr($nom, 0, 120), mb_substr($role, 0, 20),
+                       mb_substr($action, 0, 60), mb_substr($cible, 0, 60), $cibleId,
+                       mb_substr($detail, 0, 255), adresse_ip()]);
+    } catch (Throwable $e) { /* une action réussie ne doit jamais échouer à cause du journal */ }
+}
+
 /* Groupes de la barre laterale et des permissions (une seule source de verite) */
 function groupes_modules(): array {
     return [
@@ -230,6 +305,7 @@ function all_modules(): array {
         'documents'    => ['Traitement de texte', '📝', 'documents.php', 'docs', false, true],
         'coffre'       => ['Coffre à documents','🗄️', 'coffre.php',      'docs', false, false],
         'taches'       => ['Tâches',         '✅', 'taches.php',       'equipe', false, true],
+        'journal'      => ['Journal des actions', '📖', 'journal.php', 'equipe', true, false],
         'rapports'     => ['Rapports & demandes',       '📝', 'rapports.php',     'equipe', false, true],
         'messagerie'   => ['Messagerie',     '💬', 'messagerie.php',   'echange', false, true],
         'forum'        => ['Forum d\'équipe','📣', 'forum.php',        'echange', false, true],

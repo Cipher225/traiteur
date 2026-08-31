@@ -143,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['supprimer'])) {
         if (!is_admin()) { flash("Seul un administrateur peut supprimer un document.", 'error'); header('Location: documents.php'); exit; }
         $pdo->prepare('DELETE FROM documents_texte WHERE id=?')->execute([(int)$_POST['supprimer']]);
+        journaliser($pdo, 'suppression', 'document', (int)$_POST['supprimer'], 'Document rédigé supprimé');
         flash('Document supprimé.');
         header('Location: documents.php'); exit;
     }

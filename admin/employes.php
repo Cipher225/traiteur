@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['supprimer'])) {
         $eid = (int)$_POST['supprimer'];
         // Récupérer le compte lié pour archiver son identité AVANT suppression
-        $uid = (int)$pdo->query("SELECT id FROM users WHERE employe_id=" . $eid . " AND role='employe' LIMIT 1")->fetchColumn();
+        $uid = (int)$pdo->query("SELECT id FROM users WHERE employe_id=" . $eid . " AND role IN ('employe','admin') LIMIT 1")->fetchColumn();
         if ($uid > 0) {
             archiver_membre($pdo, $uid); // garde le nom pour messages, forum, rapports…
             $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$uid]);
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['toggle_compte'])) {
         $uid = (int)$_POST['toggle_compte'];
         if ($uid !== (int)$_SESSION['admin_id'])
-            $pdo->prepare("UPDATE users SET actif=1-actif WHERE id=? AND role='employe'")->execute([$uid]);
+            $pdo->prepare("UPDATE users SET actif=1-actif WHERE id=? AND role IN ('employe','admin')")->execute([$uid]);
         flash('Statut du compte mis à jour.');
         header('Location: employes.php'); exit;
     }
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $uid = (int)$_POST['acces_exception'];
         $mode = $_POST['exc_mode'] ?? 'jour';
         if ($mode === 'revoquer') {
-            $pdo->prepare("UPDATE users SET acces_exception_until=NULL WHERE id=? AND role='employe'")->execute([$uid]);
+            $pdo->prepare("UPDATE users SET acces_exception_until=NULL WHERE id=? AND role IN ('employe','admin')")->execute([$uid]);
             flash('Accès exceptionnel révoqué.');
         } else {
             // Déterminer la date de fin selon le mode choisi
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else { // 'jour' : jusqu'à la fin de la journée
                 $until = date('Y-m-d 23:59:59');
             }
-            $pdo->prepare("UPDATE users SET acces_exception_until=? WHERE id=? AND role='employe'")->execute([$until, $uid]);
+            $pdo->prepare("UPDATE users SET acces_exception_until=? WHERE id=? AND role IN ('employe','admin')")->execute([$until, $uid]);
             flash('Accès accordé jusqu\'au ' . date('d/m/Y à H:i', strtotime($until)) . '.');
         }
         header('Location: employes.php'); exit;
@@ -136,8 +136,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $permsJson = json_encode($perms);
 
     // Compte déjà lié ?
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE employe_id=? AND role='employe'");
-    $stmt->execute([$eid]); $existingUid = $stmt->fetchColumn();
+    /* Rôle du compte : seul un administrateur peut en désigner un autre.
+       Sans cette restriction, un employé pourrait s'octroyer tous les droits. */
+    $roleDemande = (is_admin() && ($_POST['role_compte'] ?? '') === 'admin') ? 'admin' : 'employe';
+
+    $stmt = $pdo->prepare("SELECT id, role FROM users WHERE employe_id=? AND role IN ('employe','admin')");
+    $stmt->execute([$eid]);
+    $ligneCompte = $stmt->fetch();
+    $existingUid = $ligneCompte['id'] ?? null;
 
     if ($username !== '') {
         // unicité
@@ -146,8 +152,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk->fetch()) { flash('Cet identifiant est déjà pris.', 'error'); header('Location: employes.php?edit='.$eid); exit; }
 
         if ($existingUid) {
-            $pdo->prepare('UPDATE users SET nom=?, username=?, permissions=? WHERE id=?')
-                ->execute([mb_substr($nom,0,100), mb_substr($username,0,50), $permsJson, $existingUid]);
+            // Un administrateur ne peut pas se rétrograder lui-même : il resterait sans accès
+            $sePropre = ((int)$existingUid === (int)($_SESSION['admin_id'] ?? 0));
+            if ($sePropre && ($ligneCompte['role'] ?? '') === 'admin' && $roleDemande !== 'admin') {
+                $roleDemande = 'admin';
+                flash("Vous ne pouvez pas retirer vos propres droits d'administrateur.", 'error');
+            }
+            $pdo->prepare('UPDATE users SET nom=?, username=?, permissions=?, role=? WHERE id=?')
+                ->execute([mb_substr($nom,0,100), mb_substr($username,0,50), $permsJson, $roleDemande, $existingUid]);
             if ($pass !== '') {
                 if (strlen($pass) < 6) { flash('Mot de passe : 6 caractères minimum.', 'error'); header('Location: employes.php?edit='.$eid); exit; }
                 $pdo->prepare('UPDATE users SET password=? WHERE id=?')->execute([password_hash($pass, PASSWORD_DEFAULT), $existingUid]);
@@ -155,9 +167,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Employé et compte mis à jour.');
         } else {
             if (strlen($pass) < 6) { flash('Pour créer le compte, indiquez un mot de passe (6 caractères min.).', 'error'); header('Location: employes.php?edit='.$eid); exit; }
-            $pdo->prepare("INSERT INTO users (username,password,nom,role,permissions,employe_id,actif) VALUES (?,?,?,'employe',?,?,1)")
-                ->execute([mb_substr($username,0,50), password_hash($pass, PASSWORD_DEFAULT), mb_substr($nom,0,100), $permsJson, $eid]);
-            flash('Employé enregistré et compte créé. Communiquez-lui son identifiant et son mot de passe.');
+            $pdo->prepare("INSERT INTO users (username,password,nom,role,permissions,employe_id,actif) VALUES (?,?,?,?,?,?,1)")
+                ->execute([mb_substr($username,0,50), password_hash($pass, PASSWORD_DEFAULT),
+                           mb_substr($nom,0,100), $roleDemande, $permsJson, $eid]);
+            flash($roleDemande === 'admin'
+                ? 'Compte ADMINISTRATEUR créé. Cette personne a désormais accès à toute l\'application.'
+                : 'Employé enregistré et compte créé. Communiquez-lui son identifiant et son mot de passe.');
         }
     } else {
         // pas de username fourni : si un compte existe, on met juste à jour ses permissions
@@ -174,13 +189,13 @@ $edit = null; $compte = null; $edit_perms = [];
 if (isset($_GET['edit'])) {
     $stmt = $pdo->prepare('SELECT * FROM employes WHERE id=?'); $stmt->execute([(int)$_GET['edit']]); $edit = $stmt->fetch();
     if ($edit) {
-        $c = $pdo->prepare("SELECT * FROM users WHERE employe_id=? AND role='employe'"); $c->execute([$edit['id']]); $compte = $c->fetch();
+        $c = $pdo->prepare("SELECT * FROM users WHERE employe_id=? AND role IN ('employe','admin')"); $c->execute([$edit['id']]); $compte = $c->fetch();
         $edit_perms = $compte && $compte['permissions'] ? (json_decode($compte['permissions'], true) ?: []) : [];
     }
 }
 
 $rows = $pdo->query("SELECT e.*, u.id AS uid, u.username, u.actif AS compte_actif, u.permissions, u.acces_exception_until
-                     FROM employes e LEFT JOIN users u ON u.employe_id=e.id AND u.role='employe'
+                     FROM employes e LEFT JOIN users u ON u.employe_id=e.id AND u.role IN ('employe','admin')
                      ORDER BY e.actif DESC, e.nom")->fetchAll();
 
 admin_header('Employés & accès', 'employes', $pdo, $settings);
@@ -254,6 +269,22 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
     <div class="form-grid">
       <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="<?= e($compte['username'] ?? '') ?>" placeholder="ex : grace" pattern="[a-zA-Z0-9._@+-]*"></div>
       <div class="field"><label>Mot de passe <?= $compte ? '(laisser vide = inchangé)' : '' ?></label><input class="input" type="text" name="password" placeholder="6 caractères min." autocomplete="new-password"></div>
+      <?php if (is_admin()): $roleActuel = $compte['role'] ?? 'employe'; ?>
+      <div class="field full">
+        <label>Type de compte</label>
+        <select class="input" name="role_compte" id="sel-role-compte">
+          <option value="employe" <?= $roleActuel !== 'admin' ? 'selected' : '' ?>>👤 Employé — accès limité aux sections cochées</option>
+          <option value="admin"   <?= $roleActuel === 'admin' ? 'selected' : '' ?>>👑 Administrateur — accès total à l'application</option>
+        </select>
+        <div id="avert-admin" style="margin-top:8px;padding:9px 13px;border-radius:11px;font-size:12.5px;
+             display:<?= $roleActuel === 'admin' ? 'block' : 'none' ?>;
+             color:#f0b429;background:rgba(240,180,41,.12);border:1px solid rgba(240,180,41,.3)">
+          ⚠️ Un administrateur peut tout consulter et tout modifier : facturation, comptabilité,
+          paiements, suppression de documents et gestion des accès. N'accordez ce rôle qu'à une
+          personne de confiance.
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
 
     <h3 class="form-section">🗂️ Sections autorisées</h3>
@@ -353,4 +384,12 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
     </table>
   </div>
 </div>
+<script>
+(function(){
+  var sel = document.getElementById('sel-role-compte');
+  var av  = document.getElementById('avert-admin');
+  if (!sel || !av) return;
+  sel.addEventListener('change', function(){ av.style.display = (this.value === 'admin') ? 'block' : 'none'; });
+})();
+</script>
 <?php admin_footer(); ?>

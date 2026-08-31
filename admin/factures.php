@@ -33,6 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         // 3) La facture elle-même
         $pdo->prepare('DELETE FROM factures WHERE id=?')->execute([$fid]);
+        journaliser($pdo, 'suppression', 'facture', (int)($_POST['supprimer'] ?? 0), 'Document supprimé');
         flash('Document supprimé définitivement (retiré aussi du coffre).');
         header('Location: factures.php'.$ctx); exit;
     }

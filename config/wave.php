@@ -186,6 +186,8 @@ function paiement_finaliser(PDO $pdo, string $reference, array $settings, array 
 
     // Les emails sont envoyés hors transaction : un échec d'envoi ne doit jamais
     // remettre en cause un paiement déjà encaissé.
+    journaliser($pdo, 'paiement', 'recu', $recuId ?? null,
+        'Encaissement Wave ' . $reference . ' — ' . (int)$p['montant']);
     paiement_notifier($pdo, $reference, $settings);
     $st = $pdo->prepare('SELECT * FROM paiements WHERE reference=?');
     $st->execute([$reference]);

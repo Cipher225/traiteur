@@ -62,6 +62,16 @@ if [ -f /var/www/html/migrations.sql ]; then
     run_sql --force "${DB_NAME}" < /var/www/html/migrations.sql 2>/dev/null || \
         echo "[entrypoint] ℹ Certaines migrations étaient déjà appliquées (normal)."
     echo "[entrypoint] Migrations terminées."
+
+# Sauvegarde automatique de la base, chaque nuit à 2 h (7 dernières conservées)
+{
+  echo "DB_HOST=${DB_HOST}"; echo "DB_PORT=${DB_PORT}"; echo "DB_NAME=${DB_NAME}"
+  echo "DB_USER=${DB_USER}"; echo "DB_PASS=${DB_PASS}"
+  echo "0 2 * * * root /usr/local/bin/sauvegarde.sh >> /var/log/sauvegarde.log 2>&1"
+} > /etc/cron.d/sauvegarde-traiteur
+chmod 0644 /etc/cron.d/sauvegarde-traiteur
+service cron start >/dev/null 2>&1 && echo "[entrypoint] Sauvegarde automatique activée (chaque nuit à 2 h)." \
+    || echo "[entrypoint] ⚠ Sauvegarde automatique indisponible." 
 fi
 
 # Droits du dossier uploads (volume persistant)

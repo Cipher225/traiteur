@@ -44,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare("DELETE FROM users WHERE client_id=? AND role='client'")->execute([$cid]);
         $pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$cid]);
+        journaliser($pdo, 'suppression', 'client', $cid, 'Client supprimé');
         flash('Client supprimé.');
         header('Location: clients.php'); exit;
     }

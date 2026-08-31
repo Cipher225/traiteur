@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nouvel = ($_POST['bascule'] === '1') ? '1' : '0';
         $pdo->prepare('INSERT INTO settings (cle, valeur) VALUES (?,?) ON DUPLICATE KEY UPDATE valeur=VALUES(valeur)')
             ->execute(['wave_actif', $nouvel]);
+        journaliser($pdo, 'reglage', 'paiement', null, $nouvel === '1' ? 'Paiement en ligne activé' : 'Paiement en ligne désactivé');
         flash($nouvel === '1' ? 'Paiement en ligne activé. ✅' : 'Paiement en ligne désactivé.');
         header('Location: paiements.php'); exit;
     }

@@ -8,7 +8,7 @@ FROM php:8.2-apache
 # Dépendances système pour GD (images) et l'internationalisation
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpng-dev libjpeg62-turbo-dev libfreetype6-dev libwebp-dev \
-        libzip-dev libonig-dev unzip default-mysql-client \
+        libzip-dev libonig-dev unzip default-mysql-client cron gzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install -j"$(nproc)" gd pdo_mysql mysqli zip mbstring \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -32,7 +32,8 @@ COPY . /var/www/html/
 
 # L'entrée d'amorçage : attend la base, installe/migre, puis lance Apache
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh \
+COPY docker/sauvegarde.sh /usr/local/bin/sauvegarde.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/sauvegarde.sh \
     && mkdir -p /var/www/html/uploads \
     && chown -R www-data:www-data /var/www/html
 

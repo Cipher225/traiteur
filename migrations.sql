@@ -202,3 +202,33 @@ INSERT IGNORE INTO settings (cle, valeur) VALUES
 -- Nouveaux reseaux sociaux
 INSERT IGNORE INTO settings (cle, valeur) VALUES
  ('tiktok',''), ('youtube',''), ('linkedin',''), ('x','');
+
+-- =====================================================================
+--  SÉCURITÉ : protection anti-intrusion et journal des actions
+-- =====================================================================
+
+-- Tentatives de connexion (protection contre les essais en série)
+CREATE TABLE IF NOT EXISTS tentatives_connexion (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  ip VARCHAR(64) NOT NULL,
+  identifiant VARCHAR(120) DEFAULT '',
+  reussi TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (ip, created_at),
+  INDEX (created_at)
+);
+
+-- Journal des actions sensibles (qui a fait quoi, et quand)
+CREATE TABLE IF NOT EXISTS journal (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT DEFAULT NULL,
+  acteur VARCHAR(120) DEFAULT '',
+  role VARCHAR(20) DEFAULT '',
+  action VARCHAR(60) NOT NULL,
+  cible VARCHAR(60) DEFAULT '',
+  cible_id INT DEFAULT NULL,
+  detail VARCHAR(255) DEFAULT '',
+  ip VARCHAR(64) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (created_at), INDEX (action), INDEX (user_id)
+);

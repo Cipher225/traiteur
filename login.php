@@ -9,11 +9,13 @@ if (!empty($_SESSION['admin_id'])) {
 $erreur = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    // Anti brute-force simple : 5 essais puis pause 5 min
-    $_SESSION['tries'] = $_SESSION['tries'] ?? 0;
-    $_SESSION['lock'] = $_SESSION['lock'] ?? 0;
-    if ($_SESSION['lock'] > time()) {
-        $erreur = 'Trop de tentatives. Réessayez dans quelques minutes.';
+    /* Protection contre les essais en série : comptabilisée en base et par adresse IP,
+       elle résiste aux robots qui n'acceptent pas les cookies. */
+    $identifiantSaisi = trim($_POST['username'] ?? '');
+    $minutes = connexion_bloquee($pdo);
+    if ($minutes > 0) {
+        $erreur = 'Trop de tentatives infructueuses. Réessayez dans ' . $minutes . ' minute' . ($minutes > 1 ? 's' : '') . '.';
+        enregistrer_tentative($pdo, $identifiantSaisi, false);
     } else {
         $stmt = $pdo->prepare('SELECT * FROM users WHERE username = ?');
         $stmt->execute([trim($_POST['username'] ?? '')]);
@@ -26,7 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_nom'] = $user['nom'];
             $_SESSION['admin_role'] = $user['role'] ?? 'admin';
             $_SESSION['admin_perms'] = $user['permissions'] ? (json_decode($user['permissions'], true) ?: []) : [];
-            $_SESSION['tries'] = 0;
+            reinitialiser_tentatives($pdo);
+            enregistrer_tentative($pdo, $identifiantSaisi, true);
             /* Session unique : on enregistre l'identifiant de session courant.
                Toute autre session déjà ouverte pour ce compte devient caduque. */
             $sid = session_id();
@@ -35,12 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['sid_check'] = $sid;
             $_SESSION['derniere_activite'] = time();
             capturer_connexion($pdo, (int)$user['id']);
+            journaliser($pdo, 'connexion', 'utilisateur', (int)$user['id'], 'Connexion réussie');
             $dest = ($_SESSION['admin_role'] === 'client') ? 'espace-client/index.php' : 'admin/index.php';
             header('Location: ' . $dest); exit;
         } else {
-            $_SESSION['tries']++;
-            if ($_SESSION['tries'] >= 5) { $_SESSION['lock'] = time() + 300; $_SESSION['tries'] = 0; }
-            $erreur = 'Identifiants incorrects.';
+            enregistrer_tentative($pdo, $identifiantSaisi, false);
+            $restants = CONNEXION_MAX_ESSAIS - 1 - (int)$pdo->query(
+                "SELECT COUNT(*) FROM tentatives_connexion WHERE ip = " . $pdo->quote(adresse_ip()) .
+                " AND reussi = 0 AND created_at > DATE_SUB(NOW(), INTERVAL " . CONNEXION_BLOCAGE_MIN . " MINUTE)"
+            )->fetchColumn();
+            $erreur = 'Identifiants incorrects.'
+                    . ($restants >= 0 && $restants <= 2
+                        ? ' Il vous reste ' . max(0, $restants) . ' tentative' . ($restants > 1 ? 's' : '') . '.'
+                        : '');
         }
     }
 }

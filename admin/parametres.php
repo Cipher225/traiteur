@@ -136,6 +136,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (isset($_POST['effacer_google_secret'])) $up->execute(['google_client_secret', '']);
         flash('Identifiants Google enregistrés.');
+    } elseif (isset($_POST['maj_compte'])) {
+        /* Modification de l'identifiant de connexion et de l'email de récupération.
+           Le mot de passe actuel est exigé : sans lui, quelqu'un ayant accès à une
+           session ouverte pourrait détourner le compte. */
+        $stmt = $pdo->prepare('SELECT * FROM users WHERE id=?');
+        $stmt->execute([$_SESSION['admin_id']]);
+        $user = $stmt->fetch();
+
+        $nouvelId = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
+        $mail     = trim($_POST['email'] ?? '');
+
+        if (!$user || !password_verify($_POST['mdp_actuel'] ?? '', $user['password'])) {
+            flash('Mot de passe actuel incorrect.', 'error');
+        } elseif (mb_strlen($nouvelId) < 3) {
+            flash("L'identifiant doit contenir au moins 3 caractères.", 'error');
+        } elseif ($mail !== '' && !filter_var($mail, FILTER_VALIDATE_EMAIL)) {
+            flash("L'adresse email n'est pas valide.", 'error');
+        } else {
+            $v = $pdo->prepare('SELECT COUNT(*) FROM users WHERE username=? AND id<>?');
+            $v->execute([$nouvelId, (int)$user['id']]);
+            if ((int)$v->fetchColumn() > 0) {
+                flash('Cet identifiant est déjà utilisé par un autre compte.', 'error');
+            } else {
+                $pdo->prepare('UPDATE users SET username=?, email=? WHERE id=?')
+                    ->execute([$nouvelId, $mail, (int)$user['id']]);
+                flash('Identifiant mis à jour. Utilisez-le à votre prochaine connexion. ✅');
+            }
+        }
+        header('Location: parametres.php?section=motdepasse'); exit;
+
     } elseif (isset($_POST['maj_mdp'])) {
         $stmt = $pdo->prepare('SELECT * FROM users WHERE id=?');
         $stmt->execute([$_SESSION['admin_id']]);
@@ -420,6 +450,54 @@ document.getElementById('smtp_email').addEventListener('blur', function () {
 
 <?php elseif ($avanceeOuverte === 'motdepasse'): ?>
 <a href="parametres.php" class="btn btn-glass btn-sm" style="margin-bottom:14px">‹ Toutes les rubriques</a>
+<?php
+$moi = $pdo->prepare('SELECT username, email, google_id FROM users WHERE id=?');
+$moi->execute([$_SESSION['admin_id']]);
+$monCompte = $moi->fetch() ?: ['username' => '', 'email' => '', 'google_id' => null];
+$googlePret = trim((string)($s['google_client_id'] ?? '')) !== '' && trim((string)($s['google_client_secret'] ?? '')) !== '';
+?>
+<div class="panel glass" style="margin-bottom:14px">
+  <h2>👤 Mon identifiant de connexion</h2>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <div class="field">
+      <label>Identifiant</label>
+      <input class="input" name="username" value="<?= e($monCompte['username']) ?>" required minlength="3" pattern="[a-zA-Z0-9._@+-]*">
+      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Lettres, chiffres, point, tiret, arobase. Une adresse email est acceptée.</div>
+    </div>
+    <div class="field">
+      <label>Email de récupération</label>
+      <input class="input" type="email" name="email" value="<?= e($monCompte['email'] ?? '') ?>" placeholder="vous@exemple.ci">
+      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Sert à réinitialiser votre mot de passe si vous l'oubliez.</div>
+    </div>
+    <div class="field full">
+      <label>Mot de passe actuel <span style="color:#c0392b">*</span></label>
+      <input class="input" type="password" name="mdp_actuel" required autocomplete="current-password">
+      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Exigé pour toute modification du compte, par sécurité.</div>
+    </div>
+    <div class="full"><button class="btn btn-gold" name="maj_compte" value="1">💾 Enregistrer</button></div>
+  </form>
+
+  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--glass-border)">
+    <strong style="font-size:13.5px">🔗 Connexion avec Google</strong>
+    <?php if (!$googlePret): ?>
+      <p style="margin:6px 0 0;font-size:12.5px;color:var(--ink-faint)">
+        Non configurée. Renseignez vos identifiants dans
+        <a href="parametres.php?section=google" style="color:var(--gold)">Connexion Google</a>
+        pour pouvoir vous connecter et récupérer votre mot de passe via votre compte Google.</p>
+    <?php elseif (!empty($monCompte['google_id'])): ?>
+      <p style="margin:6px 0 0;font-size:12.5px;color:#10b981">
+        ✅ Votre compte est relié à Google. Vous pouvez vous connecter d'un clic, et récupérer
+        l'accès même en cas d'oubli du mot de passe.</p>
+    <?php else: ?>
+      <p style="margin:6px 0 10px;font-size:12.5px;color:var(--ink-faint)">
+        Reliez votre compte à Google pour vous connecter d'un clic et ne jamais perdre l'accès.
+        L'adresse Google doit être identique à l'email ci-dessus.</p>
+      <a class="btn btn-glass btn-sm" href="../google-login.php">Relier mon compte Google</a>
+    <?php endif; ?>
+  </div>
+</div>
+
 <div class="panel glass">
   <h2>🔒 Changer mon mot de passe</h2>
   <form method="post" class="form-grid">
