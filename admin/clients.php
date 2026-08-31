@@ -18,6 +18,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: clients.php'); exit;
     }
 
+    /* --- Suppression d'un client ---
+       Le client n'est supprimable que s'il n'a aucun document rattaché : sinon on
+       perdrait la traçabilité de factures ou de paiements déjà émis. */
+    if (isset($_POST['supprimer'])) {
+        if (!is_admin()) { flash("Seul un administrateur peut supprimer un client.", 'error'); header('Location: clients.php'); exit; }
+        $cid = (int)$_POST['supprimer'];
+
+        $liens = [];
+        foreach ([['factures', 'facture'], ['recus', 'entrée / sortie'],
+                  ['commandes_client', 'commande'], ['paiements', 'paiement']] as [$table, $libelle]) {
+            try {
+                $st = $pdo->prepare("SELECT COUNT(*) FROM `$table` WHERE client_id=?");
+                $st->execute([$cid]);
+                $n = (int)$st->fetchColumn();
+                if ($n > 0) $liens[] = $n . ' ' . $libelle . ($n > 1 ? 's' : '');
+            } catch (Throwable $e) { /* table absente : on ignore */ }
+        }
+
+        if ($liens) {
+            flash("Ce client ne peut pas être supprimé : il possède " . implode(', ', $liens)
+                . ". Vous pouvez désactiver son accès à la place.", 'error');
+            header('Location: clients.php'); exit;
+        }
+
+        $pdo->prepare("DELETE FROM users WHERE client_id=? AND role='client'")->execute([$cid]);
+        $pdo->prepare('DELETE FROM clients WHERE id=?')->execute([$cid]);
+        flash('Client supprimé.');
+        header('Location: clients.php'); exit;
+    }
+
     $id = (int)($_POST['id'] ?? 0);
     $nom = trim($_POST['nom'] ?? '');
     if ($nom === '') { flash('Le nom du client est obligatoire.', 'error'); header('Location: clients.php'); exit; }
@@ -45,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Accès à l'espace client (facultatif)
-    $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(trim($_POST['username'] ?? '')));
+    $username = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
     $pass = $_POST['password'] ?? '';
     $c = $pdo->prepare("SELECT id FROM users WHERE client_id=? AND role='client'");
     $c->execute([$cid]); $existingUid = $c->fetchColumn();
@@ -109,7 +139,7 @@ admin_header('Clients', 'clients', $pdo, $settings);
     <div class="field full"><label>Notes</label><textarea class="input" name="notes" style="min-height:70px"><?= e($edit['notes'] ?? '') ?></textarea></div>
 
     <div class="full"><h3 class="form-section">🔐 Accès à l'espace client <?= $compte ? '<span class="badge '.($compte['actif']?'badge-teal':'badge-danger').'">'.($compte['actif']?'Actif':'Désactivé').'</span>' : '' ?></h3></div>
-    <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="<?= e($compte['username'] ?? '') ?>" placeholder="ex : client-konan" pattern="[a-zA-Z0-9._-]*"></div>
+    <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="<?= e($compte['username'] ?? '') ?>" placeholder="ex : client-konan" pattern="[a-zA-Z0-9._@+-]*"></div>
     <div class="field"><label>Mot de passe <?= $compte ? '(laisser vide = inchangé)' : '' ?></label><input class="input" type="text" name="password" placeholder="6 caractères min." autocomplete="new-password"></div>
     <div class="field full" style="color:var(--ink-faint);font-size:12.5px;margin-top:-6px">Renseignez un identifiant et un mot de passe pour donner au client l'accès à son espace (ses factures, devis, reçus et la possibilité de laisser un avis). Laissez vide si inutile.</div>
 

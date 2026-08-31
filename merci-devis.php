@@ -9,7 +9,7 @@ if (!$data) { header('Location: index.php'); exit; }
 $err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['creer_compte'])) {
     csrf_check();
-    $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(trim($_POST['username'] ?? '')));
+    $username = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
     $pass = $_POST['password'] ?? '';
     if ($username === '' || strlen($pass) < 6) {
         $err = 'Choisissez un identifiant et un mot de passe d\'au moins 6 caractères.';
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['creer_compte'])) {
 $suggest = '';
 if (!empty($data['email']) && strpos($data['email'],'@')!==false) $suggest = strtolower(explode('@',$data['email'])[0]);
 if ($suggest==='') $suggest = strtolower(preg_replace('/[^a-z0-9]/','', explode(' ', $data['nom'])[0] ?? 'client'));
-$suggest = preg_replace('/[^a-z0-9._-]/','',$suggest);
+$suggest = preg_replace('/[^a-z0-9._@+-]/','',$suggest);
 ?>
 <!DOCTYPE html>
 <html lang="fr">

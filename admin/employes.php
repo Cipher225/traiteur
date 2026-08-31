@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Compte de connexion (facultatif)
-    $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(trim($_POST['username'] ?? '')));
+    $username = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
     $pass     = $_POST['password'] ?? '';
     $perms    = array_values(array_intersect(array_keys($attribuables), $_POST['perms'] ?? []));
     $permsJson = json_encode($perms);
@@ -252,7 +252,7 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
     <h3 class="form-section">🔐 Accès à l'espace <?= $compte ? '<span class="badge '.($compte['actif']?'badge-teal':'badge-danger').'">'.($compte['actif']?'Compte actif':'Compte désactivé').'</span>' : '' ?></h3>
     <p style="color:var(--ink-faint);font-size:12.5px;margin:-4px 0 14px">Renseignez un identifiant et un mot de passe pour donner à l'employé un accès à son espace. Laissez vide si l'employé n'a pas besoin de se connecter.</p>
     <div class="form-grid">
-      <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="<?= e($compte['username'] ?? '') ?>" placeholder="ex : grace" pattern="[a-zA-Z0-9._-]*"></div>
+      <div class="field"><label>Identifiant de connexion</label><input class="input" name="username" value="<?= e($compte['username'] ?? '') ?>" placeholder="ex : grace" pattern="[a-zA-Z0-9._@+-]*"></div>
       <div class="field"><label>Mot de passe <?= $compte ? '(laisser vide = inchangé)' : '' ?></label><input class="input" type="text" name="password" placeholder="6 caractères min." autocomplete="new-password"></div>
     </div>
 

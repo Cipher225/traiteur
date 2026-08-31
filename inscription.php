@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $adresse = trim($_POST['adresse'] ?? '');
     $ncc = trim($_POST['ncc'] ?? '');
-    $username = preg_replace('/[^a-z0-9._-]/', '', strtolower(trim($_POST['username'] ?? '')));
+    $username = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
     $pass = $_POST['password'] ?? '';
     $pass2 = $_POST['password2'] ?? '';
 
