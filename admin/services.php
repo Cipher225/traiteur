@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/layout.php';
+require_once __DIR__ . '/includes/icones.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
@@ -36,7 +37,7 @@ admin_header('Services & prestations', 'services', $pdo, $settings);
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
     <input type="hidden" name="id" value="<?= $edit['id'] ?? '' ?>">
     <div class="field"><label>Nom *</label><input class="input" name="nom" required value="<?= e($edit['nom'] ?? '') ?>"></div>
-    <div class="field"><label>Icône (emoji)</label><input class="input" name="icone" value="<?= e($edit['icone'] ?? '✨') ?>"></div>
+    <div class="field"><?= champ_icone('icone', $edit['icone'] ?? '', 'Icône du service', '✨') ?></div>
     <div class="field"><label>Ordre</label><input class="input" type="number" name="ordre" value="<?= e($edit['ordre'] ?? 0) ?>"></div>
     <div class="field full"><label>Description</label><textarea class="input" name="description" style="min-height:80px"><?= e($edit['description'] ?? '') ?></textarea></div>
     <label class="switch"><input type="checkbox" name="actif" <?= ($edit['actif'] ?? 1) ? 'checked' : '' ?>> Visible sur le site</label>

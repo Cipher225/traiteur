@@ -31,11 +31,35 @@
     btn.style.display = 'inline-flex';
   });
 
-  var dejaInstallee = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var dejaInstallee = window.matchMedia('(display-mode: standalone)').matches
+                   || window.navigator.standalone === true;
   var ua = window.navigator.userAgent.toLowerCase();
   var estIOS = /iphone|ipad|ipod/.test(ua);
 
-  if (estIOS && !dejaInstallee) { btn.style.display = 'inline-flex'; }
+  /* L'application a-t-elle déjà été installée depuis cet appareil ?
+     On le retient, car une fois installée le navigateur ne propose plus rien,
+     et sur iPhone il n'existe aucun moyen de le détecter autrement. */
+  function memoireInstallee() {
+    try { return localStorage.getItem('app_installee') === '1'; } catch (e) { return false; }
+  }
+  function marquerInstallee() {
+    try { localStorage.setItem('app_installee', '1'); } catch (e) {}
+  }
+
+  function masquer() { btn.style.display = 'none'; }
+
+  // Ouverte en tant qu'application : le bouton n'a plus lieu d'être
+  if (dejaInstallee) { marquerInstallee(); masquer(); return; }
+  if (memoireInstallee()) { masquer(); return; }
+
+  // Chrome/Edge : vérification fiable auprès du système
+  if (navigator.getInstalledRelatedApps) {
+    navigator.getInstalledRelatedApps().then(function (apps) {
+      if (apps && apps.length) { marquerInstallee(); masquer(); }
+    }).catch(function () {});
+  }
+
+  if (estIOS) { btn.style.display = 'inline-flex'; }
 
   btn.addEventListener('click', function () {
     if (promptEvt) {
@@ -50,10 +74,24 @@
       } else {
         texte.innerHTML = 'Pour installer : ouvrez le menu de votre navigateur et choisissez <strong>&laquo; Installer l\'application &raquo;</strong> ou <strong>&laquo; Ajouter a l\'ecran d\'accueil &raquo;</strong>.';
       }
-      document.getElementById('pwa-aide').style.display = 'flex';
+      var aide = document.getElementById('pwa-aide');
+      if (estIOS && !document.getElementById('pwa-fait')) {
+        var f = document.createElement('button');
+        f.id = 'pwa-fait';
+        f.className = 'pwa-aide-btn';
+        f.textContent = "C'est fait, ne plus afficher";
+        f.addEventListener('click', function () { marquerInstallee(); masquer(); aide.style.display = 'none'; });
+        texte.parentNode.appendChild(f);
+      }
+      aide.style.display = 'flex';
     }
   });
 
-  window.addEventListener('appinstalled', function () { btn.style.display = 'none'; });
+  window.addEventListener('appinstalled', function () {
+    marquerInstallee();
+    masquer();
+    var aide = document.getElementById('pwa-aide');
+    if (aide) aide.style.display = 'none';
+  });
 })();
 </script>

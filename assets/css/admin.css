@@ -1765,3 +1765,51 @@ a.dmd-cal:hover{ background:rgba(212,165,38,.22) }
 .pay-retour .pr-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px}
 .pay-retour.pr-succes{border-color:rgba(16,185,129,.4)}
 .pay-retour.pr-echec{border-color:rgba(248,113,113,.4)}
+
+/* ============================================================
+   NOTIFICATIONS EN DIRECT
+   ============================================================ */
+.notif-flash{position:fixed;right:18px;bottom:18px;z-index:9999;display:flex;align-items:center;gap:9px;
+  padding:12px 18px;border-radius:14px;font-size:13.5px;font-weight:600;color:#0a1020;
+  background:linear-gradient(135deg,#e9c15c,#d4a526);box-shadow:0 10px 32px rgba(0,0,0,.35);
+  animation:notifEntre .35s cubic-bezier(.2,.9,.3,1.4)}
+.notif-flash span{font-size:17px}
+.notif-flash.sortie{animation:notifSort .5s forwards}
+@keyframes notifEntre{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes notifSort{to{opacity:0;transform:translateY(14px)}}
+.nav-badge.pulse{animation:badgePulse .55s ease}
+@keyframes badgePulse{0%{transform:scale(1)}45%{transform:scale(1.35)}100%{transform:scale(1)}}
+@media (max-width:640px){ .notif-flash{left:14px;right:14px;bottom:14px;justify-content:center} }
+
+/* Bouton « c'est fait » de l'aide à l'installation (iPhone) */
+.pwa-aide-btn{margin-top:12px;padding:9px 16px;border-radius:10px;border:none;cursor:pointer;
+  font-size:13px;font-weight:700;background:var(--gold,#d4a526);color:#0a1020}
+
+/* ============================================================
+   SÉLECTEUR D'ICÔNES
+   ============================================================ */
+.champ-icone{position:relative}
+.ci-haut{display:flex;gap:8px;align-items:center}
+.ci-apercu{width:44px;height:44px;flex-shrink:0;border-radius:12px;cursor:pointer;font-size:21px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);transition:all .15s}
+.ci-apercu:hover{border-color:var(--gold);transform:scale(1.05)}
+.ci-valeur{flex:1;min-width:0;text-align:center;font-size:16px}
+.ci-palette{position:absolute;z-index:80;top:100%;left:0;right:0;margin-top:6px;max-height:290px;
+  overflow-y:auto;padding:12px 14px;border-radius:14px;
+  background:var(--glass-strong);border:1px solid var(--glass-border);
+  box-shadow:0 14px 40px rgba(0,0,0,.4);backdrop-filter:blur(16px)}
+.ci-groupe{margin-bottom:11px}
+.ci-groupe:last-child{margin-bottom:0}
+.ci-titre{font-size:10px;letter-spacing:.13em;text-transform:uppercase;font-weight:800;
+  color:var(--ink-faint);margin-bottom:5px}
+.ci-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:4px}
+.ci-item{height:36px;border-radius:9px;cursor:pointer;font-size:19px;border:1px solid transparent;
+  background:var(--glass-border-soft);display:flex;align-items:center;justify-content:center;
+  transition:all .12s}
+.ci-item:hover{background:var(--glass-border);transform:scale(1.12)}
+.ci-item.ci-choisie{border-color:var(--gold);background:rgba(212,165,38,.2)}
+@media (max-width:640px){
+  .ci-palette{max-height:230px}
+  .ci-grille{grid-template-columns:repeat(auto-fill,minmax(34px,1fr))}
+}

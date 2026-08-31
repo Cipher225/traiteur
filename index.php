@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/config/db.php';
+require_once __DIR__ . '/config/reseaux.php';
 $s = get_settings($pdo);
 
 $services = $pdo->query("SELECT * FROM services WHERE actif=1 ORDER BY ordre, id")->fetchAll();
@@ -390,8 +391,10 @@ $f = flash();
       <div class="foot-brand"><?= logo_html('.', 'brand-dot') ?><?= e($s['nom_entreprise']) ?></div>
       <p><?= e($s['footer_description'] ?? '') ?></p>
       <div class="socials">
-        <?php if ($s['facebook']): ?><a href="<?= e($s['facebook']) ?>" target="_blank" rel="noopener" aria-label="Facebook">📘</a><?php endif; ?>
-        <?php if ($s['instagram']): ?><a href="<?= e($s['instagram']) ?>" target="_blank" rel="noopener" aria-label="Instagram">📸</a><?php endif; ?>
+        <?php foreach (reseaux_disponibles() as $cleR => $nomR):
+              if (empty($s[$cleR])) continue; ?>
+        <a href="<?= e($s[$cleR]) ?>" target="_blank" rel="noopener" aria-label="<?= e($nomR) ?>" title="<?= e($nomR) ?>"><?= reseau_svg($cleR, 20) ?></a>
+        <?php endforeach; ?>
         <?php if ($s['whatsapp']): ?><a href="https://wa.me/<?= e(preg_replace('/\D/', '', $s['whatsapp'])) ?>" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true"><path fill="#25D366" d="M16 0a16 16 0 0 0-13.7 24.2L0 32l8-2.1A16 16 0 1 0 16 0z"/><path fill="#fff" d="M12.1 8.6c-.3-.6-.5-.6-.8-.6h-.7c-.2 0-.6.1-.9.4-.3.3-1.2 1.2-1.2 2.9s1.2 3.4 1.4 3.6c.2.3 2.4 3.8 6 5.2 3 1.2 3.6 1 4.2.9.6-.1 2-.8 2.3-1.6.3-.8.3-1.5.2-1.6-.1-.2-.3-.2-.7-.4-.3-.2-2-1-2.3-1.1-.3-.1-.5-.2-.8.2-.2.3-.8 1.1-1 1.3-.2.2-.4.2-.7.1-.4-.2-1.5-.6-2.9-1.8-1.1-1-1.8-2.2-2-2.5-.2-.4 0-.5.1-.7l.5-.6c.2-.2.2-.3.4-.6.1-.2 0-.4 0-.6s-.7-1.8-1-2.4z"/></svg></a><?php endif; ?>
       </div>
     </div>

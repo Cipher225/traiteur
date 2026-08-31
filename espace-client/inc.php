@@ -157,6 +157,8 @@ function retourArriere(){
 </script>
 <script src="<?= asset('../assets/js/notif-son.js') ?>"></script>
 <?php $pwaBase='..'; include __DIR__.'/../config/pwa_script.php'; ?>
+<script>window.NOTIF_URL = 'notifications-check.php';</script>
+<script src="../assets/js/notifications-direct.js"></script>
 </body>
 </html>
 <?php }

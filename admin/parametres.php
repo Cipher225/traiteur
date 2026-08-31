@@ -43,6 +43,10 @@ $groupes = [
         'whatsapp'  => 'Numéro WhatsApp',
         'facebook'  => 'Lien Facebook',
         'instagram' => 'Lien Instagram',
+        'tiktok'    => 'Lien TikTok',
+        'youtube'   => 'Lien YouTube',
+        'linkedin'  => 'Lien LinkedIn',
+        'x'         => 'Lien X (Twitter)',
     ]],
     'Informations légales' => ['⚖️', [
         'forme_juridique' => 'Forme juridique (SARL, SA…)',

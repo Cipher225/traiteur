@@ -58,3 +58,45 @@ document.addEventListener('click', function (e) {
     if (!w.contains(e.target)) w.classList.remove('open');
   });
 });
+
+/* ============================================================
+   SÉLECTEUR D'ICÔNES
+   Un clic sur l'aperçu ou sur « Choisir… » ouvre la palette.
+   ============================================================ */
+(function () {
+  document.addEventListener('click', function (e) {
+    var ouvrir = e.target.closest('.ci-ouvrir, .ci-apercu');
+    if (ouvrir) {
+      var bloc = ouvrir.closest('.champ-icone');
+      var pal = bloc.querySelector('.ci-palette');
+      pal.hidden = !pal.hidden;
+      return;
+    }
+
+    var item = e.target.closest('.ci-item');
+    if (item) {
+      var b = item.closest('.champ-icone');
+      var v = b.querySelector('.ci-valeur');
+      var a = b.querySelector('.ci-apercu');
+      v.value = item.textContent.trim();
+      a.textContent = item.textContent.trim();
+      b.querySelectorAll('.ci-item').forEach(function (x) { x.classList.remove('ci-choisie'); });
+      item.classList.add('ci-choisie');
+      b.querySelector('.ci-palette').hidden = true;
+      return;
+    }
+
+    // Clic à l'extérieur : on referme les palettes ouvertes
+    if (!e.target.closest('.champ-icone')) {
+      document.querySelectorAll('.ci-palette').forEach(function (p) { p.hidden = true; });
+    }
+  });
+
+  // Saisie manuelle : l'aperçu suit
+  document.addEventListener('input', function (e) {
+    if (e.target.classList && e.target.classList.contains('ci-valeur')) {
+      var a = e.target.closest('.champ-icone').querySelector('.ci-apercu');
+      if (a) a.textContent = e.target.value || '·';
+    }
+  });
+})();

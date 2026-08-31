@@ -638,6 +638,7 @@ CREATE TABLE IF NOT EXISTS paiements (
 );
 
 INSERT IGNORE INTO settings (cle, valeur) VALUES
+ ('tiktok',''), ('youtube',''), ('linkedin',''), ('x',''),
  ('wave_actif', '0'), ('wave_api_key', ''), ('wave_mode', 'test'),
  ('wave_webhook_secret', ''), ('wave_frais_client', '0');
 

@@ -1,6 +1,7 @@
 <?php
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/layout.php';
+require_once __DIR__ . '/includes/icones.php';
 $me = (int)$_SESSION['admin_id'];
 $COFFRE = __DIR__ . '/../uploads/coffre';
 if (!is_dir($COFFRE)) @mkdir($COFFRE, 0775, true);
@@ -136,7 +137,7 @@ $csrf = csrf_token();
       <summary class="btn btn-glass btn-sm" style="margin-top:10px;width:100%">➕ Nouveau dossier</summary>
       <form method="post" style="margin-top:10px;display:flex;gap:6px">
         <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="ajouter_dossier" value="1">
-        <input class="input" name="icone" value="📁" style="width:52px;text-align:center" maxlength="4">
+        <?= champ_icone('icone', '', 'Icône', '📁') ?>
         <input class="input" name="nom" placeholder="Nom du dossier" required>
         <button class="btn btn-gold btn-sm">OK</button>
       </form>
@@ -234,7 +235,7 @@ $csrf = csrf_token();
           <details style="position:relative"><summary class="btn btn-glass btn-sm">✏️ Renommer</summary>
             <form method="post" class="glass" style="position:absolute;right:0;top:38px;z-index:5;padding:12px;border-radius:12px;display:flex;gap:6px;width:280px">
               <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="renommer_dossier" value="<?= $dossierActif['id'] ?>">
-              <input class="input" name="icone" value="<?= e($dossierActif['icone']) ?>" style="width:52px;text-align:center" maxlength="4">
+              <?= champ_icone('icone', $dossierActif['icone'], 'Icône', '📁') ?>
               <input class="input" name="nom" value="<?= e($dossierActif['nom']) ?>" required>
               <button class="btn btn-gold btn-sm">OK</button>
             </form>
