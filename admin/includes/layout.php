@@ -57,7 +57,7 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
       <div><strong><?= e($settings['nom_entreprise']) ?></strong><small><?= is_admin() ? 'Espace admin' : 'Espace employé' ?></small></div>
     </div>
     <nav class="side-nav">
-      <a href="index.php" class="<?= $actif === 'dashboard' ? 'active' : '' ?>"><span class="nico">⚡</span>Tableau de bord</a>
+      <a href="index.php" class="<?= $actif === 'dashboard' ? 'active' : '' ?>"><span class="nico">⚡</span><span class="ntxt">Tableau de bord</span></a>
       <?php
       $groupes = groupes_modules();
       foreach ($groupes as $g => $gLabel):
@@ -67,7 +67,7 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
         <div class="nav-sep"><?= e($gLabel) ?></div>
         <?php foreach ($items as $key => [$label, $ico, $url, $grp, $adminOnly]): ?>
         <a href="<?= $url ?>" class="<?= $key === $actif ? 'active' : '' ?>">
-          <span class="nico"><?= $ico ?></span><?= $label ?>
+          <span class="nico"><?= $ico ?></span><span class="ntxt" title="<?= e($label) ?>"><?= $label ?></span>
           <?php if (!empty($badges[$key])): ?><span class="nav-badge"><?= $badges[$key] ?></span><?php endif; ?>
         </a>
         <?php endforeach; ?>
