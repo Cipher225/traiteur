@@ -1,6 +1,8 @@
 <?php
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/layout.php';
+require_once __DIR__ . '/includes/documents.php';   // montants des factures
+require_once __DIR__ . '/../config/wave.php';      // sommes déjà encaissées
 
 /* ============================================================
    TABLEAU DE BORD EMPLOYÉ (espace personnel)
@@ -145,18 +147,135 @@ $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_ac
     FROM users
     WHERE last_activity IS NOT NULL AND last_activity >= (NOW() - INTERVAL 5 MINUTE)
     ORDER BY last_activity DESC")->fetchAll();
+
+/* ============================================================================
+   POINTS D'ATTENTION
+   Ce qui mérite votre regard aujourd'hui. Chaque alerte est un lien direct
+   vers l'endroit où la traiter. S'il n'y a rien à signaler, rien ne s'affiche.
+   ============================================================================ */
+$alertes = [];
+
+// Factures échues non réglées
+if (can('factures')) {
+    try {
+        $nbRetard = 0; $montantRetard = 0.0;
+        $st = $pdo->query("SELECT id FROM factures
+                           WHERE type='facture' AND statut NOT IN ('payee','annulee','brouillon')
+                             AND date_echeance IS NOT NULL AND date_echeance < CURDATE()");
+        foreach ($st->fetchAll() as $f) {
+            $doc = get_facture($pdo, (int)$f['id']);
+            if (!$doc) continue;
+            $solde = (float)$doc['montant_ttc'] - paiements_deja_regles($pdo, (int)$f['id']);
+            if ($solde > 1) { $nbRetard++; $montantRetard += $solde; }
+        }
+        if ($nbRetard > 0) {
+            $alertes[] = ['urgent', '💰', $nbRetard . ' facture' . ($nbRetard > 1 ? 's' : '') . ' en retard',
+                          money($montantRetard, $devise) . ' à encaisser', 'relances.php', 'Relancer'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Articles sous le seuil d'alerte
+if (can('stock')) {
+    try {
+        $bas = $pdo->query("SELECT nom, quantite, unite, seuil_alerte FROM stock_articles
+                            WHERE seuil_alerte > 0 AND quantite <= seuil_alerte
+                            ORDER BY quantite ASC LIMIT 5")->fetchAll();
+        if ($bas) {
+            $noms = implode(', ', array_map(fn($a) => $a['nom'] . ' (' . rtrim(rtrim(number_format((float)$a['quantite'], 2, ',', ' '), '0'), ',') . ' ' . $a['unite'] . ')', array_slice($bas, 0, 3)));
+            $alertes[] = ['attention', '📦', count($bas) . ' article' . (count($bas) > 1 ? 's' : '') . ' à réapprovisionner',
+                          $noms, 'stock.php', 'Voir le stock'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Tâches à échéance aujourd'hui ou dépassée
+try {
+    $st = $pdo->query("SELECT titre, date_limite FROM taches
+                       WHERE statut <> 'termine' AND date_limite IS NOT NULL AND date_limite <= CURDATE()
+                       ORDER BY date_limite ASC LIMIT 5");
+    $tachesDues = $st->fetchAll();
+    if ($tachesDues) {
+        $alertes[] = ['attention', '✅', count($tachesDues) . ' tâche' . (count($tachesDues) > 1 ? 's' : '') . ' à traiter',
+                      $tachesDues[0]['titre'] . (count($tachesDues) > 1 ? ' et ' . (count($tachesDues) - 1) . ' autre(s)' : ''),
+                      'taches.php', 'Ouvrir'];
+    }
+} catch (Throwable $e) {}
+
+// Documents rédigés en attente de validation
+if (is_admin()) {
+    try {
+        $nbDoc = (int)$pdo->query("SELECT COUNT(*) FROM documents_texte WHERE statut='termine'")->fetchColumn();
+        if ($nbDoc > 0) {
+            $alertes[] = ['info', '📝', $nbDoc . ' document' . ($nbDoc > 1 ? 's' : '') . ' à valider',
+                          'Terminé' . ($nbDoc > 1 ? 's' : '') . ' par un employé, en attente de votre accord', 'documents.php', 'Vérifier'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Paiements en ligne restés en attente
+if (is_admin()) {
+    try {
+        $nbPay = (int)$pdo->query("SELECT COUNT(*) FROM paiements WHERE statut='en_attente'
+                                   AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)")->fetchColumn();
+        if ($nbPay > 0) {
+            $alertes[] = ['info', '💳', $nbPay . ' paiement' . ($nbPay > 1 ? 's' : '') . ' à vérifier',
+                          'En attente depuis plus de 30 minutes', 'paiements.php', 'Contrôler'];
+        }
+    } catch (Throwable $e) {}
+}
+
+/* Encaissements des 6 derniers mois, pour la tendance */
+$tendance = [];
+if (can('comptabilite')) {
+    try {
+        for ($i = 5; $i >= 0; $i--) {
+            $m = date('Y-m', strtotime("-$i month"));
+            $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM transactions
+                                 WHERE type='entree' AND DATE_FORMAT(date_operation,'%Y-%m')=?");
+            $st->execute([$m]);
+            $abrevFr = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+            $tendance[] = ['mois' => $abrevFr[(int)date('n', strtotime($m . '-01'))], 'val' => (float)$st->fetchColumn()];
+        }
+    } catch (Throwable $e) { $tendance = []; }
+}
+$maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
 ?>
+
+<?php if ($alertes): ?>
+<div class="alertes-bande">
+  <?php foreach ($alertes as [$niv, $ico, $titre, $detail, $lien, $action]): ?>
+  <a class="alerte alerte-<?= $niv ?>" href="<?= $lien ?>">
+    <span class="al-ico"><?= $ico ?></span>
+    <span class="al-txt">
+      <span class="al-titre"><?= e($titre) ?></span>
+      <span class="al-detail"><?= e($detail) ?></span>
+    </span>
+    <span class="al-action"><?= e($action) ?> →</span>
+  </a>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<div class="actions-rapides">
+  <?php if (can('factures')): ?><a href="factures.php?edit=new">🧾 Nouvelle facture</a><?php endif; ?>
+  <?php if (can('clients')): ?><a href="clients.php#form">👥 Nouveau client</a><?php endif; ?>
+  <?php if (can('bons_entree')): ?><a href="recus.php?type=entree">💵 Encaisser</a><?php endif; ?>
+  <?php if (can('commandes_client')): ?><a href="commandes-client.php">📦 Commandes</a><?php endif; ?>
+  <a href="recherche.php">🔍 Rechercher</a>
+</div>
+
 <div class="dash-cards">
   <!-- Carte horloge + météo -->
   <div class="dcard glass gold">
     <div class="dcard-head">
       <span class="dcard-ico">🕐</span>
-      <span class="dcard-weather" id="dc-weather"><span id="dc-w-ico">☀️</span> <span id="dc-w-temp">--°</span></span>
+      <span class="dcard-weather" id="dc-weather" hidden><span id="dc-w-ico"></span> <span id="dc-w-temp"></span></span>
     </div>
     <div class="dcard-clock" id="dc-time">--:--<span class="dc-sec" id="dc-sec">00</span></div>
     <div class="dcard-sub">
       <span id="dc-date">—</span>
-      <span class="dcard-city" id="dc-city">📍 —</span>
+      <span class="dcard-city" id="dc-city" hidden></span>
     </div>
   </div>
 
@@ -164,7 +283,8 @@ $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_ac
   <div class="dcard glass teal">
     <div class="dcard-head">
       <span class="dcard-ico"><span class="online-pulse"></span></span>
-      <span class="dcard-count"><?= count($enLigne) ?> en ligne</span>
+      <span class="dcard-titre">Connectés maintenant</span>
+      <span class="dcard-count"><?= count($enLigne) ?></span>
     </div>
     <?php if (!$enLigne): ?>
       <p style="color:var(--ink-faint);font-size:12.5px;margin:12px 0 0">Personne connecté.</p>
@@ -198,15 +318,28 @@ $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_ac
 </div>
 
 <div class="stats">
-  <div class="stat glass gold"><div class="s-ico">📥</div><div class="s-num"><?= $stats['nouveaux'] ?></div><div class="s-label">Nouvelles demandes</div></div>
-  <div class="stat glass violet"><div class="s-ico">🔄</div><div class="s-num"><?= $stats['en_cours'] ?></div><div class="s-label">Événements en cours</div></div>
-  <div class="stat glass teal"><div class="s-ico">👥</div><div class="s-num"><?= $nb_clients ?></div><div class="s-label">Clients enregistrés</div></div>
-  <div class="stat glass rose"><div class="s-ico">🍛</div><div class="s-num"><?= $stats['plats'] ?></div><div class="s-label">Plats actifs au menu</div></div>
+  <a class="stat glass gold" href="commandes-client.php"><div class="s-ico">📥</div><div class="s-num"><?= $stats['nouveaux'] ?></div><div class="s-label">Nouvelles demandes</div></a>
+  <a class="stat glass violet" href="calendrier.php"><div class="s-ico">🔄</div><div class="s-num"><?= $stats['en_cours'] ?></div><div class="s-label">Événements en cours</div></a>
+  <a class="stat glass teal" href="clients.php"><div class="s-ico">👥</div><div class="s-num"><?= $nb_clients ?></div><div class="s-label">Clients enregistrés</div></a>
+  <a class="stat glass rose" href="menu.php"><div class="s-ico">🍛</div><div class="s-num"><?= $stats['plats'] ?></div><div class="s-label">Plats actifs au menu</div></a>
 </div>
 
 <?php if (can('comptabilite') || can('factures')): ?>
 <div class="panel glass">
   <h2>💰 Aperçu financier — <?= date('m/Y') ?> <?php if (can('comptabilite')): ?><a href="comptabilite.php" class="btn btn-glass btn-sm" style="margin-left:auto">Comptabilité →</a><?php endif; ?></h2>
+  <?php if ($tendance && can('comptabilite')): ?>
+  <div class="mini-tendance">
+    <?php foreach ($tendance as $t):
+      $h = $maxTend > 0 ? max(4, round($t['val'] / $maxTend * 100)) : 4; ?>
+    <div class="mt-col" title="<?= e($t['mois']) ?> — <?= money($t['val'], $devise) ?>">
+      <div class="mt-barre" style="height:<?= $h ?>%"></div>
+      <div class="mt-mois"><?= e($t['mois']) ?></div>
+    </div>
+    <?php endforeach; ?>
+    <div class="mt-legende">Encaissements<br><span>6 derniers mois</span></div>
+  </div>
+  <?php endif; ?>
+
   <div class="stats" style="margin-bottom:0">
     <?php if (can('comptabilite')): ?>
     <div class="stat glass teal"><div class="s-ico">📈</div><div class="s-num" style="font-size:22px"><?= money($m_entrees, $devise) ?></div><div class="s-label">Entrées du mois</div></div>
@@ -275,10 +408,19 @@ $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_ac
   tick(); setInterval(tick,1000);
 
   var wIco={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'❄️',80:'🌦️',81:'🌧️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'};
+  /* La météo n'apparaît que si la donnée arrive vraiment : mieux vaut ne rien
+     afficher qu'un tiret permanent, qui donne une impression d'inachevé. */
   function setWeather(temp,code,ville){
+    if (temp === undefined || temp === null || isNaN(temp)) return;
+    var w=document.getElementById('dc-weather');
     var i=document.getElementById('dc-w-ico'), tp=document.getElementById('dc-w-temp');
-    if(i) i.textContent=wIco[code]||'🌡️'; if(tp) tp.textContent=Math.round(temp)+'°';
-    if(ville){ var c=document.getElementById('dc-city'); if(c) c.textContent='📍 '+ville; }
+    if(i) i.textContent=wIco[code]||'🌡️';
+    if(tp) tp.textContent=Math.round(temp)+'°';
+    if(w) w.hidden=false;
+    if(ville){
+      var c=document.getElementById('dc-city');
+      if(c){ c.textContent='📍 '+ville; c.hidden=false; }
+    }
   }
   function fetchWeather(lat,lon,ville){
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,weather_code')

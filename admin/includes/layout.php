@@ -154,7 +154,8 @@ function retourArriere(){
 <script>window.NOTIF_URL = 'notifications-check.php';</script>
 <script src="<?= asset('../assets/js/notifications-direct.js') ?>"></script>
 <script src="<?= asset('../assets/js/img-redim.js') ?>"></script>
-<?php $pwaBase='..'; include __DIR__.'/../../config/pwa_script.php'; ?>
+
+<?php $pwaBase='..'; $pwaBouton=false; include __DIR__.'/../../config/pwa_script.php'; ?>
 </body>
 </html>
 <?php } ?>

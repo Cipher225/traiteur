@@ -1,9 +1,18 @@
-<?php $pwaBase = $pwaBase ?? '.'; ?>
-<!-- Bouton d'installation de l'application -->
+<?php
+/* $pwaBouton : n'afficher le bouton d'installation que sur le site public.
+   Le service worker, lui, est enregistré partout : c'est lui qui assure
+   le fonctionnement hors connexion de l'administration et de l'espace client. */
+$pwaBase   = $pwaBase ?? '.';
+$pwaBouton = $pwaBouton ?? false;
+?>
+<?php if ($pwaBouton): ?>
+<!-- Bouton d'installation, discret, en bas de l'écran -->
 <button id="pwa-install" class="pwa-install-btn" style="display:none" aria-label="Installer l'application">
-  <span class="pwa-install-ico">⬇️</span> Installer l'application
+  <span class="pwa-install-ico">⤓</span><span class="pwa-install-txt">Installer l'application</span>
 </button>
+<?php endif; ?>
 
+<?php if ($pwaBouton): ?>
 <!-- Fenêtre d'aide à l'installation (si l'installation automatique n'est pas disponible) -->
 <div id="pwa-aide" class="pwa-aide" style="display:none">
   <div class="pwa-aide-carte">
@@ -12,6 +21,7 @@
     <div id="pwa-aide-texte"></div>
   </div>
 </div>
+<?php endif; ?>
 
 <script>
 (function () {
@@ -23,6 +33,7 @@
 
   var promptEvt = null;
   var btn = document.getElementById('pwa-install');
+  if (!btn) return;                 // page sans bouton : seul le service worker était nécessaire
   if (!btn) return;
 
   window.addEventListener('beforeinstallprompt', function (e) {

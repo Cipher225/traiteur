@@ -1868,3 +1868,66 @@ a.dmd-cal:hover{ background:rgba(212,165,38,.22) }
   border-radius:13px;font-size:13px;color:var(--ink);
   background:rgba(212,165,38,.12);border:1px solid rgba(212,165,38,.35)}
 .barre-lot strong{color:var(--gold);font-size:15px}
+
+/* ============================================================
+   TABLEAU DE BORD — POINTS D'ATTENTION
+   Une bande d'alertes qui n'existe que s'il y a quelque chose
+   à signaler : le tableau reste épuré les jours calmes.
+   ============================================================ */
+.alertes-bande{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.alerte{display:flex;align-items:center;gap:13px;padding:12px 16px;border-radius:15px;
+  text-decoration:none;color:inherit;border:1px solid var(--glass-border);
+  background:var(--glass-strong);backdrop-filter:blur(14px);
+  transition:transform .16s cubic-bezier(.2,.9,.3,1.2), box-shadow .16s, border-color .16s}
+.alerte:hover{transform:translateX(3px);border-color:var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.28)}
+.alerte .al-ico{font-size:21px;flex-shrink:0;width:42px;height:42px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center}
+.alerte .al-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.alerte .al-titre{font-size:14px;font-weight:700;color:var(--ink)}
+.alerte .al-detail{font-size:12.5px;color:var(--ink-faint);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alerte .al-action{flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--gold);opacity:.85}
+.alerte:hover .al-action{opacity:1}
+.alerte-urgent{border-left:4px solid #f87171}
+.alerte-urgent .al-ico{background:rgba(248,113,113,.14)}
+.alerte-attention{border-left:4px solid #f0b429}
+.alerte-attention .al-ico{background:rgba(240,180,41,.14)}
+.alerte-info{border-left:4px solid #60a5fa}
+.alerte-info .al-ico{background:rgba(96,165,250,.14)}
+
+/* Actions rapides */
+.actions-rapides{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.actions-rapides a{display:inline-flex;align-items:center;gap:6px;padding:9px 15px;border-radius:12px;
+  font-size:13px;font-weight:600;text-decoration:none;color:var(--ink);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);transition:all .15s}
+.actions-rapides a:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-1px)}
+
+/* Mini-graphique de tendance */
+.mini-tendance{display:flex;align-items:flex-end;gap:7px;height:76px;padding:6px 4px 0;margin-bottom:14px}
+.mt-col{flex:1;max-width:52px;display:flex;flex-direction:column;align-items:center;height:100%}
+.mt-barre{width:100%;border-radius:5px 5px 0 0;margin-top:auto;
+  background:linear-gradient(180deg,#34d399,#10b981);transition:opacity .15s}
+.mt-col:hover .mt-barre{opacity:.8}
+.mt-mois{font-size:10px;color:var(--ink-faint);margin-top:5px}
+.mt-legende{margin-left:auto;align-self:center;font-size:11.5px;font-weight:700;color:var(--ink-faint);
+  text-align:right;line-height:1.4}
+.mt-legende span{font-weight:400;font-size:10.5px;opacity:.75}
+
+/* Carte des connectés : titre explicite */
+.dcard-titre{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+  color:var(--ink-faint)}
+.dcard-count{margin-left:auto;font-size:17px;font-weight:800;color:#10b981}
+
+/* Les cartes de statistiques deviennent cliquables */
+a.stat{text-decoration:none;color:inherit;transition:transform .15s, border-color .15s}
+a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
+
+@media (max-width:640px){
+  .alerte{padding:11px 13px;gap:10px}
+  .alerte .al-ico{width:36px;height:36px;font-size:18px}
+  .alerte .al-action{display:none}
+  .actions-rapides{gap:6px}
+  .actions-rapides a{padding:8px 12px;font-size:12px}
+  .mini-tendance{height:64px}
+  .mt-legende{display:none}
+}

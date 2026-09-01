@@ -507,6 +507,6 @@ $f = flash();
   sections.forEach(function(o){ spy.observe(o.s); });
 })();
 </script>
-<?php $pwaBase='.'; include __DIR__.'/config/pwa_script.php'; ?>
+<?php $pwaBase='.'; $pwaBouton=true; include __DIR__.'/config/pwa_script.php'; ?>
 </body>
 </html>
