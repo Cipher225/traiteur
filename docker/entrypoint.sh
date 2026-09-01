@@ -68,6 +68,7 @@ if [ -f /var/www/html/migrations.sql ]; then
   echo "DB_HOST=${DB_HOST}"; echo "DB_PORT=${DB_PORT}"; echo "DB_NAME=${DB_NAME}"
   echo "DB_USER=${DB_USER}"; echo "DB_PASS=${DB_PASS}"
   echo "0 2 * * * root /usr/local/bin/sauvegarde.sh >> /var/log/sauvegarde.log 2>&1"
+  echo "30 7 * * * root php /var/www/html/docker/relances-quotidiennes.php >> /var/log/relances.log 2>&1"
 } > /etc/cron.d/sauvegarde-traiteur
 chmod 0644 /etc/cron.d/sauvegarde-traiteur
 service cron start >/dev/null 2>&1 && echo "[entrypoint] Sauvegarde automatique activée (chaque nuit à 2 h)." \

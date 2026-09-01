@@ -139,6 +139,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: documents.php?edit=' . $id); exit;
     }
 
+    /* Suppression groupée (administrateur uniquement) */
+    if (isset($_POST['supprimer_lot'])) {
+        if (!is_admin()) { flash("Seul un administrateur peut supprimer des documents.", 'error'); header('Location: documents.php'); exit; }
+        $ids = array_values(array_filter(array_map('intval', (array)($_POST['sel'] ?? []))));
+        if (!$ids) { flash('Aucun document sélectionné.', 'error'); header('Location: documents.php'); exit; }
+        $marques = implode(',', array_fill(0, count($ids), '?'));
+        $pdo->prepare("DELETE FROM documents_texte WHERE id IN ($marques)")->execute($ids);
+        journaliser($pdo, 'suppression', 'document', null, count($ids) . ' document(s) supprimé(s) en lot');
+        flash(count($ids) . ' document' . (count($ids) > 1 ? 's supprimés' : ' supprimé') . '.');
+        header('Location: documents.php'); exit;
+    }
+
     // La suppression est reservee a l'administrateur
     if (isset($_POST['supprimer'])) {
         if (!is_admin()) { flash("Seul un administrateur peut supprimer un document.", 'error'); header('Location: documents.php'); exit; }
@@ -712,12 +724,26 @@ var MODELES_DOC = <?= json_encode(array_map(fn($m) => ['nom' => $m[0], 'cat' => 
   <?php if (!$documents): ?>
   <p style="color:var(--ink-faint)">Aucun document pour le moment.</p>
   <?php else: ?>
+  <?php if (is_admin()): ?>
+  <form method="post" id="form-lot" onsubmit="return confirm('Supprimer définitivement les documents sélectionnés ?')">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <div class="barre-lot" id="barre-lot" hidden>
+      <span><strong id="nb-sel">0</strong> document(s) sélectionné(s)</span>
+      <button class="btn btn-danger btn-sm" name="supprimer_lot" value="1">🗑️ Supprimer la sélection</button>
+      <button type="button" class="btn btn-glass btn-sm" id="annuler-sel">Annuler</button>
+    </div>
+  </form>
+  <?php endif; ?>
+
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Titre</th><th>Catégorie</th><th>État</th><th>Auteur</th><th>Modifié le</th><th></th></tr></thead>
+      <thead><tr>
+        <?php if (is_admin()): ?><th style="width:34px"><input type="checkbox" id="sel-tout" title="Tout sélectionner"></th><?php endif; ?>
+        <th>Titre</th><th>Catégorie</th><th>État</th><th>Auteur</th><th>Modifié le</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($documents as $d): ?>
         <tr>
+          <?php if (is_admin()): ?><td><input type="checkbox" name="sel[]" value="<?= (int)$d['id'] ?>" class="sel-doc" form="form-lot"></td><?php endif; ?>
           <td><a href="documents.php?edit=<?= (int)$d['id'] ?>" style="font-weight:700;color:var(--ink)"><?= e($d['titre']) ?></a></td>
           <td><span class="badge"><?= e($d['categorie']) ?></span></td>
           <td><?php $st = $d['statut'] ?? 'brouillon'; ?>
@@ -749,4 +775,30 @@ var MODELES_DOC = <?= json_encode(array_map(fn($m) => ['nom' => $m[0], 'cat' => 
 </div>
 <?php endif; ?>
 
+<script>
+/* Sélection multiple : la barre d'action n'apparaît que si au moins un document est coché. */
+(function(){
+  var tout = document.getElementById('sel-tout');
+  var barre = document.getElementById('barre-lot');
+  var nb = document.getElementById('nb-sel');
+  var annuler = document.getElementById('annuler-sel');
+  if (!barre) return;
+  function cases(){ return Array.prototype.slice.call(document.querySelectorAll('.sel-doc')); }
+  function maj(){
+    var n = cases().filter(function(c){ return c.checked; }).length;
+    nb.textContent = n;
+    barre.hidden = (n === 0);
+    if (tout) tout.checked = (n > 0 && n === cases().length);
+  }
+  if (tout) tout.addEventListener('change', function(){
+    cases().forEach(function(c){ c.checked = tout.checked; }); maj();
+  });
+  document.addEventListener('change', function(e){
+    if (e.target.classList && e.target.classList.contains('sel-doc')) maj();
+  });
+  if (annuler) annuler.addEventListener('click', function(){
+    cases().forEach(function(c){ c.checked = false; }); if (tout) tout.checked = false; maj();
+  });
+})();
+</script>
 <?php admin_footer(); ?>

@@ -289,8 +289,11 @@ function all_modules(): array {
     return [
         'commandes_client' => ['Commandes clients', '📦', 'commandes-client.php', 'activite', false, false],
         'calendrier'   => ['Calendrier',     '📅', 'calendrier.php',   'activite', false, false],
+        'recherche'    => ['Recherche', '🔍', 'recherche.php', 'activite', false, true],
         'clients'      => ['Clients',        '👥', 'clients.php',      'commercial', false, false],
         'paiements'    => ['Paiements en ligne', '💳', 'paiements.php', 'finances', false, false],
+        'finances'     => ['Tableau de bord financier', '📊', 'finances.php', 'finances', true, false],
+        'relances'     => ['Relance des impayés', '✉️', 'relances.php', 'finances', false, false],
         'comptabilite' => ['Comptabilité',   '💰', 'comptabilite.php', 'finances', false, false],
         'stock'        => ['Stock',          '📦', 'stock.php',        'activite', false, false],
         'factures'     => ['Factures',       '🧾', 'factures.php',     'commercial', false, false],
@@ -328,6 +331,18 @@ function current_user(): array {
 }
 
 function is_admin(): bool { return (current_user()['role']) === 'admin'; }
+
+/* Cette personne a-t-elle accès à ce module ?
+   L'administrateur voit tout ; l'employé, uniquement ce qui lui a été accordé
+   ainsi que les sections déclarées « toujours accessibles ». */
+function peut_acceder(string $module): bool {
+    if (is_admin()) return true;
+    $m = all_modules()[$module] ?? null;
+    if (!$m) return false;
+    if (!empty($m[4])) return false;                    // réservé à l'administrateur
+    if (!empty($m[5])) return true;                     // toujours accessible
+    return in_array($module, current_user()['perms'] ?? [], true);
+}
 function is_client(): bool { return (current_user()['role']) === 'client'; }
 
 /* Vérifie si l'heure actuelle est dans les horaires de travail autorisés (pour les employés) */

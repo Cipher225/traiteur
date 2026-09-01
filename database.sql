@@ -834,3 +834,21 @@ CREATE TABLE IF NOT EXISTS journal (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX (created_at), INDEX (action), INDEX (user_id)
 );
+
+-- Relances des factures impayées
+CREATE TABLE IF NOT EXISTS relances (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  facture_id INT DEFAULT NULL,
+  client_id INT DEFAULT NULL,
+  niveau TINYINT DEFAULT 1,
+  montant DECIMAL(14,0) DEFAULT 0,
+  destinataire VARCHAR(190) DEFAULT '',
+  origine VARCHAR(20) DEFAULT 'manuelle',
+  succes TINYINT(1) DEFAULT 1,
+  envoye_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (facture_id), INDEX (envoye_le),
+  FOREIGN KEY (facture_id) REFERENCES factures(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+);
+
+INSERT IGNORE INTO settings (cle, valeur) VALUES ('relances_actives', '0');

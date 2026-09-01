@@ -13,12 +13,25 @@ if (!is_admin()) {
     header('Location: index.php'); exit;
 }
 
-/* Purge manuelle des entrées anciennes */
+/* Purge des entrées anciennes.
+   On ne supprime que ce qui dépasse l'ancienneté choisie, et on ne laisse une
+   trace que si quelque chose a réellement été supprimé. */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger'])) {
     csrf_check();
-    $pdo->exec("DELETE FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
-    journaliser($pdo, 'purge', 'journal', null, 'Entrées de plus de 90 jours supprimées');
-    flash('Journal nettoyé : les entrées de plus de 90 jours ont été supprimées.');
+    $jours = (int)($_POST['jours'] ?? 90);
+    if (!in_array($jours, [30, 90, 180, 365], true)) $jours = 90;
+
+    $st = $pdo->prepare("SELECT COUNT(*) FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+    $st->execute([$jours]);
+    $aSupprimer = (int)$st->fetchColumn();
+
+    if ($aSupprimer === 0) {
+        flash("Aucune entrée de plus de $jours jours : le journal est déjà à jour.");
+    } else {
+        $pdo->prepare("DELETE FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)")->execute([$jours]);
+        journaliser($pdo, 'purge', 'journal', null, $aSupprimer . ' entrée(s) de plus de ' . $jours . ' jours supprimée(s)');
+        flash($aSupprimer . ' entrée' . ($aSupprimer > 1 ? 's supprimées' : ' supprimée') . '.');
+    }
     header('Location: journal.php'); exit;
 }
 
@@ -39,6 +52,15 @@ $where = []; $args = [];
 if ($filtre !== '' && isset($LIBELLES[$filtre])) { $where[] = 'action = ?'; $args[] = $filtre; }
 if ($q !== '') { $where[] = '(acteur LIKE ? OR detail LIKE ? OR cible LIKE ?)'; array_push($args, "%$q%", "%$q%", "%$q%"); }
 $clause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+/* Nombre d'entrées purgeables pour chaque ancienneté proposée */
+$purgeables = [];
+foreach ([30, 90, 180, 365] as $j) {
+    $s = $pdo->prepare("SELECT COUNT(*) FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+    $s->execute([$j]);
+    $purgeables[$j] = (int)$s->fetchColumn();
+}
+$plusAncienne = $pdo->query("SELECT MIN(created_at) FROM journal")->fetchColumn();
 
 $stTot = $pdo->prepare("SELECT COUNT(*) FROM journal $clause");
 $stTot->execute($args);
@@ -105,11 +127,27 @@ admin_header('Journal des actions', 'journal', $pdo, $settings);
     <a class="btn btn-glass btn-sm" href="journal.php">Réinitialiser</a>
     <?php endif; ?>
   </form>
-  <form method="post" style="margin:-42px 0 12px;display:flex;justify-content:flex-end"
-        onsubmit="return confirm('Supprimer les entrées de plus de 90 jours ?')">
+  <form method="post" style="margin:-42px 0 14px;display:flex;justify-content:flex-end;gap:7px;align-items:center"
+        onsubmit="return confirm('Supprimer définitivement ces entrées du journal ?')">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-    <button class="btn btn-glass btn-sm" name="purger" value="1">🧹 Nettoyer</button>
+    <span style="font-size:12.5px;color:var(--ink-faint)">Supprimer les entrées de plus de</span>
+    <select class="input" name="jours" id="sel-jours" style="max-width:150px;padding:5px 9px;font-size:12.5px">
+      <?php foreach ([30, 90, 180, 365] as $j): ?>
+      <option value="<?= $j ?>" <?= $j === 90 ? 'selected' : '' ?> data-n="<?= $purgeables[$j] ?>">
+        <?= $j ?> jours (<?= $purgeables[$j] ?>)
+      </option>
+      <?php endforeach; ?>
+    </select>
+    <button class="btn btn-glass btn-sm" name="purger" value="1" id="btn-purge"
+            <?= $purgeables[90] === 0 ? 'disabled style="opacity:.45;cursor:not-allowed"' : '' ?>>🧹 Nettoyer</button>
   </form>
+  <?php if (array_sum($purgeables) === 0): ?>
+  <p style="margin:-6px 0 12px;font-size:12.5px;color:var(--ink-faint)">
+    Rien à nettoyer : toutes les entrées sont récentes<?php if ($plusAncienne): ?>
+    (la plus ancienne date du <?= date('d/m/Y', strtotime($plusAncienne)) ?>)<?php endif; ?>.
+    Le nettoyage sert à alléger le journal au bout de plusieurs mois.
+  </p>
+  <?php endif; ?>
 
   <?php if (!$lignes): ?>
     <p style="color:var(--ink-faint)">Aucune entrée pour le moment.</p>
@@ -147,4 +185,18 @@ admin_header('Journal des actions', 'journal', $pdo, $settings);
   <?php endif; ?>
 </div>
 
+<script>
+(function(){
+  var sel = document.getElementById('sel-jours');
+  var btn = document.getElementById('btn-purge');
+  if (!sel || !btn) return;
+  function maj(){
+    var n = parseInt(sel.options[sel.selectedIndex].dataset.n || '0', 10);
+    btn.disabled = (n === 0);
+    btn.style.opacity = n === 0 ? '.45' : '1';
+    btn.style.cursor = n === 0 ? 'not-allowed' : 'pointer';
+  }
+  sel.addEventListener('change', maj); maj();
+})();
+</script>
 <?php admin_footer(); ?>
