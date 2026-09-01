@@ -9,10 +9,22 @@ $err = ''; $codeGenere = null; $userGenere = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    /* Un compte administrateur ne se gère jamais depuis cette page : chacun passe
+       par Paramètres → Mon compte, où le mot de passe actuel est exigé. */
+    $estAdmin = function (int $uid) use ($pdo): bool {
+        $s = $pdo->prepare('SELECT role FROM users WHERE id=?');
+        $s->execute([$uid]);
+        return ($s->fetchColumn() === 'admin');
+    };
+
     /* Générer un code de réinitialisation pour un utilisateur */
     if (isset($_POST['generer'])) {
         $uid = (int)$_POST['user_id'];
-        $u = $pdo->query("SELECT * FROM users WHERE id=$uid")->fetch();
+        if ($estAdmin($uid)) {
+            $err = "Un compte administrateur se gère depuis Paramètres → Mon compte.";
+            $uid = 0;
+        }
+        $u = $uid ? $pdo->query("SELECT * FROM users WHERE id=$uid")->fetch() : null;
         if ($u) {
             $code = strtoupper(bin2hex(random_bytes(4)));   // 8 caractères
             $expire = date('Y-m-d H:i:s', time() + 3600 * 24);   // valable 24 h
@@ -28,7 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['reset_direct'])) {
         $uid = (int)$_POST['user_id'];
         $nouveau = $_POST['nouveau'] ?? '';
-        if (strlen($nouveau) < 6) {
+        if ($estAdmin($uid)) {
+            $err = "Un compte administrateur se gère depuis Paramètres → Mon compte.";
+        } elseif (strlen($nouveau) < 6) {
             $err = 'Le mot de passe doit contenir au moins 6 caractères.';
         } else {
             $pdo->prepare("UPDATE users SET password=?, reset_code=NULL, reset_expire=NULL WHERE id=?")
@@ -38,11 +52,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+/* Les administrateurs ne figurent pas ici : chacun gère son identifiant et son
+   mot de passe depuis Paramètres → Mon compte. Cette page sert aux accès que
+   VOUS attribuez — employés et clients. */
 $users = $pdo->query("SELECT u.*, c.nom AS client_nom, e.nom AS employe_nom
                       FROM users u
                       LEFT JOIN clients c ON c.id=u.client_id
                       LEFT JOIN employes e ON e.id=u.employe_id
-                      ORDER BY FIELD(u.role,'admin','employe','client'), u.nom")->fetchAll();
+                      WHERE u.role <> 'admin'
+                      ORDER BY FIELD(u.role,'employe','client'), u.nom")->fetchAll();
 
 $roleLabel = ['admin'=>'Administrateur','employe'=>'Employé','client'=>'Client'];
 $roleBadge = ['admin'=>'badge-violet','employe'=>'badge-teal','client'=>'badge-gold'];

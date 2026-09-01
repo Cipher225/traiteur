@@ -204,7 +204,7 @@ $avancees = [
     'email'     => ['✉️', 'Emails automatiques', 'Configuration SMTP'],
     'google'    => ['🔗', 'Connexion Google', 'Identifiants OAuth'],
     'wave'      => ['💳', 'Paiement en ligne', 'Clé Wave, mode et sécurité'],
-    'motdepasse'=> ['🔒', 'Mot de passe', 'Changer votre mot de passe'],
+    'motdepasse'=> ['👤', 'Mon compte', 'Identifiant, mot de passe, Google'],
 ];
 function param_slug($titre){ return substr(md5($titre), 0, 8); }
 $sectionOuverte = $_GET['section'] ?? '';
@@ -451,63 +451,179 @@ document.getElementById('smtp_email').addEventListener('blur', function () {
 <?php elseif ($avanceeOuverte === 'motdepasse'): ?>
 <a href="parametres.php" class="btn btn-glass btn-sm" style="margin-bottom:14px">‹ Toutes les rubriques</a>
 <?php
-$moi = $pdo->prepare('SELECT username, email, google_id FROM users WHERE id=?');
+$moi = $pdo->prepare('SELECT username, email, google_id, nom, role, created_at FROM users WHERE id=?');
 $moi->execute([$_SESSION['admin_id']]);
-$monCompte = $moi->fetch() ?: ['username' => '', 'email' => '', 'google_id' => null];
+$monCompte = $moi->fetch() ?: ['username' => '', 'email' => '', 'google_id' => null, 'nom' => '', 'role' => 'admin', 'created_at' => null];
 $googlePret = trim((string)($s['google_client_id'] ?? '')) !== '' && trim((string)($s['google_client_secret'] ?? '')) !== '';
-?>
-<div class="panel glass" style="margin-bottom:14px">
-  <h2>👤 Mon identifiant de connexion</h2>
-  <form method="post" class="form-grid">
-    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-    <div class="field">
-      <label>Identifiant</label>
-      <input class="input" name="username" value="<?= e($monCompte['username']) ?>" required minlength="3" pattern="[a-zA-Z0-9._@+-]*">
-      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Lettres, chiffres, point, tiret, arobase. Une adresse email est acceptée.</div>
-    </div>
-    <div class="field">
-      <label>Email de récupération</label>
-      <input class="input" type="email" name="email" value="<?= e($monCompte['email'] ?? '') ?>" placeholder="vous@exemple.ci">
-      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Sert à réinitialiser votre mot de passe si vous l'oubliez.</div>
-    </div>
-    <div class="field full">
-      <label>Mot de passe actuel <span style="color:#c0392b">*</span></label>
-      <input class="input" type="password" name="mdp_actuel" required autocomplete="current-password">
-      <div style="margin-top:5px;font-size:12.5px;color:var(--ink-faint)">Exigé pour toute modification du compte, par sécurité.</div>
-    </div>
-    <div class="full"><button class="btn btn-gold" name="maj_compte" value="1">💾 Enregistrer</button></div>
-  </form>
+$relieGoogle = !empty($monCompte['google_id']);
+$aEmail = trim((string)($monCompte['email'] ?? '')) !== '';
 
-  <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--glass-border)">
-    <strong style="font-size:13.5px">🔗 Connexion avec Google</strong>
-    <?php if (!$googlePret): ?>
-      <p style="margin:6px 0 0;font-size:12.5px;color:var(--ink-faint)">
-        Non configurée. Renseignez vos identifiants dans
-        <a href="parametres.php?section=google" style="color:var(--gold)">Connexion Google</a>
-        pour pouvoir vous connecter et récupérer votre mot de passe via votre compte Google.</p>
-    <?php elseif (!empty($monCompte['google_id'])): ?>
-      <p style="margin:6px 0 0;font-size:12.5px;color:#10b981">
-        ✅ Votre compte est relié à Google. Vous pouvez vous connecter d'un clic, et récupérer
-        l'accès même en cas d'oubli du mot de passe.</p>
-    <?php else: ?>
-      <p style="margin:6px 0 10px;font-size:12.5px;color:var(--ink-faint)">
-        Reliez votre compte à Google pour vous connecter d'un clic et ne jamais perdre l'accès.
-        L'adresse Google doit être identique à l'email ci-dessus.</p>
-      <a class="btn btn-glass btn-sm" href="../google-login.php">Relier mon compte Google</a>
-    <?php endif; ?>
+/* État de sécurité du compte, pour guider sans culpabiliser */
+$points = [];
+$points[] = ['ok' => $aEmail, 'txt' => $aEmail ? 'Email de récupération renseigné' : "Aucun email de récupération : en cas d'oubli, vous ne pourrez pas retrouver l'accès seul"];
+$points[] = ['ok' => $relieGoogle, 'txt' => $relieGoogle ? 'Compte relié à Google' : 'Compte non relié à Google'];
+$points[] = ['ok' => ($monCompte['username'] ?? '') !== 'admin', 'txt' => ($monCompte['username'] ?? '') !== 'admin' ? 'Identifiant personnalisé' : "Identifiant encore « admin » : trop facile à deviner"];
+$score = count(array_filter($points, fn($p) => $p['ok']));
+?>
+
+<div class="compte-entete panel glass">
+  <div class="ce-ava"><?= e(mb_strtoupper(mb_substr($monCompte['nom'] ?: 'A', 0, 1))) ?></div>
+  <div class="ce-txt">
+    <div class="ce-nom"><?= e($monCompte['nom'] ?: 'Mon compte') ?></div>
+    <div class="ce-role">
+      <span class="ce-tag">👑 Administrateur</span>
+      <?php if (!empty($monCompte['created_at'])): ?>
+      <span class="ce-depuis">Compte créé le <?= date('d/m/Y', strtotime($monCompte['created_at'])) ?></span>
+      <?php endif; ?>
+    </div>
+  </div>
+  <div class="ce-score ce-score-<?= $score ?>">
+    <div class="ce-jauge"><span style="width:<?= round($score / 3 * 100) ?>%"></span></div>
+    <div class="ce-score-txt"><?= $score ?>/3 · sécurité</div>
   </div>
 </div>
 
-<div class="panel glass">
-  <h2>🔒 Changer mon mot de passe</h2>
-  <form method="post" class="form-grid">
-    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-    <div class="field"><label>Ancien mot de passe</label><input class="input" type="password" name="ancien" required></div>
-    <div class="field"><label>Nouveau mot de passe (8 caractères min.)</label><input class="input" type="password" name="nouveau" required minlength="8"></div>
-    <div class="field"><label>Confirmer le nouveau</label><input class="input" type="password" name="confirme" required minlength="8"></div>
-    <div class="full"><button class="btn btn-gold" name="maj_mdp" value="1">Mettre à jour le mot de passe</button></div>
-  </form>
+<div class="compte-etat panel glass">
+  <?php foreach ($points as $p): ?>
+  <div class="cet-ligne <?= $p['ok'] ? 'ok' : 'a-faire' ?>">
+    <span class="cet-ico"><?= $p['ok'] ? '✓' : '!' ?></span>
+    <span><?= e($p['txt']) ?></span>
+  </div>
+  <?php endforeach; ?>
 </div>
+
+<div class="compte-duo">
+
+  <div class="panel glass">
+    <h2>👤 Identifiant &amp; récupération</h2>
+    <p class="compte-aide">Ces informations vous permettent d'accéder à l'application et de
+       retrouver l'accès en cas d'oubli.</p>
+    <form method="post" class="form-grid">
+      <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+      <div class="field full">
+        <label>Identifiant de connexion</label>
+        <input class="input" name="username" value="<?= e($monCompte['username']) ?>" required minlength="3" pattern="[a-zA-Z0-9._@+-]*">
+        <span class="compte-note">Lettres, chiffres, point, tiret, arobase. Une adresse email est acceptée.</span>
+      </div>
+      <div class="field full">
+        <label>Email de récupération</label>
+        <input class="input" type="email" name="email" value="<?= e($monCompte['email'] ?? '') ?>" placeholder="vous@exemple.ci">
+        <span class="compte-note">Utilisé pour réinitialiser votre mot de passe. Idéalement votre adresse Google.</span>
+      </div>
+      <div class="field full">
+        <label>Mot de passe actuel <span style="color:#f87171">*</span></label>
+        <input class="input" type="password" name="mdp_actuel" required autocomplete="current-password">
+        <span class="compte-note">Exigé pour toute modification, par sécurité.</span>
+      </div>
+      <div class="full"><button class="btn btn-gold" name="maj_compte" value="1">💾 Enregistrer</button></div>
+    </form>
+  </div>
+
+  <div class="panel glass">
+    <h2>🔒 Mot de passe</h2>
+    <p class="compte-aide">Choisissez une phrase longue plutôt qu'un mot compliqué :
+       elle est plus sûre et plus facile à retenir.</p>
+    <form method="post" class="form-grid">
+      <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+      <div class="field full"><label>Mot de passe actuel</label>
+        <input class="input" type="password" name="ancien" required autocomplete="current-password"></div>
+      <div class="field full"><label>Nouveau mot de passe</label>
+        <input class="input" type="password" name="nouveau" id="mdp-new" required minlength="8" autocomplete="new-password">
+        <div class="mdp-force"><span id="mdp-barre"></span></div>
+        <span class="compte-note" id="mdp-txt">8 caractères minimum.</span>
+      </div>
+      <div class="field full"><label>Confirmer le nouveau</label>
+        <input class="input" type="password" name="confirme" id="mdp-conf" required minlength="8" autocomplete="new-password">
+        <span class="compte-note" id="mdp-match"></span></div>
+      <div class="full"><button class="btn btn-gold" name="maj_mdp" value="1">🔐 Mettre à jour</button></div>
+    </form>
+  </div>
+
+</div>
+
+<div class="panel glass" style="margin-top:14px">
+  <h2>🔗 Connexion avec Google</h2>
+  <?php if (!$googlePret): ?>
+    <p class="compte-aide" style="margin-bottom:12px">
+      Non configurée. Renseignez vos identifiants dans
+      <a href="parametres.php?section=google" style="color:var(--gold)">Connexion Google</a>
+      pour vous connecter d'un clic et récupérer votre accès en cas d'oubli du mot de passe.</p>
+  <?php elseif ($relieGoogle): ?>
+    <div class="compte-google ok">
+      <span class="cg-ico">✅</span>
+      <div>
+        <strong>Votre compte est relié à Google.</strong>
+        <div class="compte-note">Vous pouvez vous connecter d'un clic, et retrouver l'accès
+          même si vous oubliez votre mot de passe.</div>
+      </div>
+    </div>
+  <?php else: ?>
+    <div class="compte-google">
+      <span class="cg-ico">🔗</span>
+      <div>
+        <strong>Reliez votre compte à Google.</strong>
+        <div class="compte-note">Connexion en un clic, et accès garanti même en cas d'oubli.
+          L'adresse Google doit être identique à l'email de récupération ci-dessus.</div>
+      </div>
+      <a class="btn btn-glass btn-sm" href="../google-login.php" style="margin-left:auto">Relier</a>
+    </div>
+  <?php endif; ?>
+</div>
+
+<div class="panel glass" style="margin-top:14px">
+  <h2>👥 Les autres comptes</h2>
+  <p class="compte-aide">Les accès de vos employés et de vos clients se gèrent ailleurs :
+     cette page ne concerne que votre propre compte.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+    <a class="btn btn-glass btn-sm" href="comptes.php">🔑 Comptes &amp; accès</a>
+    <a class="btn btn-glass btn-sm" href="employes.php">🧑‍🍳 Employés</a>
+    <a class="btn btn-glass btn-sm" href="clients.php">👥 Clients</a>
+  </div>
+</div>
+
+<script>
+/* Indicateur de robustesse : on encourage les phrases longues plutôt que
+   les mots compliqués, qui sont plus durs à retenir et pas plus sûrs. */
+(function(){
+  var champ = document.getElementById('mdp-new');
+  var barre = document.getElementById('mdp-barre');
+  var txt   = document.getElementById('mdp-txt');
+  var conf  = document.getElementById('mdp-conf');
+  var match = document.getElementById('mdp-match');
+  if (!champ) return;
+
+  function force(v){
+    var n = 0;
+    if (v.length >= 8)  n++;
+    if (v.length >= 14) n++;
+    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) n++;
+    if (/[0-9]/.test(v)) n++;
+    if (/[^a-zA-Z0-9]/.test(v)) n++;
+    if (v.length >= 20) n++;
+    return Math.min(4, n);
+  }
+  var libelles = ['Trop court', 'Faible', 'Correct', 'Solide', 'Excellent'];
+  var couleurs = ['#f87171', '#f87171', '#f0b429', '#34d399', '#10b981'];
+
+  champ.addEventListener('input', function(){
+    var v = this.value, n = force(v);
+    if (!v) { barre.style.width = '0'; txt.textContent = '8 caractères minimum.'; txt.style.color = ''; return; }
+    barre.style.width = ((n + 1) / 5 * 100) + '%';
+    barre.style.background = couleurs[n];
+    txt.textContent = libelles[n] + (v.length < 14 ? ' — une phrase de plusieurs mots serait plus sûre' : '');
+    txt.style.color = couleurs[n];
+  });
+
+  function verif(){
+    if (!conf.value) { match.textContent = ''; return; }
+    var ok = (conf.value === champ.value);
+    match.textContent = ok ? '✓ Les deux mots de passe correspondent' : '✗ Les mots de passe diffèrent';
+    match.style.color = ok ? '#10b981' : '#f87171';
+  }
+  conf.addEventListener('input', verif);
+  champ.addEventListener('input', verif);
+})();
+</script>
 
 <?php else: ?>
 <div class="panel glass" style="margin-bottom:14px">

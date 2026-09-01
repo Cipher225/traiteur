@@ -2049,3 +2049,50 @@ a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
   .side-nav a:hover{ transform:none }
   .side-nav a::after{ display:none }
 }
+
+/* ============================================================
+   MON COMPTE — espace personnel de l'administrateur
+   ============================================================ */
+.compte-entete{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.ce-ava{width:58px;height:58px;flex-shrink:0;border-radius:19px;display:grid;place-items:center;
+  font-size:24px;font-weight:800;color:#0a1020;
+  background:linear-gradient(135deg,var(--gold-2),var(--gold));
+  box-shadow:0 8px 24px rgba(212,165,38,.32), inset 0 1px 0 rgba(255,255,255,.45)}
+.ce-txt{flex:1;min-width:150px}
+.ce-nom{font-family:var(--font-display);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.ce-role{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:5px}
+.ce-tag{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:20px;
+  color:var(--gold);background:rgba(212,165,38,.14);border:1px solid rgba(212,165,38,.3)}
+.ce-depuis{font-size:12px;color:var(--ink-faint)}
+.ce-score{flex-shrink:0;min-width:132px;text-align:right}
+.ce-jauge{height:6px;border-radius:4px;background:var(--glass-border-soft);overflow:hidden;margin-bottom:5px}
+.ce-jauge span{display:block;height:100%;border-radius:4px;transition:width .5s var(--ease-ios);
+  background:linear-gradient(90deg,#f87171,#f0b429)}
+.ce-score-3 .ce-jauge span{background:linear-gradient(90deg,#34d399,#10b981)}
+.ce-score-2 .ce-jauge span{background:linear-gradient(90deg,#f0b429,#fbbf24)}
+.ce-score-txt{font-size:11.5px;font-weight:700;color:var(--ink-faint)}
+
+.compte-etat{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;padding:14px 18px}
+.cet-ligne{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim)}
+.cet-ico{width:20px;height:20px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;
+  font-size:11px;font-weight:800}
+.cet-ligne.ok .cet-ico{background:rgba(16,185,129,.18);color:#10b981}
+.cet-ligne.a-faire .cet-ico{background:rgba(240,180,41,.18);color:#f0b429}
+.cet-ligne.a-faire{color:var(--ink)}
+
+.compte-duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.compte-aide{color:var(--ink-faint);font-size:13px;margin:-8px 0 14px;line-height:1.55}
+.compte-note{display:block;margin-top:5px;font-size:12px;color:var(--ink-faint);line-height:1.5}
+
+.mdp-force{height:5px;border-radius:3px;background:var(--glass-border-soft);overflow:hidden;margin-top:8px}
+.mdp-force span{display:block;height:100%;width:0;border-radius:3px;transition:width .3s ease,background .3s ease}
+
+.compte-google{display:flex;align-items:center;gap:13px;padding:13px 16px;border-radius:14px;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.compte-google.ok{border-color:rgba(16,185,129,.32);background:rgba(16,185,129,.07)}
+.cg-ico{font-size:22px;flex-shrink:0}
+
+@media (max-width:900px){
+  .compte-duo{grid-template-columns:1fr}
+  .ce-score{min-width:100%;text-align:left;margin-top:4px}
+}
