@@ -20,49 +20,64 @@ function doc_html_styles(): string {
   .pad{padding:26px 30px}
 
   /* ---------- En-tête ---------- */
-  .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding:10px 30px 8px;min-height:104px}
-  .dh-left{text-align:center;width:250px}
-  .dh-left img{max-height:92px;max-width:170px;display:block;margin:0 auto 8px}
-  .dh-left .ent{font-size:17px;font-weight:800;letter-spacing:.06em;color:#0a1f44;line-height:1.2}
-  .dh-left .slg{font-size:8px;font-weight:600;letter-spacing:.1em;color:#b8870f;text-transform:uppercase;margin-top:5px;line-height:1.4}
-  .dh-right{flex:1;text-align:right;padding-top:6px}
-  .dh-title{font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:700;letter-spacing:.16em;
-    color:#0a1f44;line-height:1.1;white-space:nowrap;text-transform:uppercase}
-  .dh-title.long{font-size:21px;letter-spacing:.11em}
-  .dh-title.xlong{font-size:16px;letter-spacing:.07em}
-  .dh-rule{height:2px;background:#d4a526;margin:12px 0 4px;position:relative}
+  /* En-tête resserré : le logo et le titre partagent la même bande, et les
+     références se placent sous le titre plutôt que dans un cartouche isolé.
+     Le tableau démarre ainsi bien plus haut sur la page. */
+  .dh{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:6px 30px 4px;min-height:0}
+  .dh-left{text-align:center;width:210px;flex-shrink:0}
+  .dh-left img{max-height:66px;max-width:140px;display:block;margin:0 auto 5px}
+  .dh-left .ent{font-size:15px;font-weight:800;letter-spacing:.05em;color:#0a1f44;line-height:1.2}
+  .dh-left .slg{font-size:7.5px;font-weight:600;letter-spacing:.09em;color:#b8870f;text-transform:uppercase;margin-top:3px;line-height:1.35}
+  .dh-right{flex:1;text-align:right;padding-top:0}
+  .dh-title{font-family:Georgia,'Times New Roman',serif;font-size:27px;font-weight:700;letter-spacing:.15em;
+    color:#0a1f44;line-height:1.05;white-space:nowrap;text-transform:uppercase}
+  .dh-title.long{font-size:20px;letter-spacing:.1em}
+  .dh-title.xlong{font-size:15px;letter-spacing:.06em}
+  .dh-rule{height:2px;background:#d4a526;margin:7px 0 6px;position:relative}
   .dh-rule::after{content:'';position:absolute;right:0;top:-1px;width:120px;height:4px;background:#b8870f}
-  .dh-info{margin-top:14px;display:inline-block;text-align:left}
-  .dh-info .r{display:flex;gap:8px;font-size:12.5px;padding:3px 0}
-  .dh-info .r b{min-width:104px;font-weight:400;color:#4a5568}
-  .dh-info .r i{font-style:normal;color:#8a9ab5}
+  /* Références en ligne, séparées par des points médians : trois lignes gagnées */
+  .dh-info{margin-top:0;display:block;text-align:right}
+  .dh-info .r{display:inline-flex;gap:5px;font-size:11.5px;padding:0;margin-left:14px}
+  .dh-info .r b{min-width:0;font-weight:400;color:#4a5568}
+  .dh-info .r i{display:none}
   .dh-info .r span{font-weight:700;color:#0a1f44}
-  .dh-sep{height:1.6px;background:#d4a526;margin:6px 40px 0}
+  .dh-sep{height:1.6px;background:#d4a526;margin:5px 30px 0}
+
+  /* Cadre de page : le pied du tableau réserve, sur chaque page, la hauteur
+     occupée par le pied de page fixe. Le contenu ne peut donc jamais passer
+     dessous, quelle que soit la longueur du document. */
+  .cadre-page{width:100%;border-collapse:collapse}
+  .cadre-page > tbody > tr > td, .cadre-page > tfoot > tr > td{padding:0;border:none}
+  .pied-reserve{height:0}
 
   /* ---------- Blocs Client / Informations ---------- */
-  .parts{display:flex;gap:0;padding:14px 20px 4px 80px}
-  .part{flex:0 0 50%;min-width:0;box-sizing:border-box}
-  .parts .part:first-child{padding-right:26px}
-  .part h3{font-size:12px;font-weight:800;letter-spacing:.12em;color:#b8870f;text-transform:uppercase}
-  .part .ul{width:34px;height:2px;background:#d4a526;margin:6px 0 14px}
-  .part .row{display:flex;align-items:baseline;gap:7px;font-size:12px;padding:3.5px 0}
-  .part .row .lb{min-width:104px;color:#4a5568;flex-shrink:0}
+  .parts{display:flex;gap:24px;padding:9px 30px 2px}
+  .part{flex:1 1 0;min-width:0;box-sizing:border-box}
+  .parts .part:first-child{padding-right:0}
+  .part h3{font-size:10.5px;font-weight:800;letter-spacing:.11em;color:#b8870f;text-transform:uppercase}
+  .part .ul{width:28px;height:2px;background:#d4a526;margin:4px 0 7px}
+  .part .row{display:flex;align-items:baseline;gap:6px;font-size:11.5px;padding:1.5px 0}
+  .part .row .lb{min-width:86px;color:#4a5568;flex-shrink:0}
   .part .row .cl{color:#8a9ab5}
-  .part .row .vl{flex:1;font-weight:700;color:#0a1f44;padding-bottom:2px;min-height:15px}
+  .part .row .vl{flex:1;font-weight:700;color:#0a1f44;padding-bottom:1px;min-height:13px;
+    overflow:hidden;text-overflow:ellipsis}
 
   /* ---------- Tableau ---------- */
-  table{width:100%;border-collapse:collapse;margin:8px 0 0}
-  thead th{background:#0a1f44;color:#fff;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:11px 12px;text-align:center}
+  /* Tableau resserré : une catégorie peut compter une dizaine d'éléments,
+     chacun avec sa description. On gagne de la place sans nuire à la lecture. */
+  table{width:100%;border-collapse:collapse;margin:6px 0 0}
+  thead th{background:#0a1f44;color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;text-align:center}
   thead th.l{text-align:left}
   thead th.r{text-align:right}
-  tbody td{padding:8px 12px;border-bottom:1px solid #e8ecf2;font-size:12.5px;vertical-align:top}
+  tbody td{padding:5px 10px;border-bottom:1px solid #e8ecf2;font-size:11.5px;vertical-align:top}
   tbody tr:nth-child(even) td{background:#f8f9fb}
   td.c{text-align:center}
   td.r{text-align:right}
-  td .des{font-weight:700;color:#0a1f44}
-  ul.incl{list-style:none;margin:6px 0 0;padding:0}
-  ul.incl li{font-size:10.5px;color:#6e7685;line-height:1.7;padding-left:12px;position:relative}
-  ul.incl li::before{content:'';position:absolute;left:1px;top:7px;width:4px;height:4px;background:#d4a526}
+  td .des{font-weight:700;color:#0a1f44;font-size:12px}
+  ul.incl{list-style:none;margin:3px 0 0;padding:0}
+  ul.incl li{font-size:9.8px;color:#6e7685;line-height:1.42;padding-left:10px;position:relative;
+    margin-bottom:1px;break-inside:avoid}
+  ul.incl li::before{content:'';position:absolute;left:1px;top:5px;width:3.5px;height:3.5px;background:#d4a526}
 
   /* ---------- Totaux ---------- */
   .bottom{display:flex;gap:26px;padding:12px 40px 0;align-items:flex-start}
@@ -190,6 +205,9 @@ function doc_html_styles(): string {
     /* PIED DE PAGE SOCIETE : fixe, sur CHAQUE page */
     /* Pied de page fixe, en bas de la zone imprimable de CHAQUE page. La place qu'il occupe
        est reservee par le calcul de calage (variable "securite"), d'ou l'absence de chevauchement. */
+    .cadre-page tfoot{display:table-footer-group}
+    .cadre-page > tbody > tr > td{vertical-align:top}
+    .pied-reserve{height:21mm}          /* place réservée au pied de page, chaque page */
     .df{position:fixed;bottom:6mm;left:0;right:0;margin:0;background:#fff}
     /* la ligne "Document emis le..." fait partie du pied de page : elle doit etre fixee
        elle aussi, sinon elle flotte en fin de document et cree une page presque vide. */
@@ -198,7 +216,7 @@ function doc_html_styles(): string {
     /* Le bloc embarque sa propre zone de degagement (22 mm) : comme il est insecable,
        le navigateur le bascule tout seul sur la page suivante s'il ne tient pas
        au-dessus du pied de page. Plus aucun chevauchement possible. */
-    .auth{page-break-inside:avoid;break-inside:avoid;margin:9px 40px 0;padding-bottom:18mm}
+    .auth{page-break-inside:avoid;break-inside:avoid;margin:9px 30px 0;padding-bottom:4mm}
     /* aucune partie du bloc (QR, tampon, signature, nom) ne peut etre coupee */
     .auth > *, .sign, .sign .imgs, .sign .line, .auth-qr{page-break-inside:avoid;break-inside:avoid}
     .sign .line, .sign .nm{page-break-before:avoid;break-before:avoid}

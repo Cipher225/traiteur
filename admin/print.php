@@ -92,17 +92,38 @@ if ($type === 'fiche') {
     // sur le document ; sinon, le nom de la personne.
     $nomAffiche = trim((string)($doc['entreprise'] ?? '')) !== ''
                 ? $doc['entreprise'] : ($doc['client_nom'] ?? '');
+    /* Bloc client resserré : l'adresse et le NCC figurent dans le dossier client,
+       ils alourdissaient le document sans être utiles à la lecture. Le numéro de
+       référence n'est plus répété : il est déjà dans le bandeau d'en-tête. */
     $t1 = 'Client'; $l1 = [['Nom / Société', $nomAffiche]];
-    if (trim((string)($doc['client_ncc'] ?? '')) !== '') $l1[] = ['NCC', $doc['client_ncc']];
-    $l1[] = ['Adresse', $doc['client_adresse'] ?? ''];
-    $l1[] = ['Téléphone', $doc['client_tel'] ?? ''];
-    $l1[] = ['Email', $doc['client_email'] ?? ''];
+    if (trim((string)($doc['client_tel'] ?? '')) !== '')   $l1[] = ['Téléphone', $doc['client_tel']];
+    if (trim((string)($doc['client_email'] ?? '')) !== '') $l1[] = ['Email', $doc['client_email']];
     $l1[] = ['N° Client', $doc['client_id'] ? sprintf('CL-%04d', (int)$doc['client_id']) : ''];
-    $t2 = 'Informations'; $l2 = [['Référence', $doc['numero']]];
+    $t2 = 'Informations'; $l2 = [];
     if (trim((string)($doc['mode_paiement'] ?? '')) !== '') $l2[] = ['Mode de paiement', $doc['mode_paiement']];
     if (trim((string)($doc['activite'] ?? '')) !== '') $l2[] = ['Activité', $doc['activite']];
     if (!empty($doc['date_evenement'])) $l2[] = ["Date de l'événement", date('d/m/Y', strtotime((string)$doc['date_evenement']))];
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu', $doc['lieu']];
+    if (!$l2) { $l2[] = ['Échéance', $doc['date_echeance'] ? date('d/m/Y', strtotime($doc['date_echeance'])) : '—']; }
+}
+
+/* Descriptions du menu : chaque élément détaillé d'une ligne peut porter sa
+   description entre parenthèses, pour que le client sache exactement ce qu'il
+   commande sans avoir à demander. Chargée une seule fois, en une requête. */
+$descriptionsPlats = [];
+try {
+    foreach ($pdo->query("SELECT nom, description FROM plats WHERE description <> ''")->fetchAll() as $p) {
+        $cle = mb_strtolower(trim((string)$p['nom']));
+        if ($cle !== '') $descriptionsPlats[$cle] = trim((string)$p['description']);
+    }
+} catch (Throwable $e) { $descriptionsPlats = []; }
+
+/* Renvoie « Nom (description) » si une description existe pour cet élément. */
+function element_avec_description(string $item, array $descriptions): string {
+    $d = $descriptions[mb_strtolower(trim($item))] ?? '';
+    if ($d === '') return $item;
+    if (mb_strlen($d) > 90) $d = mb_substr($d, 0, 88) . '…';
+    return $item . ' (' . $d . ')';
 }
 
 /* Authentification */
@@ -129,6 +150,7 @@ if ($AUTH) {
 </div>
 
 <div class="sheet">
+  <table class="cadre-page"><tfoot><tr><td><div class="pied-reserve"></div></td></tr></tfoot><tbody><tr><td>
   <div class="flex-fill">
   <?= doc_html_header($settings, $titre, $entete, '..') ?>
   <?php if ($estLivraison): ?>
@@ -203,7 +225,7 @@ if ($AUTH) {
         <tr>
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
-            <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e($it) ?></li><?php endforeach; ?></ul><?php endif; ?>
+            <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e(element_avec_description($it, $descriptionsPlats)) ?></li><?php endforeach; ?></ul><?php endif; ?>
           </td>
           <td class="c"><?= qte_fmt($l['quantite']) ?></td>
           <td class="c"><span class="bl-recu">&#10003;</span></td>
@@ -220,7 +242,7 @@ if ($AUTH) {
         <tr>
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
-            <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e($it) ?></li><?php endforeach; ?></ul><?php endif; ?>
+            <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e(element_avec_description($it, $descriptionsPlats)) ?></li><?php endforeach; ?></ul><?php endif; ?>
           </td>
           <td class="c"><?= qte_fmt($l['quantite']) ?></td>
           <td class="r"><?= nf($l['prix_unitaire']) ?></td>
@@ -279,6 +301,7 @@ if ($AUTH) {
   </div>
   </div>
   <?= doc_html_auth($settings, '..', $qrUri, $checksum, $token) ?>
+  </td></tr></tbody></table>
   <?= doc_html_footer($settings) ?>
 </div>
 
@@ -289,7 +312,10 @@ if ($AUTH) {
    et n'est JAMAIS repete. Si ce script ne s'execute pas, le bloc reste sur la derniere page
    (juste apres le contenu) : aucun risque de casse. */
 (function(){
-  var HAUT_MM = 8, BAS_MM = 16, PAGE_MM = 297;       // doit correspondre au @page du CSS
+  /* RESERVE_MM : hauteur que le cadre de page réserve au pied de page sur chaque
+     page. Sans la retrancher, le calage placerait la signature trop bas et
+     créerait une page vide. */
+  var HAUT_MM = 8, BAS_MM = 16, RESERVE_MM = 21, PAGE_MM = 297;   // doit correspondre au CSS
   function placer(){
     var sheet = document.querySelector('.sheet');
     var auth  = document.querySelector('.auth');
@@ -304,7 +330,7 @@ if ($AUTH) {
     // Hauteur UTILE d'une page (hors marges) : c'est elle qui decoupe le contenu en pages.
     var sonde = document.createElement('div');
     sonde.style.cssText = 'position:absolute;visibility:hidden;left:0;top:0;width:1px;height:'
-                        + (PAGE_MM - HAUT_MM - BAS_MM) + 'mm';
+                        + (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM) + 'mm';
     document.body.appendChild(sonde);
     var pageH = sonde.getBoundingClientRect().height;
     if(sonde.parentNode) sonde.parentNode.removeChild(sonde);
@@ -351,7 +377,7 @@ if ($AUTH) {
     var elDf = document.querySelector('.df'), elDp = document.querySelector('.df-page');
     var hPied = (elDf ? elDf.getBoundingClientRect().height : 0)
               + (elDp ? elDp.getBoundingClientRect().height : 0);
-    var securite = pageH * (4 / (PAGE_MM - HAUT_MM - BAS_MM));   // le degagement du bloc fait le reste
+    var securite = pageH * (6 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));   // le degagement du bloc fait le reste
     var espace   = (pages * pageH - securite) - basBloc;
     // Si le bloc est deja bas, on n'y touche pas : sa zone de degagement suffit a le
     // proteger du pied de page (le navigateur le deplace lui-meme si besoin).
