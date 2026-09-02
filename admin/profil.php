@@ -35,6 +35,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    /* Créer sa propre fiche dans le personnel.
+       Sans elle, impossible d'éditer un badge ou une carte d'identification :
+       ces documents s'appuient sur la fiche, pas sur le compte de connexion. */
+    if (isset($_POST['creer_fiche'])) {
+        require_once __DIR__ . '/includes/badges.php';
+        $poste = trim($_POST['poste'] ?? '');
+        if ($poste === '') {
+            $err = 'Indiquez votre fonction dans l\'entreprise.';
+        } elseif (!empty($u['employe_id'])) {
+            $err = 'Votre fiche existe déjà.';
+        } else {
+            $matricule = badge_generer_matricule($pdo, $settings, 'employe');
+            $pdo->prepare("INSERT INTO employes (nom, poste, matricule, telephone, email, actif, fiche_perso)
+                           VALUES (?,?,?,?,?,1,1)")
+                ->execute([$u['nom'], mb_substr($poste, 0, 100), $matricule,
+                           $u['telephone'] ?? '', $u['email'] ?? '']);
+            $eid = (int)$pdo->lastInsertId();
+            $pdo->prepare('UPDATE users SET employe_id=? WHERE id=?')->execute([$eid, $uid]);
+            if (function_exists('journaliser')) {
+                journaliser($pdo, 'creation', 'employe', $eid, 'Fiche personnel créée depuis le profil — ' . $matricule);
+            }
+            $ok = 'Votre fiche a été créée (matricule ' . $matricule . '). Vous pouvez maintenant éditer votre badge.';
+            $u = $pdo->query("SELECT * FROM users WHERE id=$uid")->fetch();
+        }
+    }
+
     if (isset($_POST['maj_mdp'])) {
         $actuel = $_POST['actuel'] ?? '';
         $nouveau = $_POST['nouveau'] ?? '';
@@ -57,6 +83,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $aMotDePasse = trim((string)$u['password']) !== '';
 $relieGoogle = !empty($u['google_id']);
+
+/* Fiche personnel liée à ce compte, si elle existe */
+$maFiche = null;
+if (!empty($u['employe_id'])) {
+    $st = $pdo->prepare('SELECT * FROM employes WHERE id=?');
+    $st->execute([(int)$u['employe_id']]);
+    $maFiche = $st->fetch() ?: null;
+}
+$monBadge = null;
+if ($maFiche) {
+    try {
+        $st = $pdo->prepare("SELECT id, statut, date_expiration FROM badges WHERE employe_id=? ORDER BY id DESC LIMIT 1");
+        $st->execute([(int)$maFiche['id']]);
+        $monBadge = $st->fetch() ?: null;
+    } catch (Throwable $e) {}
+}
 $aEmail      = trim((string)($u['email'] ?? '')) !== '';
 $googlePret  = trim((string)($settings['google_client_id'] ?? '')) !== ''
             && trim((string)($settings['google_client_secret'] ?? '')) !== '';
@@ -152,6 +194,50 @@ admin_header('Mon profil', '', $pdo, $settings);
     <button class="btn btn-gold" name="maj_mdp" value="1" style="margin-top:8px"><?= $aMotDePasse ? 'Changer le mot de passe' : 'Définir le mot de passe' ?></button>
   </form>
 </div>
+</div>
+
+<div class="panel glass" style="margin-top:14px">
+  <h2>🪪 Ma fiche &amp; mon badge</h2>
+  <?php if (!$maFiche): ?>
+    <p class="compte-aide">
+      Les badges et cartes d'identification s'appuient sur la <strong>fiche du personnel</strong>,
+      et non sur le compte de connexion. Votre compte n'a pas encore de fiche : créez-la ici,
+      en une fois, pour pouvoir éditer votre propre badge.</p>
+    <form method="post" class="fiche-creer">
+      <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+      <div class="fc-champ">
+        <label>Votre fonction dans l'entreprise *</label>
+        <input class="input" name="poste" required maxlength="100"
+               placeholder="ex : Directrice Générale, Gérant, Responsable"
+               value="<?= ($u['role'] ?? '') === 'admin' ? 'Direction' : '' ?>">
+      </div>
+      <button class="btn btn-gold" name="creer_fiche" value="1">🪪 Créer ma fiche</button>
+    </form>
+    <p class="compte-note" style="margin-top:10px">
+      Votre nom, téléphone et email seront repris de vos informations ci-dessus, et un matricule
+      vous sera attribué automatiquement. Vous resterez modifiable depuis
+      <a href="employes.php" style="color:var(--gold)">Employés</a>.</p>
+  <?php else: ?>
+    <div class="fiche-ok">
+      <span class="fo-ico">✅</span>
+      <div class="fo-txt">
+        <strong><?= e($maFiche['nom']) ?> — <?= e($maFiche['poste'] ?: 'Fonction non précisée') ?></strong>
+        <div class="compte-note">Matricule <?= e($maFiche['matricule']) ?><?php
+          if ($monBadge): ?> · badge n° <?= (int)$monBadge['id'] ?><?php
+            if (!empty($monBadge['date_expiration'])): ?> valable jusqu'au <?= date('d/m/Y', strtotime($monBadge['date_expiration'])) ?><?php endif;
+          else: ?> · aucun badge édité pour le moment<?php endif; ?></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <?php if ($monBadge): ?>
+        <a class="btn btn-gold btn-sm" href="badge-print.php?id=<?= (int)$monBadge['id'] ?>" target="_blank">🖨️ Imprimer mon badge</a>
+        <a class="btn btn-glass btn-sm" href="badges.php?edit=<?= (int)$monBadge['id'] ?>">✏️ Modifier</a>
+      <?php else: ?>
+        <a class="btn btn-gold btn-sm" href="badges.php">🪪 Éditer mon badge</a>
+      <?php endif; ?>
+      <a class="btn btn-glass btn-sm" href="employes.php?edit=<?= (int)$maFiche['id'] ?>">📋 Ma fiche personnel</a>
+    </div>
+  <?php endif; ?>
 </div>
 
 <div class="panel glass" style="margin-top:14px">

@@ -852,3 +852,7 @@ CREATE TABLE IF NOT EXISTS relances (
 );
 
 INSERT IGNORE INTO settings (cle, valeur) VALUES ('relances_actives', '0');
+
+-- Fiche personnelle d'un titulaire de compte : elle sert aux badges et cartes,
+-- mais n'a pas à figurer dans la liste du personnel ni dans la paie.
+ALTER TABLE employes ADD COLUMN IF NOT EXISTS fiche_perso TINYINT(1) DEFAULT 0;

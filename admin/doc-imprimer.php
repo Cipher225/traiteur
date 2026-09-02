@@ -134,7 +134,7 @@ $titre = mb_strtoupper($doc['titre'] !== '' ? $doc['titre'] : $doc['categorie'])
       if (h > plusHaut && h < pageH) plusHaut = h;
     }
     var pages    = Math.max(1, Math.ceil(basBloc / pageH));
-    var securite = (pages - 1) * plusHaut + mm(18);
+    var securite = (pages - 1) * plusHaut + mm(13);
     var espace   = (pages * pageH - securite) - basBloc;
     if (!isFinite(espace) || espace < 8) return;
 

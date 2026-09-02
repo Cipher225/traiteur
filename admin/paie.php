@@ -54,7 +54,7 @@ if (isset($_GET['edit'])) {
     if ($pre_emp) { $e = $pdo->prepare('SELECT * FROM employes WHERE id=?'); $e->execute([$pre_emp]); $emp_data = $e->fetch(); }
 }
 
-$employes = $pdo->query('SELECT id, nom, poste, salaire_base, banque, numero_compte FROM employes WHERE actif=1 ORDER BY nom')->fetchAll();
+$employes = $pdo->query('SELECT id, nom, poste, salaire_base, banque, numero_compte FROM employes WHERE actif=1 AND COALESCE(fiche_perso,0)=0 ORDER BY nom')->fetchAll();
 $fiches = $pdo->query("SELECT fp.*, e.nom AS employe, e.poste FROM fiches_paie fp LEFT JOIN employes e ON e.id=fp.employe_id ORDER BY fp.periode DESC, fp.id DESC")->fetchAll();
 
 /* Rangement par année → mois (période de paie) */

@@ -42,7 +42,7 @@ if (mb_strlen($q) >= 2) {
 
         'employes' => ['🧑‍🍳', 'Employés', 'employes',
             "SELECT id, nom, poste, matricule, telephone FROM employes
-             WHERE nom LIKE ? OR poste LIKE ? OR matricule LIKE ?
+             WHERE COALESCE(fiche_perso,0)=0 AND (nom LIKE ? OR poste LIKE ? OR matricule LIKE ?)
              ORDER BY nom LIMIT 12", 3],
 
         'stock' => ['📦', 'Stock', 'stock',

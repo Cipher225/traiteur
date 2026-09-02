@@ -196,6 +196,8 @@ if (isset($_GET['edit'])) {
 
 $rows = $pdo->query("SELECT e.*, u.id AS uid, u.username, u.actif AS compte_actif, u.permissions, u.acces_exception_until
                      FROM employes e LEFT JOIN users u ON u.employe_id=e.id AND u.role IN ('employe','admin')
+                     -- les fiches personnelles (créées depuis « Mon profil ») restent hors de cette liste
+                     WHERE COALESCE(e.fiche_perso, 0) = 0
                      ORDER BY e.actif DESC, e.nom")->fetchAll();
 
 admin_header('Employés & accès', 'employes', $pdo, $settings);
