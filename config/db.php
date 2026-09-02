@@ -276,6 +276,38 @@ function groupes_modules(): array {
     ];
 }
 
+/* ============================================================================
+   ENTRÉES / SORTIES DE CAISSE → COMPTABILITÉ
+   Chaque bon d'entrée ou de sortie génère son écriture comptable, et une seule :
+   la liaison par « recu_id » garantit qu'une modification met à jour l'écriture
+   existante au lieu d'en créer une seconde.
+   ============================================================================ */
+function ecriture_pour_recu(PDO $pdo, int $recuId, string $type, string $numero,
+                            float $montant, string $mode, string $motif, string $date,
+                            ?int $clientId, string $activite = ''): void {
+    try {
+        $sens     = ($type === 'entree') ? 'entree' : 'depense';
+        $categorie= ($type === 'entree') ? 'Ventes' : 'Achats';
+        $libelle  = mb_substr(trim(($type === 'entree' ? 'Entrée ' : 'Sortie ') . $numero
+                    . ($motif !== '' ? ' — ' . $motif : '')), 0, 200);
+        $notes    = trim($activite !== '' ? 'Activité : ' . $activite : '');
+
+        $st = $pdo->prepare('SELECT id FROM transactions WHERE recu_id=?');
+        $st->execute([$recuId]);
+        $existe = $st->fetchColumn();
+
+        if ($existe) {
+            $pdo->prepare('UPDATE transactions SET type=?, categorie=?, libelle=?, montant=?,
+                           mode_paiement=?, client_id=?, date_operation=?, notes=? WHERE id=?')
+                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes, (int)$existe]);
+        } else {
+            $pdo->prepare('INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement,
+                           client_id, date_operation, notes, recu_id) VALUES (?,?,?,?,?,?,?,?,?)')
+                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes, $recuId]);
+        }
+    } catch (Throwable $e) { /* la caisse ne doit jamais échouer à cause de la comptabilité */ }
+}
+
 /* Modes de paiement proposes dans toute l'application */
 function modes_paiement(): array {
     return ['Espèces', 'Wave', 'Orange Money', 'MTN Money', 'Moov Money',

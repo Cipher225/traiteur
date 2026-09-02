@@ -254,3 +254,21 @@ INSERT IGNORE INTO settings (cle, valeur) VALUES ('relances_actives', '0');
 -- Fiche personnelle d'un titulaire de compte : elle sert aux badges et cartes,
 -- mais n'a pas à figurer dans la liste du personnel ni dans la paie.
 ALTER TABLE employes ADD COLUMN IF NOT EXISTS fiche_perso TINYINT(1) DEFAULT 0;
+
+-- Chaque entrée / sortie de caisse est reliée à son écriture comptable :
+-- l'écriture suit la modification et disparaît avec le document.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recu_id INT DEFAULT NULL;
+
+-- Reprise : les entrées / sorties déjà saisies avant cette mise à jour reçoivent
+-- leur écriture comptable. Sans doublon possible grâce au NOT EXISTS.
+INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement, client_id, date_operation, notes, recu_id)
+SELECT
+  CASE WHEN r.type = 'entree' THEN 'entree' ELSE 'depense' END,
+  CASE WHEN r.type = 'entree' THEN 'Ventes' ELSE 'Achats' END,
+  CONCAT(CASE WHEN r.type = 'entree' THEN 'Entrée ' ELSE 'Sortie ' END, r.numero,
+         CASE WHEN COALESCE(r.motif,'') <> '' THEN CONCAT(' — ', r.motif) ELSE '' END),
+  r.montant, COALESCE(r.mode_paiement,'Espèces'), r.client_id, r.date_paiement,
+  CASE WHEN COALESCE(r.activite,'') <> '' THEN CONCAT('Activité : ', r.activite) ELSE '' END,
+  r.id
+FROM recus r
+WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recu_id = r.id);

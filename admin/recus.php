@@ -15,7 +15,9 @@ $modes = modes_paiement();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     if (isset($_POST['supprimer'])) {
-        $pdo->prepare('DELETE FROM recus WHERE id=?')->execute([(int)$_POST['supprimer']]);
+        $sid = (int)$_POST['supprimer'];
+        $pdo->prepare('DELETE FROM transactions WHERE recu_id=?')->execute([$sid]);   // et son écriture comptable
+        $pdo->prepare('DELETE FROM recus WHERE id=?')->execute([$sid]);
         flash($LIB . ' supprimé.');
         header('Location: ' . $RETOUR); exit;
     }
@@ -36,11 +38,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($id) {
         $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, lieu=? WHERE id=?')
             ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $lieu, $id]);
+        // L'écriture comptable suit la modification
+        $st = $pdo->prepare('SELECT numero FROM recus WHERE id=?');
+        $st->execute([$id]);
+        $num = (string)$st->fetchColumn();
+        ecriture_pour_recu($pdo, $id, $TYPE, $num, $montant, $mode, $motif, $date, $client_id, $activite);
         flash($LIB . ' modifié.');
     } else {
         $numero = next_numero($pdo, 'recus', $PREF);
         $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)')
             ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $lieu]);
+        $nid = (int)$pdo->lastInsertId();
+        // Toute entrée ou sortie de caisse alimente la comptabilité
+        ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite);
         flash($LIB . ' ' . $numero . ' créé.');
     }
     header('Location: ' . $RETOUR); exit;

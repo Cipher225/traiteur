@@ -46,7 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!empty($u['employe_id'])) {
             $err = 'Votre fiche existe déjà.';
         } else {
-            $matricule = badge_generer_matricule($pdo, $settings, 'employe');
+            /* Un administrateur porte le premier matricule (la direction) ; un employé
+               qui crée sa fiche depuis son profil suit la numérotation habituelle. */
+            $typeMat = (($u['role'] ?? '') === 'admin') ? 'direction' : 'employe';
+            $matricule = badge_generer_matricule($pdo, $settings, $typeMat);
             $pdo->prepare("INSERT INTO employes (nom, poste, matricule, telephone, email, actif, fiche_perso)
                            VALUES (?,?,?,?,?,1,1)")
                 ->execute([$u['nom'], mb_substr($poste, 0, 100), $matricule,

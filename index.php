@@ -5,7 +5,7 @@ $s = get_settings($pdo);
 
 $services = $pdo->query("SELECT * FROM services WHERE actif=1 ORDER BY ordre, id")->fetchAll();
 $categories = $pdo->query("SELECT * FROM categories WHERE actif=1 ORDER BY ordre, id")->fetchAll();
-$plats = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY populaire DESC, id DESC")->fetchAll();
+$plats = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY categorie_id, ordre, id")->fetchAll();
 $galerie = $pdo->query("SELECT * FROM galerie ORDER BY ordre, id DESC LIMIT 8")->fetchAll();
 $temoignages = $pdo->query("SELECT * FROM temoignages WHERE statut='valide' ORDER BY id DESC LIMIT 6")->fetchAll();
 $videos = $pdo->query("SELECT * FROM videos WHERE actif=1 ORDER BY ordre, id DESC LIMIT 6")->fetchAll();

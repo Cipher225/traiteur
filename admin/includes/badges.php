@@ -36,24 +36,43 @@ function badge_generer_matricule(PDO $pdo, array $settings, string $typePorteur 
         for ($essai = 0; $essai < 10000; $essai++) {
             $num = str_pad((string)$seq, 2, '0', STR_PAD_LEFT);
             $mat = $prefixe . '-EX' . $num . '-' . $ym;
-            $chk = $pdo->prepare("SELECT 1 FROM badges WHERE matricule=?");
-            $chk->execute([$mat]);
+            $chk = $pdo->prepare("SELECT 1 FROM badges WHERE matricule=?
+                              UNION SELECT 1 FROM employes WHERE matricule=? LIMIT 1");
+            $chk->execute([$mat, $mat]);
             if (!$chk->fetchColumn()) return $mat;
             $seq++;
         }
         return $prefixe . '-EX' . substr(uniqid(), -4) . '-' . $ym;
     }
 
-    // Employé : compter les employés déjà émis pour continuer la séquence
+    /* Employé : la séquence doit tenir compte des matricules DÉJÀ ATTRIBUÉS aux
+       fiches du personnel, et pas seulement des badges édités. Sans cela, deux
+       fiches créées avant tout badge recevraient le même numéro.
+       Le numéro 01 est réservé à la direction. */
+    $seqEmp = 0;
+    try {
+        $st = $pdo->prepare("SELECT COUNT(*) FROM employes WHERE matricule LIKE ?");
+        $st->execute([$prefixe . '%']);
+        $seqEmp = (int)$st->fetchColumn();
+    } catch (Throwable $e) {}
+
     $st = $pdo->prepare("SELECT COUNT(*) FROM badges WHERE type_porteur='employe' AND matricule LIKE ?");
     $st->execute([$prefixe . '%']);
-    $seq = (int)$st->fetchColumn() + 1;
+    $seqBadge = (int)$st->fetchColumn();
+
+    $seq = max($seqEmp, $seqBadge) + 1;
+    if ($typePorteur === 'direction') {
+        $seq = 1;                       // la direction porte le premier matricule
+    } elseif ($seq < 2) {
+        $seq = 2;                       // 01 reste réservé à la direction
+    }
     for ($essai = 0; $essai < 10000; $essai++) {
         $num = str_pad((string)$seq, 2, '0', STR_PAD_LEFT);
         $lettres = badge_lettres_suffixe($seq);
         $mat = $prefixe . $num . '-' . $ym . '-' . $lettres;
-        $chk = $pdo->prepare("SELECT 1 FROM badges WHERE matricule=?");
-        $chk->execute([$mat]);
+        $chk = $pdo->prepare("SELECT 1 FROM badges WHERE matricule=?
+                              UNION SELECT 1 FROM employes WHERE matricule=? LIMIT 1");
+        $chk->execute([$mat, $mat]);
         if (!$chk->fetchColumn()) return $mat;
         $seq++;
     }

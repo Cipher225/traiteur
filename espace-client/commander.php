@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Menu (plats actifs groupés par catégorie)
 $cats = $pdo->query("SELECT * FROM categories WHERE actif=1 ORDER BY ordre, id")->fetchAll();
 $platsParCat = [];
-$st = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY populaire DESC, id DESC");
+$st = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY categorie_id, ordre, id");
 foreach ($st as $p) $platsParCat[$p['categorie_id']][] = $p;
 
 client_header('Commander', 'commander', $settings, $CLIENT);

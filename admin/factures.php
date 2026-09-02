@@ -180,7 +180,9 @@ if (isset($_GET['edit'])) {
 $clients = $pdo->query('SELECT id, nom, entreprise FROM clients ORDER BY nom')->fetchAll();
 // Menu traiteur : catégories + plats (pour l'ajout rapide de lignes)
 $catsMenu = $pdo->query("SELECT id, nom, icone FROM categories WHERE actif=1 ORDER BY ordre, id")->fetchAll();
-$platsMenu = $pdo->query("SELECT id, nom, prix, categorie_id FROM plats WHERE actif=1 ORDER BY nom")->fetchAll();
+/* Les plats suivent l'ordre défini dans le Menu, et non l'ordre alphabétique :
+   c'est celui que vous avez choisi et que vos clients connaissent. */
+$platsMenu = $pdo->query("SELECT id, nom, prix, categorie_id FROM plats WHERE actif=1 ORDER BY ordre, id")->fetchAll();
 $menuData = [];
 foreach ($catsMenu as $c) $menuData[$c['id']] = ['nom' => $c['nom'], 'icone' => $c['icone'] ?: '🍽️', 'plats' => []];
 foreach ($platsMenu as $p) if (isset($menuData[$p['categorie_id']])) $menuData[$p['categorie_id']]['plats'][] = ['nom' => $p['nom'], 'prix' => (float)$p['prix']];
