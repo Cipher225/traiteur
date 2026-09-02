@@ -2013,7 +2013,7 @@ a.dmd-cal:hover{ background:rgba(212,165,38,.22) }
 .actions-rapides a:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-1px)}
 
 /* Mini-graphique de tendance */
-.mini-tendance{display:flex;align-items:flex-end;gap:7px;height:76px;padding:6px 4px 0;margin-bottom:14px}
+.mini-tendance{display:flex;align-items:flex-end;gap:7px;height:76px;padding:6px 4px 0;margin-bottom:14px;position:relative;z-index:0}
 .mt-col{flex:1;max-width:52px;display:flex;flex-direction:column;align-items:center;height:100%}
 .mt-barre{width:100%;border-radius:5px 5px 0 0;margin-top:auto;
   background:linear-gradient(180deg,#34d399,#10b981);transition:opacity .15s}
@@ -2096,3 +2096,117 @@ a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
   .compte-duo{grid-template-columns:1fr}
   .ce-score{min-width:100%;text-align:left;margin-top:4px}
 }
+
+/* ============================================================
+   POULS DE L'ACTIVITÉ
+   ============================================================ */
+.pouls{margin-top:14px;overflow:hidden;position:relative;color:var(--ink)}
+.pouls::before{content:'';position:absolute;inset:-50% -20% auto -20%;height:70%;z-index:0;
+  background:radial-gradient(50% 60% at 30% 30%, rgba(16,185,129,.10), transparent 70%),
+             radial-gradient(45% 55% at 78% 15%, rgba(212,165,38,.10), transparent 72%);
+  filter:blur(30px);pointer-events:none}
+.pouls > *{position:relative;z-index:1}
+
+.pouls-tete{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:14px}
+.pouls-sous{color:var(--ink-faint);font-size:12.5px;margin:4px 0 0}
+.pouls-legende{display:flex;gap:6px;flex-wrap:wrap}
+.pl-item{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:20px;
+  font-size:12px;font-weight:600;cursor:pointer;color:var(--ink-faint);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);
+  transition:all .18s var(--ease-ios)}
+.pl-item i{width:9px;height:9px;border-radius:50%;opacity:.35;transition:opacity .18s}
+.pl-item.actif{color:var(--ink);border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.07)}
+.pl-item.actif i{opacity:1;box-shadow:0 0 8px currentColor}
+.pl-item:hover{transform:translateY(-1px)}
+
+.pouls-corps{display:grid;grid-template-columns:1fr 250px;gap:20px;align-items:center}
+.pouls-graphe{position:relative;min-width:0}
+.pouls-graphe svg{width:100%;height:260px;display:block;overflow:visible}
+.pouls-bulle{position:absolute;top:6px;transform:translateX(-50%);pointer-events:none;
+  padding:9px 13px;border-radius:12px;font-size:11.5px;line-height:1.65;white-space:nowrap;
+  background:rgba(8,14,28,.94);border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 10px 30px rgba(0,0,0,.45);backdrop-filter:blur(10px);z-index:5}
+.pouls-bulle strong{display:block;color:var(--gold);font-size:12.5px;margin-bottom:4px}
+.pouls-bulle span{display:flex;align-items:center;gap:6px;color:var(--ink-dim)}
+.pouls-bulle i{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.pouls-bulle b{color:var(--ink);margin-left:auto;padding-left:10px}
+
+.pouls-cote{display:flex;flex-direction:column;align-items:center;gap:14px}
+.pouls-donut{position:relative;width:150px;height:150px}
+.pouls-donut svg{width:100%;height:100%;transform:rotate(0deg)}
+.pd-centre{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;text-align:center;pointer-events:none}
+.pd-val{font-family:var(--font-display);font-size:19px;font-weight:800;color:var(--gold);
+  letter-spacing:-.02em;line-height:1.1}
+.pd-lbl{font-size:9.5px;color:var(--ink-faint);margin-top:3px;letter-spacing:.04em}
+.pouls-moyens{width:100%;display:flex;flex-direction:column;gap:5px}
+.pm-ligne{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink-dim)}
+.pm-ligne i{width:9px;height:9px;border-radius:3px;flex-shrink:0}
+.pm-nom{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pm-pct{font-weight:700;color:var(--ink)}
+.pm-vide{font-size:12px;color:var(--ink-faint);text-align:center}
+
+.pouls-reperes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px;
+  padding-top:16px;border-top:1px solid var(--glass-border)}
+.pr-item{text-align:center}
+.pr-val{display:block;font-family:var(--font-display);font-size:21px;font-weight:800;
+  color:var(--ink);letter-spacing:-.02em;line-height:1.15}
+.pr-val.pr-txt{color:var(--gold)}
+.pr-lbl{display:block;font-size:11px;color:var(--ink-faint);margin-top:3px}
+
+@media (max-width:900px){
+  .pouls-corps{grid-template-columns:1fr}
+  .pouls-cote{flex-direction:row;justify-content:center;flex-wrap:wrap}
+  .pouls-moyens{width:auto;flex:1;min-width:180px}
+  .pouls-graphe svg{height:210px}
+  .pouls-reperes{grid-template-columns:repeat(2,1fr);gap:14px}
+}
+
+/* ============================================================
+   CARTE DES COMPTES CONNECTÉS
+   Le détail s'ouvre en panneau flottant : la carte conserve sa
+   hauteur, et la mise en page ne se déforme jamais.
+   ============================================================ */
+/* La carte doit se superposer aux blocs suivants quand son panneau s'ouvre,
+   sinon celui-ci passerait derrière les cartes de statistiques. */
+.dcard-online{position:relative;z-index:900}
+.dash-cards{position:relative;z-index:800}
+/* Les blocs qui suivent restent en dessous : le panneau doit pouvoir les recouvrir. */
+.dash-cards ~ .stats, .dash-cards ~ .panel{position:relative;z-index:0}
+.online-avatars{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
+.online-ava.sm.ava-plus{background:var(--glass-border-soft);color:var(--ink-faint);
+  border:1px solid var(--glass-border);font-size:10.5px;font-weight:700}
+
+.online-btn{display:inline-flex;align-items:center;gap:6px;margin-top:11px;padding:5px 12px;
+  border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--ink-faint);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);transition:all .16s}
+.online-btn:hover{color:var(--ink);border-color:rgba(255,255,255,.18)}
+.online-btn.ouvert{color:var(--gold);border-color:rgba(212,165,38,.35)}
+.online-btn .ob-fl{font-size:9px;transition:transform .22s ease}
+.online-btn.ouvert .ob-fl{transform:rotate(180deg)}
+
+.online-pan{position:fixed;z-index:9999;width:290px;max-width:calc(100vw - 32px);
+  padding:12px 14px;border-radius:16px;
+  background:rgba(10,17,33,.96);border:1px solid var(--glass-border);
+  box-shadow:0 18px 44px rgba(0,0,0,.5);backdrop-filter:blur(18px);
+  animation:opApparait .22s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes opApparait{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.op-tete{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding-bottom:9px;margin-bottom:8px;border-bottom:1px solid var(--glass-border);
+  font-size:12.5px;color:var(--ink)}
+.op-fermer{width:24px;height:24px;border-radius:7px;cursor:pointer;font-size:12px;
+  color:var(--ink-faint);background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.op-fermer:hover{color:var(--ink)}
+/* Au-delà de quelques connectés, la liste défile au lieu de s'étirer */
+.online-pan .online-list{max-height:236px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent}
+.online-pan .online-list::-webkit-scrollbar{width:5px}
+.online-pan .online-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+.online-row{display:flex;align-items:center;gap:9px;padding:6px 4px;border-radius:9px}
+.online-row:hover{background:var(--glass-border-soft)}
+.online-info{flex:1;min-width:0}
+.online-info strong{display:block;font-size:12.5px;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.online-info small{font-size:11px;color:var(--ink-faint)}
+@media (max-width:640px){ .online-pan{left:8px;right:8px} }

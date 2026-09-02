@@ -225,6 +225,66 @@ if (is_admin()) {
     } catch (Throwable $e) {}
 }
 
+/* ============================================================================
+   POULS DE L'ACTIVITÉ — données des 12 derniers mois
+   Une seule requête par série : on reste léger même avec des milliers de lignes.
+   ============================================================================ */
+$pouls = ['mois' => [], 'entrees' => [], 'depenses' => [], 'docs' => [], 'evts' => []];
+$nomsCourts = ['', 'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+$cles = [];
+for ($i = 11; $i >= 0; $i--) {
+    $k = date('Y-m', strtotime("-$i month"));
+    $cles[$k] = 11 - $i;
+    $pouls['mois'][]     = $nomsCourts[(int)date('n', strtotime($k . '-01'))];
+    $pouls['entrees'][]  = 0.0;
+    $pouls['depenses'][] = 0.0;
+    $pouls['docs'][]     = 0;
+    $pouls['evts'][]     = 0;
+}
+$depuis = date('Y-m-01', strtotime('-11 month'));
+
+try {
+    $st = $pdo->prepare("SELECT DATE_FORMAT(date_operation,'%Y-%m') k, type, SUM(montant) s
+                         FROM transactions WHERE date_operation >= ? GROUP BY k, type");
+    $st->execute([$depuis]);
+    foreach ($st->fetchAll() as $r) {
+        if (!isset($cles[$r['k']])) continue;
+        $pouls[$r['type'] === 'entree' ? 'entrees' : 'depenses'][$cles[$r['k']]] = (float)$r['s'];
+    }
+} catch (Throwable $e) {}
+
+try {
+    $st = $pdo->prepare("SELECT DATE_FORMAT(date_emission,'%Y-%m') k, COUNT(*) n
+                         FROM factures WHERE date_emission >= ? AND statut <> 'annulee' GROUP BY k");
+    $st->execute([$depuis]);
+    foreach ($st->fetchAll() as $r) if (isset($cles[$r['k']])) $pouls['docs'][$cles[$r['k']]] = (int)$r['n'];
+} catch (Throwable $e) {}
+
+try {
+    $st = $pdo->prepare("SELECT DATE_FORMAT(date_evenement,'%Y-%m') k, COUNT(*) n
+                         FROM commandes_client WHERE date_evenement >= ? GROUP BY k");
+    $st->execute([$depuis]);
+    foreach ($st->fetchAll() as $r) if (isset($cles[$r['k']])) $pouls['evts'][$cles[$r['k']]] = (int)$r['n'];
+} catch (Throwable $e) {}
+
+/* Répartition des encaissements par moyen de paiement (12 mois) */
+$moyens = [];
+try {
+    $st = $pdo->prepare("SELECT mode_paiement m, SUM(montant) s FROM transactions
+                         WHERE type='entree' AND date_operation >= ?
+                         GROUP BY m ORDER BY s DESC LIMIT 6");
+    $st->execute([$depuis]);
+    $moyens = array_map(fn($r) => ['nom' => $r['m'] ?: 'Non précisé', 'val' => (float)$r['s']], $st->fetchAll());
+} catch (Throwable $e) {}
+
+/* Quelques repères, animés à l'affichage */
+$poulsCA      = array_sum($pouls['entrees']);
+$poulsDep     = array_sum($pouls['depenses']);
+$poulsDocs    = array_sum($pouls['docs']);
+$poulsEvts    = array_sum($pouls['evts']);
+$poulsMoyen   = $poulsDocs > 0 ? $poulsCA / $poulsDocs : 0;
+$moisPlein    = $pouls['entrees'] ? array_search(max($pouls['entrees']), $pouls['entrees']) : 0;
+
 /* Encaissements des 6 derniers mois, pour la tendance */
 $tendance = [];
 if (can('comptabilite')) {
@@ -280,7 +340,7 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
   </div>
 
   <!-- Carte comptes en ligne -->
-  <div class="dcard glass teal">
+  <div class="dcard glass teal dcard-online">
     <div class="dcard-head">
       <span class="dcard-ico"><span class="online-pulse"></span></span>
       <span class="dcard-titre">Connectés maintenant</span>
@@ -289,13 +349,24 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
     <?php if (!$enLigne): ?>
       <p style="color:var(--ink-faint);font-size:12.5px;margin:12px 0 0">Personne connecté.</p>
     <?php else: ?>
+      <?php $visibles = array_slice($enLigne, 0, 6); $reste = count($enLigne) - count($visibles); ?>
       <div class="online-avatars">
-        <?php foreach ($enLigne as $u): ?>
+        <?php foreach ($visibles as $u): ?>
         <span class="online-ava sm <?= $u['role']==='client'?'ava-client':($u['role']==='admin'?'ava-admin':'ava-emp') ?>" title="<?= e($u['nom']) ?>"><?= e(mb_strtoupper(mb_substr($u['nom'],0,1))) ?></span>
         <?php endforeach; ?>
+        <?php if ($reste > 0): ?><span class="online-ava sm ava-plus">+<?= $reste ?></span><?php endif; ?>
       </div>
-      <details class="online-details">
-        <summary>Détail</summary>
+
+      <!-- Le détail s'ouvre en panneau flottant : la carte garde sa taille,
+           et la mise en page ne bouge pas, quel que soit le nombre de connectés. -->
+      <button type="button" class="online-btn" id="btn-online" aria-expanded="false" aria-controls="pan-online">
+        Voir le détail <span class="ob-fl">▾</span>
+      </button>
+      <div class="online-pan" id="pan-online" hidden>
+        <div class="op-tete">
+          <strong><?= count($enLigne) ?> connecté<?= count($enLigne) > 1 ? 's' : '' ?></strong>
+          <button type="button" class="op-fermer" id="close-online" aria-label="Fermer">✕</button>
+        </div>
         <div class="online-list">
           <?php foreach ($enLigne as $u): ?>
           <div class="online-row">
@@ -312,7 +383,44 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
           </div>
           <?php endforeach; ?>
         </div>
-      </details>
+      </div>
+      <script>
+      (function(){
+        var b=document.getElementById('btn-online'), p=document.getElementById('pan-online'),
+            f=document.getElementById('close-online');
+        if(!b||!p) return;
+        /* Une carte en verre applique un flou d'arrière-plan, ce qui piège tout
+           élément « fixe » à l'intérieur d'elle. On rattache donc le panneau
+           directement à la page : il se superpose alors librement. */
+        document.body.appendChild(p);
+        function placer(){
+          /* Le panneau est positionné au niveau de la page : il se superpose à tout
+             sans jamais déformer la carte ni les blocs voisins. */
+          /* On mesure APRÈS avoir rendu le panneau visible : tant qu'il est masqué,
+             sa largeur vaut zéro et le calcul de position serait faux. */
+          var r = b.getBoundingClientRect();
+          var largeur = p.offsetWidth || 290;
+          var l = Math.min(r.left, window.innerWidth - largeur - 16);
+          p.style.left = Math.max(16, l) + 'px';
+          var sousLeBouton = r.bottom + 8;
+          if (sousLeBouton + p.offsetHeight > window.innerHeight - 12) {
+            p.style.top = Math.max(12, r.top - p.offsetHeight - 8) + 'px';
+          } else {
+            p.style.top = sousLeBouton + 'px';
+          }
+        }
+        function ouvrir(o){
+          p.hidden=!o; b.setAttribute('aria-expanded', o?'true':'false'); b.classList.toggle('ouvert', o);
+          if (o) { p.style.visibility='hidden'; placer(); p.style.visibility=''; }
+        }
+        window.addEventListener('resize', function(){ if(!p.hidden) placer(); });
+        window.addEventListener('scroll', function(){ if(!p.hidden) placer(); }, {passive:true});
+        b.addEventListener('click', function(e){ e.stopPropagation(); ouvrir(p.hidden); });
+        if(f) f.addEventListener('click', function(){ ouvrir(false); });
+        document.addEventListener('click', function(e){ if(!p.hidden && !p.contains(e.target)) ouvrir(false); });
+        document.addEventListener('keydown', function(e){ if(e.key==='Escape') ouvrir(false); });
+      })();
+      </script>
     <?php endif; ?>
   </div>
 </div>
@@ -435,4 +543,267 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
   } else { fetchWeather(5.36,-4.01,'Abidjan'); }
 })();
 </script>
+
+<?php if (can('comptabilite')): ?>
+<!-- ============================================================================
+     POULS DE L'ACTIVITÉ
+     Tout se dessine en SVG au chargement : les courbes se tracent, les aires se
+     remplissent, les chiffres défilent. Aucune bibliothèque : rien à télécharger,
+     donc un affichage instantané, même sur une connexion faible.
+     ============================================================================ -->
+<div class="pouls panel glass">
+  <div class="pouls-tete">
+    <div>
+      <h2 style="margin:0">💓 Pouls de l'activité</h2>
+      <p class="pouls-sous">Douze derniers mois — encaissements, dépenses, documents et événements</p>
+    </div>
+    <div class="pouls-legende">
+      <button type="button" class="pl-item actif" data-serie="entrees"><i style="background:#10b981"></i>Encaissements</button>
+      <button type="button" class="pl-item actif" data-serie="depenses"><i style="background:#f87171"></i>Dépenses</button>
+      <button type="button" class="pl-item" data-serie="docs"><i style="background:#d4a526"></i>Factures</button>
+      <button type="button" class="pl-item" data-serie="evts"><i style="background:#60a5fa"></i>Événements</button>
+    </div>
+  </div>
+
+  <div class="pouls-corps">
+    <div class="pouls-graphe">
+      <svg id="pouls-svg" viewBox="0 0 820 260" preserveAspectRatio="none" role="img"
+           aria-label="Évolution de l'activité sur douze mois"></svg>
+      <div class="pouls-bulle" id="pouls-bulle" hidden></div>
+    </div>
+
+    <div class="pouls-cote">
+      <div class="pouls-donut">
+        <svg viewBox="0 0 120 120" id="pouls-donut" aria-label="Répartition par moyen de paiement"></svg>
+        <div class="pd-centre">
+          <span class="pd-val" data-compte="<?= (int)$poulsCA ?>">0</span>
+          <span class="pd-lbl"><?= e($devise) ?> encaissés</span>
+        </div>
+      </div>
+      <div class="pouls-moyens" id="pouls-moyens"></div>
+    </div>
+  </div>
+
+  <div class="pouls-reperes">
+    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsDocs ?>">0</span><span class="pr-lbl">factures émises</span></div>
+    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsEvts ?>">0</span><span class="pr-lbl">événements</span></div>
+    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsMoyen ?>">0</span><span class="pr-lbl">panier moyen</span></div>
+    <div class="pr-item"><span class="pr-val pr-txt"><?= e($pouls['mois'][$moisPlein] ?? '—') ?></span><span class="pr-lbl">meilleur mois</span></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var D = <?= json_encode([
+      'mois' => $pouls['mois'],
+      'series' => [
+        'entrees'  => array_map('floatval', $pouls['entrees']),
+        'depenses' => array_map('floatval', $pouls['depenses']),
+        'docs'     => array_map('intval',   $pouls['docs']),
+        'evts'     => array_map('intval',   $pouls['evts']),
+      ],
+      'moyens' => $moyens,
+      'devise' => $devise,
+  ], JSON_UNESCAPED_UNICODE) ?>;
+
+  var svg = document.getElementById('pouls-svg');
+  if (!svg) return;
+  var NS = 'http://www.w3.org/2000/svg';
+  var W = 820, H = 260, ML = 8, MR = 8, MT = 18, MB = 30;
+  var douce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var couleurs = { entrees:'#10b981', depenses:'#f87171', docs:'#d4a526', evts:'#60a5fa' };
+  var actives  = { entrees:true, depenses:true, docs:false, evts:false };
+
+  function fmt(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function el(t, a){ var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
+
+  /* Courbe lissée : des segments droits feraient « graphique de tableur »,
+     une courbe douce se lit mieux et fait vivante. */
+  function chemin(pts){
+    if (!pts.length) return '';
+    var d = 'M' + pts[0][0] + ',' + pts[0][1];
+    for (var i = 0; i < pts.length - 1; i++) {
+      var x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i+1][0], y1 = pts[i+1][1];
+      var cx = (x0 + x1) / 2;
+      d += ' C' + cx + ',' + y0 + ' ' + cx + ',' + y1 + ' ' + x1 + ',' + y1;
+    }
+    return d;
+  }
+
+  function dessiner(){
+    svg.innerHTML = '';
+    var n = D.mois.length;
+    var largeur = W - ML - MR, hauteur = H - MT - MB;
+    var pas = largeur / Math.max(1, n - 1);
+
+    // Échelle : chaque famille garde sa propre lecture (argent vs nombre)
+    var maxArgent = 1, maxNb = 1;
+    ['entrees','depenses'].forEach(function(s){ if(actives[s]) D.series[s].forEach(function(v){ if(v>maxArgent) maxArgent=v; }); });
+    ['docs','evts'].forEach(function(s){ if(actives[s]) D.series[s].forEach(function(v){ if(v>maxNb) maxNb=v; }); });
+
+    // Lignes de repère
+    var defs = el('defs', {});
+    for (var g = 0; g <= 4; g++) {
+      var y = MT + hauteur * g / 4;
+      svg.appendChild(el('line', {x1:ML, y1:y, x2:W-MR, y2:y,
+        stroke:'currentColor', 'stroke-opacity':.07, 'stroke-width':1}));
+    }
+
+    ['entrees','depenses','docs','evts'].forEach(function(nom, idx){
+      if (!actives[nom]) return;
+      var vals = D.series[nom];
+      var mx = (nom === 'docs' || nom === 'evts') ? maxNb : maxArgent;
+      var pts = vals.map(function(v, i){
+        return [ML + i * pas, MT + hauteur - (v / mx) * hauteur * 0.92];
+      });
+      var d = chemin(pts);
+
+      // Aire dégradée sous la courbe
+      var grad = el('linearGradient', {id:'g-'+nom, x1:'0', y1:'0', x2:'0', y2:'1'});
+      var s1 = el('stop', {offset:'0%'});  s1.setAttribute('stop-color', couleurs[nom]); s1.setAttribute('stop-opacity','.30');
+      var s2 = el('stop', {offset:'100%'});s2.setAttribute('stop-color', couleurs[nom]); s2.setAttribute('stop-opacity','0');
+      grad.appendChild(s1); grad.appendChild(s2); defs.appendChild(grad);
+
+      var aire = el('path', {d: d + ' L' + (ML + (n-1)*pas) + ',' + (MT+hauteur) + ' L' + ML + ',' + (MT+hauteur) + ' Z',
+                             fill:'url(#g-'+nom+')', opacity:'0'});
+      svg.appendChild(aire);
+
+      var ligne = el('path', {d:d, fill:'none', stroke:couleurs[nom], 'stroke-width':'2.4',
+                              'stroke-linecap':'round', 'stroke-linejoin':'round'});
+      svg.appendChild(ligne);
+
+      // Tracé progressif de la courbe, puis remplissage de l'aire
+      if (!douce) {
+        var L = ligne.getTotalLength();
+        ligne.style.strokeDasharray = L; ligne.style.strokeDashoffset = L;
+        ligne.style.transition = 'stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1) ' + (idx*.12) + 's';
+        aire.style.transition = 'opacity .8s ease ' + (0.7 + idx*.12) + 's';
+        requestAnimationFrame(function(){ ligne.style.strokeDashoffset = '0'; aire.style.opacity = '1'; });
+      } else { aire.style.opacity = '1'; }
+
+      // Points, révélés après le tracé
+      pts.forEach(function(p, i){
+        var c = el('circle', {cx:p[0], cy:p[1], r:'3.2', fill:couleurs[nom],
+                              stroke:'rgba(10,16,32,.9)', 'stroke-width':'1.6', opacity: douce ? '1':'0'});
+        if (!douce) {
+          c.style.transition = 'opacity .3s ease ' + (0.9 + i*.03) + 's';
+          requestAnimationFrame(function(){ c.style.opacity = '1'; });
+        }
+        svg.appendChild(c);
+      });
+    });
+
+    svg.appendChild(defs);
+
+    // Mois
+    D.mois.forEach(function(m, i){
+      var t = el('text', {x: ML + i*pas, y: H - 8, 'text-anchor':'middle',
+                          fill:'currentColor', 'fill-opacity':'.45', 'font-size':'11'});
+      t.textContent = m; svg.appendChild(t);
+    });
+
+    // Zone sensible au survol : un repère vertical suit le curseur
+    var trait = el('line', {y1:MT, y2:MT+hauteur, stroke:'currentColor', 'stroke-opacity':'.25',
+                            'stroke-width':1, 'stroke-dasharray':'3 3', opacity:'0'});
+    svg.appendChild(trait);
+
+    var bulle = document.getElementById('pouls-bulle');
+    var zone = svg.parentNode;
+    zone.onmousemove = function(e){
+      var r = svg.getBoundingClientRect();
+      var x = (e.clientX - r.left) / r.width * W;
+      var i = Math.max(0, Math.min(n-1, Math.round((x - ML) / pas)));
+      trait.setAttribute('x1', ML + i*pas); trait.setAttribute('x2', ML + i*pas);
+      trait.setAttribute('opacity', '1');
+      var h = '<strong>' + D.mois[i] + '</strong>';
+      if (actives.entrees)  h += '<span><i style="background:#10b981"></i>Encaissé <b>' + fmt(D.series.entrees[i]) + '</b></span>';
+      if (actives.depenses) h += '<span><i style="background:#f87171"></i>Dépensé <b>' + fmt(D.series.depenses[i]) + '</b></span>';
+      if (actives.docs)     h += '<span><i style="background:#d4a526"></i>Factures <b>' + D.series.docs[i] + '</b></span>';
+      if (actives.evts)     h += '<span><i style="background:#60a5fa"></i>Événements <b>' + D.series.evts[i] + '</b></span>';
+      bulle.innerHTML = h; bulle.hidden = false;
+      var px = (ML + i*pas) / W * r.width;
+      bulle.style.left = Math.min(Math.max(px, 70), r.width - 70) + 'px';
+    };
+    zone.onmouseleave = function(){ trait.setAttribute('opacity','0'); bulle.hidden = true; };
+  }
+
+  /* Anneau des moyens de paiement */
+  function donut(){
+    var s = document.getElementById('pouls-donut');
+    var liste = document.getElementById('pouls-moyens');
+    if (!s || !D.moyens.length) { if (liste) liste.innerHTML = '<div class="pm-vide">Aucun encaissement enregistré</div>'; return; }
+    s.innerHTML = '';
+    var total = D.moyens.reduce(function(a,b){ return a + b.val; }, 0) || 1;
+    var teintes = ['#d4a526','#10b981','#60a5fa','#a78bfa','#f0b429','#94a3b8'];
+    var R = 46, C = 2 * Math.PI * R, debut = 0, html = '';
+
+    D.moyens.forEach(function(m, i){
+      var part = m.val / total;
+      var arc = el('circle', {cx:60, cy:60, r:R, fill:'none', stroke:teintes[i % 6],
+        'stroke-width':'13', 'stroke-linecap':'butt',
+        'stroke-dasharray': (C*part - 1.5) + ' ' + (C - C*part + 1.5),
+        'stroke-dashoffset': -C*debut, transform:'rotate(-90 60 60)'});
+      if (!douce) {
+        arc.style.opacity = '0';
+        arc.style.transition = 'opacity .5s ease ' + (0.4 + i*.12) + 's';
+        requestAnimationFrame(function(){ arc.style.opacity = '1'; });
+      }
+      s.appendChild(arc);
+      html += '<div class="pm-ligne"><i style="background:' + teintes[i % 6] + '"></i>' +
+              '<span class="pm-nom">' + m.nom + '</span>' +
+              '<span class="pm-pct">' + Math.round(part*100) + '%</span></div>';
+      debut += part;
+    });
+    liste.innerHTML = html;
+  }
+
+  /* Les chiffres défilent jusqu'à leur valeur : le mouvement attire l'œil
+     sur les repères, sans être tapageur. */
+  function compter(){
+    document.querySelectorAll('[data-compte]').forEach(function(e){
+      var cible = parseInt(e.dataset.compte, 10) || 0;
+      if (douce || cible === 0) { e.textContent = fmt(cible); return; }
+      var t0 = null, duree = 1300;
+      function pas(t){
+        if (!t0) t0 = t;
+        var p = Math.min(1, (t - t0) / duree);
+        var e2 = 1 - Math.pow(1 - p, 3);          // ralentit en fin de course
+        e.textContent = fmt(cible * e2);
+        if (p < 1) requestAnimationFrame(pas);
+      }
+      requestAnimationFrame(pas);
+    });
+  }
+
+  document.querySelectorAll('.pl-item').forEach(function(b){
+    b.addEventListener('click', function(){
+      var s = this.dataset.serie;
+      actives[s] = !actives[s];
+      this.classList.toggle('actif', actives[s]);
+      if (!Object.keys(actives).some(function(k){ return actives[k]; })) {
+        actives[s] = true; this.classList.add('actif');   // au moins une série visible
+      }
+      dessiner();
+    });
+  });
+
+  /* On ne lance l'animation que lorsque le bloc entre à l'écran */
+  var lance = false;
+  function demarrer(){
+    if (lance) return; lance = true;
+    dessiner(); donut(); compter();
+  }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(ents){
+      ents.forEach(function(en){ if (en.isIntersecting) { demarrer(); io.disconnect(); } });
+    }, {threshold:.2});
+    io.observe(document.querySelector('.pouls'));
+  } else { demarrer(); }
+
+  window.addEventListener('resize', function(){ if (lance) dessiner(); });
+})();
+</script>
+<?php endif; ?>
+
 <?php admin_footer(); ?>
