@@ -112,14 +112,35 @@ if ($type === 'fiche') {
 /* Une prestation peut se dérouler sur plusieurs jours : on affiche alors la
    période complète plutôt qu'une date isolée. */
 function periode_evenement(array $doc): array {
+    $mois = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+             'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
     $deb = strtotime((string)$doc['date_evenement']);
     $nbj = max(1, (int)($doc['nb_jours'] ?? 1));
-    if ($nbj > 1) {
-        $fin = strtotime('+' . ($nbj - 1) . ' day', $deb);
-        return ["Dates de l'événement",
-                date('d/m/Y', $deb) . ' au ' . date('d/m/Y', $fin) . ' — ' . $nbj . ' jours'];
+
+    if ($nbj <= 1) {
+        return ["Date de l'événement",
+                date('j', $deb) . ' ' . $mois[(int)date('n', $deb)] . ' ' . date('Y', $deb)];
     }
-    return ["Date de l'événement", date('d/m/Y', $deb)];
+
+    /* Formulation compacte : on ne répète que ce qui change. Le mois et l'année
+       ne sont écrits qu'une fois s'ils sont communs aux deux dates, ce qui évite
+       une ligne trop longue qui déborderait de la carte.
+         même mois  → « Du 2 au 5 septembre 2026 »
+         même année → « Du 28 septembre au 2 octobre 2026 »
+         sinon      → « Du 30 décembre 2026 au 2 janvier 2027 » */
+    $fin = strtotime('+' . ($nbj - 1) . ' day', $deb);
+    $jd = date('j', $deb); $jf = date('j', $fin);
+    $md = (int)date('n', $deb); $mf = (int)date('n', $fin);
+    $ad = date('Y', $deb); $af = date('Y', $fin);
+
+    if ($ad === $af && $md === $mf) {
+        $txt = 'Du ' . $jd . ' au ' . $jf . ' ' . $mois[$mf] . ' ' . $af;
+    } elseif ($ad === $af) {
+        $txt = 'Du ' . $jd . ' ' . $mois[$md] . ' au ' . $jf . ' ' . $mois[$mf] . ' ' . $af;
+    } else {
+        $txt = 'Du ' . $jd . ' ' . $mois[$md] . ' ' . $ad . ' au ' . $jf . ' ' . $mois[$mf] . ' ' . $af;
+    }
+    return ["Dates de l'événement", $txt];
 }
 
 /* Descriptions du menu : chaque élément détaillé d'une ligne peut porter sa
@@ -172,7 +193,7 @@ if ($AUTH) {
   <!-- ===== BON DE LIVRAISON : bandeau des references ===== -->
   <div class="bl-strip">
     <div class="bl-card"><div class="k">N° Bon de livraison</div><div class="v">BL-<?= e($doc['numero']) ?></div></div>
-    <div class="bl-card"><div class="k">Date de livraison</div><div class="v"><?= e(!empty($doc['date_evenement']) ? date('d/m/Y', strtotime((string)$doc['date_evenement'])) : date('d/m/Y', strtotime($doc['date_emission']))) ?></div></div>
+    <div class="bl-card"><div class="k">Date de livraison</div><div class="v"><?= e(date('d/m/Y', strtotime((string)(!empty($doc['date_evenement']) ? $doc['date_evenement'] : $doc['date_emission'])))) ?></div></div>
     <div class="bl-card"><div class="k">Réf. facture</div><div class="v"><?= e($doc['numero']) ?></div></div>
   </div>
   <!-- ===== Destinataire et details de la livraison ===== -->
@@ -195,12 +216,12 @@ if ($AUTH) {
       <div class="hd">Détails de la livraison</div>
       <div class="bd">
         <?php
-        /* La date figure déjà dans le bandeau du haut : on n'affiche ici que la
-           durée, lorsque la prestation se déroule sur plusieurs jours. */
+        /* Même formulation que sur la facture et la proforma : le client retrouve
+           la période au même endroit et sous la même forme sur les trois documents. */
         $infosLiv = [['Activité', $doc['activite'] ?? '']];
-        if (!empty($doc['date_evenement']) && (int)($doc['nb_jours'] ?? 1) > 1) {
+        if (!empty($doc['date_evenement'])) {
             $pe = periode_evenement($doc);
-            $infosLiv[] = ['Durée', $pe[1]];
+            $infosLiv[] = $pe;
         }
         $infosLiv[] = ['Lieu de livraison', $doc['lieu'] ?? ''];
         if (trim((string)($doc['mode_paiement'] ?? '')) !== '')

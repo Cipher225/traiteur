@@ -140,9 +140,12 @@ function doc_html_styles(): string {
   .bl-duo{display:flex;gap:14px;padding:14px 40px 4px}
   .doc-duo{padding:9px 30px 2px;gap:13px}
   .doc-duo .bl-box{flex:1 1 0}
-  .bl-box{flex:0 0 50%;box-sizing:border-box;border:1px solid #e3e8f0;border-radius:9px;overflow:hidden}
+  /* Cartes sobres : un contour doré fin plutôt qu'un aplat de couleur.
+     Le document respire davantage et s'imprime mieux en noir et blanc. */
+  .bl-box{flex:0 0 50%;box-sizing:border-box;border:1px solid #e2c98b;border-radius:9px;overflow:hidden;background:#fff}
   .bl-box + .bl-box{margin-left:0}
-  .bl-box .hd{background:#0a1f44;color:#fff;font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;padding:7px 13px}
+  .bl-box .hd{background:transparent;color:#b8870f;font-size:9px;letter-spacing:.16em;
+    text-transform:uppercase;font-weight:800;padding:7px 13px 5px;border-bottom:1px solid #f0e2bf}
   .bl-box .bd{padding:8px 13px 9px}
   /* Une ligne fine sépare chaque information : la lecture est plus rapide
      qu'avec des lignes collées, sans alourdir la carte. */
