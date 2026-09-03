@@ -11,7 +11,9 @@
 .sidebar {
   width: 254px; flex-shrink: 0; border-radius: 26px;
   padding: 20px 13px 16px; display: flex; flex-direction: column; gap: 18px;
-  position: sticky; top: 18px; height: calc(100svh - 36px);
+  /* Hiérarchie des plans : contenu (1) < barre latérale (1000) < panneaux
+     flottants (9999). La barre ne doit jamais passer sous une carte. */
+  position: sticky; top: 18px; height: calc(100svh - 36px); z-index: 1000;
   isolation: isolate;
   background:
     linear-gradient(180deg, rgba(255,255,255,.055) 0%, rgba(255,255,255,.018) 42%, rgba(255,255,255,.03) 100%);
@@ -2170,10 +2172,9 @@ a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
    ============================================================ */
 /* La carte doit se superposer aux blocs suivants quand son panneau s'ouvre,
    sinon celui-ci passerait derrière les cartes de statistiques. */
-.dcard-online{position:relative;z-index:900}
-.dash-cards{position:relative;z-index:800}
-/* Les blocs qui suivent restent en dessous : le panneau doit pouvoir les recouvrir. */
-.dash-cards ~ .stats, .dash-cards ~ .panel{position:relative;z-index:0}
+/* Le panneau des connectés est rattaché à la page et flotte au-dessus de tout :
+   les cartes n'ont donc plus besoin d'être surélevées. */
+.dcard-online{position:relative}
 .online-avatars{display:flex;gap:5px;flex-wrap:wrap;margin-top:10px}
 .online-ava.sm.ava-plus{background:var(--glass-border-soft);color:var(--ink-faint);
   border:1px solid var(--glass-border);font-size:10.5px;font-weight:700}

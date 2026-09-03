@@ -138,13 +138,19 @@ function doc_html_styles(): string {
   .bl-card .k{font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#a0872f;font-weight:800}
   .bl-card .v{font-size:13.5px;font-weight:800;color:#0a1f44;margin-top:3px}
   .bl-duo{display:flex;gap:14px;padding:14px 40px 4px}
+  .doc-duo{padding:9px 30px 2px;gap:13px}
+  .doc-duo .bl-box{flex:1 1 0}
   .bl-box{flex:0 0 50%;box-sizing:border-box;border:1px solid #e3e8f0;border-radius:9px;overflow:hidden}
   .bl-box + .bl-box{margin-left:0}
   .bl-box .hd{background:#0a1f44;color:#fff;font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;padding:7px 13px}
-  .bl-box .bd{padding:9px 13px 11px}
-  .bl-box .rw{display:flex;font-size:11.5px;padding:3px 0;line-height:1.45}
-  .bl-box .rw .lb{color:#6e7685;min-width:104px;padding-right:10px;flex-shrink:0}
-  .bl-box .rw .vl{color:#0a1f44;font-weight:700;word-break:break-word}
+  .bl-box .bd{padding:8px 13px 9px}
+  /* Une ligne fine sépare chaque information : la lecture est plus rapide
+     qu'avec des lignes collées, sans alourdir la carte. */
+  .bl-box .rw{display:flex;font-size:11.5px;padding:3.5px 0;line-height:1.4;
+    border-bottom:1px solid #f0f3f8}
+  .bl-box .rw:last-child{border-bottom:none;padding-bottom:0}
+  .bl-box .rw .lb{color:#6e7685;min-width:96px;padding-right:10px;flex-shrink:0}
+  .bl-box .rw .vl{color:#0a1f44;font-weight:700;word-break:break-word;flex:1;text-align:right}
   .bl-recap{display:flex;align-items:stretch;margin:8px 40px 0;border-radius:9px;overflow:hidden;border:1px solid #e3e8f0}
   .bl-recap .lab{flex:1;background:#f6f8fb;padding:9px 15px;font-size:12px;color:#41485a;line-height:1.5}
   .bl-recap .num{background:linear-gradient(135deg,#d4a526,#e9c15c 55%,#b8870f);color:#0a1020;
@@ -255,16 +261,24 @@ function doc_html_header(array $s, string $titre, array $entete, string $base): 
 }
 
 /* Deux blocs de coordonnées avec conduites pointillées */
+/* Deux cartes à en-tête plein, côte à côte : la même présentation que le bon de
+   livraison. Elles occupent toute la largeur, se lisent d'un coup d'œil et
+   donnent la même identité à tous les documents. Les lignes vides sont
+   ignorées : une carte ne montre jamais un champ non renseigné. */
 function doc_html_parties(string $t1, array $l1, string $t2, array $l2): string {
-    $bloc = function (string $t, array $rows) {
-        $o = '<div class="part"><h3>' . e($t) . '</h3><div class="ul"></div>';
+    $carte = function (string $t, array $rows) {
+        $o = '<div class="bl-box"><div class="hd">' . e($t) . '</div><div class="bd">';
+        $vide = true;
         foreach ($rows as $r) {
-            $o .= '<div class="row"><span class="lb">' . e($r[0]) . '</span><span class="cl">:</span><span class="vl">'
-                . e((string)$r[1]) . '</span></div>';
+            if (trim((string)$r[1]) === '') continue;
+            $vide = false;
+            $o .= '<div class="rw"><span class="lb">' . e($r[0]) . '</span>'
+                . '<span class="vl">' . e((string)$r[1]) . '</span></div>';
         }
-        return $o . '</div>';
+        if ($vide) $o .= '<div class="rw"><span class="vl" style="color:#8a9ab5">—</span></div>';
+        return $o . '</div></div>';
     };
-    return '<div class="parts">' . $bloc($t1, $l1) . $bloc($t2, $l2) . '</div>';
+    return '<div class="bl-duo doc-duo">' . $carte($t1, $l1) . $carte($t2, $l2) . '</div>';
 }
 
 /* Pied de page : quatre colonnes avec pastilles dorées */

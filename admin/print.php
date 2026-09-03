@@ -203,6 +203,8 @@ if ($AUTH) {
             $infosLiv[] = ['Durée', $pe[1]];
         }
         $infosLiv[] = ['Lieu de livraison', $doc['lieu'] ?? ''];
+        if (trim((string)($doc['mode_paiement'] ?? '')) !== '')
+            $infosLiv[] = ['Mode de paiement', $doc['mode_paiement']];
         $infosLiv[] = ['Livreur', $settings['nom_entreprise'] ?? ''];
         foreach ($infosLiv as [$lb, $vl]): if (trim((string)$vl) === '') continue; ?>
         <div class="rw"><span class="lb"><?= e($lb) ?></span><span class="vl"><?= e($vl) ?></span></div>
