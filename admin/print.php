@@ -423,7 +423,9 @@ if ($AUTH) {
     var elDf = document.querySelector('.df'), elDp = document.querySelector('.df-page');
     var hPied = (elDf ? elDf.getBoundingClientRect().height : 0)
               + (elDp ? elDp.getBoundingClientRect().height : 0);
-    var securite = pageH * (2 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));   // le bloc descend au plus près du pied de page
+    /* Une marge de sécurité de 2 mm suffit : forcer davantage ferait basculer le
+       bloc sur une page supplémentaire, ce qui est bien pire qu'un léger espace. */
+    var securite = pageH * (2 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));
     var espace   = (pages * pageH - securite) - basBloc;
     // Si le bloc est deja bas, on n'y touche pas : sa zone de degagement suffit a le
     // proteger du pied de page (le navigateur le deplace lui-meme si besoin).

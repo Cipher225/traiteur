@@ -65,11 +65,11 @@ function doc_html_styles(): string {
   /* ---------- Tableau ---------- */
   /* Tableau resserré : une catégorie peut compter une dizaine d'éléments,
      chacun avec sa description. On gagne de la place sans nuire à la lecture. */
-  table{width:100%;border-collapse:collapse;margin:6px 0 0}
+  table{width:100%;border-collapse:collapse;margin:4px 0 0}
   thead th{background:#0a1f44;color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;text-align:center}
   thead th.l{text-align:left}
   thead th.r{text-align:right}
-  tbody td{padding:5px 10px;border-bottom:1px solid #e8ecf2;font-size:11.5px;vertical-align:top}
+  tbody td{padding:4px 10px;border-bottom:1px solid #e8ecf2;font-size:11.5px;vertical-align:top}
   tbody tr:nth-child(even) td{background:#f8f9fb}
   td.c{text-align:center}
   td.r{text-align:right}
@@ -80,34 +80,36 @@ function doc_html_styles(): string {
   ul.incl li::before{content:'';position:absolute;left:1px;top:5px;width:3.5px;height:3.5px;background:#d4a526}
 
   /* ---------- Totaux ---------- */
-  .bottom{display:flex;gap:22px;padding:8px 30px 0;align-items:flex-start}
+  .bottom{display:flex;gap:22px;padding:5px 30px 0;align-items:flex-start}
   .lettres{flex:1;padding-top:6px}
   .lettres p{font-size:12.5px;color:#2d3442;margin-bottom:10px}
   .lettres .dots{min-height:8px;margin-bottom:3px;font-style:italic;font-weight:700;color:#0a1f44;font-size:12px}
   .tot{width:330px;flex-shrink:0}
-  .tot .l{display:flex;justify-content:space-between;padding:7px 14px;font-size:12px;background:#fafbfc;border-bottom:1px solid #e8ecf2}
+  .tot .l{display:flex;justify-content:space-between;padding:6px 14px;font-size:12px;background:#fafbfc;border-bottom:1px solid #e8ecf2}
   .tot .l span{color:#4a5568}
   .tot .l strong{color:#0a1f44}
-  .tot .grand{display:flex;justify-content:space-between;padding:10px 14px;font-size:14.5px;font-weight:800;color:#0a1f44;
+  .tot .grand{display:flex;justify-content:space-between;padding:8px 14px;font-size:14.5px;font-weight:800;color:#0a1f44;
     background:linear-gradient(135deg,#c9971f 0%,#e8b93f 18%,#f7dd8f 38%,#fff3c4 50%,#f0c14b 64%,#d4a526 82%,#c9971f 100%)}
-  .merci{padding:7px 30px 0;font-size:12.5px;font-style:italic;font-weight:700;color:#0a1f44}
+  .merci{padding:5px 30px 0;font-size:12.5px;font-style:italic;font-weight:700;color:#0a1f44}
 
   /* ---------- Authentification / signature ---------- */
-  .auth{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;margin:10px 30px 0;padding-top:9px;border-top:1px solid #e8ecf2}
-  .auth-qr{display:flex;gap:14px;align-items:flex-start}
-  .auth-qr img{width:78px;height:78px}
-  .auth-qr .t{font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#b8870f;text-transform:uppercase}
-  .auth-qr .s{font-size:9.5px;color:#6e7685;line-height:1.75;margin-top:3px}
+  /* Bloc d'authentification compact : il doit tenir dans le bas de page sans
+     jamais provoquer une page supplémentaire sur une facture courte. */
+  .auth{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;margin:5px 30px 0;padding-top:4px;border-top:1px solid #e8ecf2}
+  .auth-qr{display:flex;gap:11px;align-items:flex-start}
+  .auth-qr img{width:60px;height:60px}
+  .auth-qr .t{font-size:8.5px;font-weight:800;letter-spacing:.07em;color:#b8870f;text-transform:uppercase}
+  .auth-qr .s{font-size:8.5px;color:#6e7685;line-height:1.45;margin-top:2px}
   /* Le nom du signataire est annoncé en haut, le trait le souligne, puis le
      tampon et le paraphe viennent en dessous. */
-  .sign{text-align:center;min-width:250px}
+  .sign{text-align:center;min-width:215px}
   .sign .fn{font-size:11px;color:#6e7685}
-  .sign .line{font-size:12px;font-weight:700;color:#0a1f44;padding-bottom:5px;
-    border-bottom:1px solid #b4bac6;margin-bottom:4px}
+  .sign .line{font-size:10.5px;font-weight:700;color:#0a1f44;padding-bottom:2px;
+    border-bottom:1px solid #b4bac6;margin-bottom:2px}
   .sign .imgs{position:relative;height:0;margin:0}
-  .sign .imgs.has{height:76px;margin:0}
-  .sign .imgs img.tampon{width:160px;height:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.95}
-  .sign .imgs img.sig{width:108px;height:auto;position:absolute;left:50%;top:26px;transform:translateX(-50%);opacity:.95}
+  .sign .imgs.has{height:50px;margin:0}
+  .sign .imgs img.tampon{width:112px;height:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.95}
+  .sign .imgs img.sig{width:76px;height:auto;position:absolute;left:50%;top:17px;transform:translateX(-50%);opacity:.95}
 
   /* ---------- Pied de page ---------- */
   .df{margin-top:18px;border-top:1.6px solid #d4a526;display:flex;padding:9px 30px 6px;flex-shrink:0;background:#fff}
@@ -138,7 +140,7 @@ function doc_html_styles(): string {
   .bl-card .k{font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:#a0872f;font-weight:800}
   .bl-card .v{font-size:13.5px;font-weight:800;color:#0a1f44;margin-top:3px}
   .bl-duo{display:flex;gap:14px;padding:14px 40px 4px}
-  .doc-duo{padding:9px 30px 2px;gap:13px}
+  .doc-duo{padding:7px 30px 2px;gap:13px}
   .doc-duo .bl-box{flex:1 1 0}
   /* Cartes sobres : un contour doré fin plutôt qu'un aplat de couleur.
      Le document respire davantage et s'imprime mieux en noir et blanc. */
@@ -205,7 +207,9 @@ function doc_html_styles(): string {
   body.mode-mesure{padding:0;margin:0;background:#fff}
   body.mode-mesure .sheet{width:210mm;min-height:0;box-shadow:none;display:block;margin:0;padding-bottom:0}
   body.mode-mesure .barre{display:none}
-  body.mode-mesure .auth{margin:9px 40px 0;padding-bottom:18mm}
+  /* Le mode mesure doit refléter EXACTEMENT la mise en page d'impression :
+     un dégagement fantôme fausserait le calage et provoquerait des pages inutiles. */
+  body.mode-mesure .auth{margin:9px 30px 0;padding-bottom:1mm}
   body.mode-mesure table{min-width:0}
   body.mode-mesure .df, body.mode-mesure .df-page{position:absolute;left:0;top:0;width:100%;visibility:hidden}
 
