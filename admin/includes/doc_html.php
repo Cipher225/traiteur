@@ -80,17 +80,17 @@ function doc_html_styles(): string {
   ul.incl li::before{content:'';position:absolute;left:1px;top:5px;width:3.5px;height:3.5px;background:#d4a526}
 
   /* ---------- Totaux ---------- */
-  .bottom{display:flex;gap:26px;padding:12px 40px 0;align-items:flex-start}
+  .bottom{display:flex;gap:22px;padding:8px 30px 0;align-items:flex-start}
   .lettres{flex:1;padding-top:6px}
   .lettres p{font-size:12.5px;color:#2d3442;margin-bottom:10px}
-  .lettres .dots{min-height:8px;margin-bottom:4px;font-style:italic;font-weight:700;color:#0a1f44;font-size:12.5px}
+  .lettres .dots{min-height:8px;margin-bottom:3px;font-style:italic;font-weight:700;color:#0a1f44;font-size:12px}
   .tot{width:330px;flex-shrink:0}
-  .tot .l{display:flex;justify-content:space-between;padding:11px 16px;font-size:12.5px;background:#fafbfc;border-bottom:1px solid #e8ecf2}
+  .tot .l{display:flex;justify-content:space-between;padding:7px 14px;font-size:12px;background:#fafbfc;border-bottom:1px solid #e8ecf2}
   .tot .l span{color:#4a5568}
   .tot .l strong{color:#0a1f44}
-  .tot .grand{display:flex;justify-content:space-between;padding:14px 16px;font-size:15px;font-weight:800;color:#0a1f44;
+  .tot .grand{display:flex;justify-content:space-between;padding:10px 14px;font-size:14.5px;font-weight:800;color:#0a1f44;
     background:linear-gradient(135deg,#c9971f 0%,#e8b93f 18%,#f7dd8f 38%,#fff3c4 50%,#f0c14b 64%,#d4a526 82%,#c9971f 100%)}
-  .merci{padding:10px 40px 0;font-size:13px;font-style:italic;font-weight:700;color:#0a1f44}
+  .merci{padding:7px 30px 0;font-size:12.5px;font-style:italic;font-weight:700;color:#0a1f44}
 
   /* ---------- Authentification / signature ---------- */
   .auth{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;margin:10px 30px 0;padding-top:9px;border-top:1px solid #e8ecf2}
@@ -98,13 +98,16 @@ function doc_html_styles(): string {
   .auth-qr img{width:78px;height:78px}
   .auth-qr .t{font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#b8870f;text-transform:uppercase}
   .auth-qr .s{font-size:9.5px;color:#6e7685;line-height:1.75;margin-top:3px}
+  /* Le nom du signataire est annoncé en haut, le trait le souligne, puis le
+     tampon et le paraphe viennent en dessous. */
   .sign{text-align:center;min-width:250px}
   .sign .fn{font-size:11px;color:#6e7685}
+  .sign .line{font-size:12px;font-weight:700;color:#0a1f44;padding-bottom:5px;
+    border-bottom:1px solid #b4bac6;margin-bottom:4px}
   .sign .imgs{position:relative;height:0;margin:0}
-  .sign .imgs.has{height:78px;margin:-6px 0 0}
-  .sign .imgs img.tampon{width:168px;height:auto;position:absolute;left:50%;top:-2px;transform:translateX(-50%);opacity:.95}
-  .sign .imgs img.sig{width:112px;height:auto;position:absolute;left:50%;top:28px;transform:translateX(-50%);opacity:.95}
-  .sign .line{border-top:1px solid #b4bac6;margin-top:2px;padding-top:5px;font-size:12px;font-weight:700;color:#0a1f44}
+  .sign .imgs.has{height:76px;margin:0}
+  .sign .imgs img.tampon{width:160px;height:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);opacity:.95}
+  .sign .imgs img.sig{width:108px;height:auto;position:absolute;left:50%;top:26px;transform:translateX(-50%);opacity:.95}
 
   /* ---------- Pied de page ---------- */
   .df{margin-top:18px;border-top:1.6px solid #d4a526;display:flex;padding:9px 30px 6px;flex-shrink:0;background:#fff}
@@ -216,10 +219,10 @@ function doc_html_styles(): string {
     /* Le bloc embarque sa propre zone de degagement (22 mm) : comme il est insecable,
        le navigateur le bascule tout seul sur la page suivante s'il ne tient pas
        au-dessus du pied de page. Plus aucun chevauchement possible. */
-    .auth{page-break-inside:avoid;break-inside:avoid;margin:9px 30px 0;padding-bottom:4mm}
+    .auth{page-break-inside:avoid;break-inside:avoid;margin:9px 30px 0;padding-bottom:1mm}
     /* aucune partie du bloc (QR, tampon, signature, nom) ne peut etre coupee */
     .auth > *, .sign, .sign .imgs, .sign .line, .auth-qr{page-break-inside:avoid;break-inside:avoid}
-    .sign .line, .sign .nm{page-break-before:avoid;break-before:avoid}
+    .sign .line, .sign .imgs{page-break-before:avoid;break-before:avoid}
     /* aération et coupures propres */
     .content{page-break-inside:auto}
     .content p{page-break-inside:avoid;orphans:3;widows:3}
@@ -296,10 +299,13 @@ function doc_html_auth(array $s, string $base, ?string $qrDataUri, ?string $chec
         $sigTxt = $sigTxt !== '' ? $ancienNom . ', ' . $sigTxt : $ancienNom;
     }
     if ($sigTxt === '') $sigTxt = (string)($s['nom_entreprise'] ?? 'La Direction');
+    /* Le signataire est annoncé AVANT sa signature : on lit d'abord qui signe,
+       puis on voit le tampon et le paraphe en dessous — comme sur un courrier. */
     $o .= '<div class="sign">'
+        . '<div class="line">' . e($sigTxt) . '</div>'
         . '<div class="imgs' . ($aImg ? ' has' : '') . '">';
     if (!empty($s['tampon_img']))    $o .= '<img class="tampon" src="' . $base . '/uploads/' . e($s['tampon_img']) . '" alt="">';
     if (!empty($s['signature_img'])) $o .= '<img class="sig" src="' . $base . '/uploads/' . e($s['signature_img']) . '" alt="">';
-    $o .= '</div><div class="line">' . e($sigTxt) . '</div></div>';
+    $o .= '</div></div>';
     return $o . '</div>';
 }

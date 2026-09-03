@@ -72,6 +72,14 @@ function get_recu(PDO $pdo, int $id): ?array {
 }
 
 /* Montant en toutes lettres (français, entiers) pour les reçus */
+/* Première lettre en majuscule, en tenant compte des accents :
+   ucfirst() de PHP abîmerait un mot commençant par « é » ou « à ». */
+function ucfirst_fr(string $t): string {
+    $t = ltrim($t);
+    if ($t === '') return $t;
+    return mb_strtoupper(mb_substr($t, 0, 1)) . mb_substr($t, 1);
+}
+
 function montant_lettres(int $n): string {
     if ($n === 0) return 'zéro';
     $u = ['','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];

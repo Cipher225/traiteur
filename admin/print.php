@@ -273,7 +273,7 @@ if ($AUTH) {
       else { $intro = $estPro ? 'Arrêtée la présente proforma à la somme de :' : 'Arrêtée la présente facture à la somme de :'; $mt = (int)$doc['montant_ttc']; }
       ?>
       <p><?= e($intro) ?></p>
-      <div class="dots"><?= e(montant_lettres($mt) . ' ' . $devise) ?></div>
+      <div class="dots"><?= e(ucfirst_fr(montant_lettres($mt)) . ' ' . $devise) ?></div>
     </div>
     <div class="tot">
       <?php if ($type === 'fiche'): ?>
@@ -377,7 +377,7 @@ if ($AUTH) {
     var elDf = document.querySelector('.df'), elDp = document.querySelector('.df-page');
     var hPied = (elDf ? elDf.getBoundingClientRect().height : 0)
               + (elDp ? elDp.getBoundingClientRect().height : 0);
-    var securite = pageH * (6 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));   // le degagement du bloc fait le reste
+    var securite = pageH * (2 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));   // le bloc descend au plus près du pied de page
     var espace   = (pages * pageH - securite) - basBloc;
     // Si le bloc est deja bas, on n'y touche pas : sa zone de degagement suffit a le
     // proteger du pied de page (le navigateur le deplace lui-meme si besoin).
