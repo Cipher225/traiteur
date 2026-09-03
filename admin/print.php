@@ -67,22 +67,24 @@ if ($type === 'fiche') {
         ['Téléphone', $doc['client_tel'] ?? ''], ['Email', $doc['client_email'] ?? '']];
     $t2 = 'Informations'; $l2 = [['Référence', $doc['numero']], ['Mode de règlement', $doc['mode_paiement'] ?? '']];
     if (trim((string)($doc['activite'] ?? '')) !== '') $l2[] = ['Activité', $doc['activite']];
-    if (!empty($doc['date_evenement'])) $l2[] = ["Date de l'événement", date('d/m/Y', strtotime((string)$doc['date_evenement']))];
+    if (!empty($doc['date_evenement'])) $l2[] = periode_evenement($doc);
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu', $doc['lieu']];
     $l2[] = ['Facture liée', $doc['facture_num'] ?: '—'];
     $l2[] = ['Devise', $devise];
 } elseif ($type === 'livraison') {
     $titre  = 'BON DE LIVRAISON';
     $entete = [];   // les references figurent dans le bandeau dedie, sous l'en-tete
-    $t1 = 'Livré à'; $l1 = [
-        ['Nom / Société', $doc['client_nom'] ?? ''], ['Adresse', $doc['client_adresse'] ?? ''],
-        ['Téléphone', $doc['client_tel'] ?? ''], ['Email', $doc['client_email'] ?? ''],
-        ['N° Client', $doc['client_id'] ? sprintf('CL-%04d', (int)$doc['client_id']) : '']];
-    $t2 = 'Livraison'; $l2 = [['Référence', 'BL-' . $doc['numero']]];
+    /* L'adresse est conservée : elle sert au livreur. Le reste va à l'essentiel,
+       les montants et le détail figurant déjà sur la proforma et la facture. */
+    $t1 = 'Livré à'; $l1 = [['Nom / Société', $doc['client_nom'] ?? '']];
+    if (trim((string)($doc['client_adresse'] ?? '')) !== '') $l1[] = ['Adresse', $doc['client_adresse']];
+    if (trim((string)($doc['client_tel'] ?? '')) !== '')     $l1[] = ['Téléphone', $doc['client_tel']];
+
+    $t2 = 'Livraison'; $l2 = [];
     if (trim((string)($doc['activite'] ?? '')) !== '') $l2[] = ['Activité', $doc['activite']];
-    if (!empty($doc['date_evenement'])) $l2[] = ["Date de l'événement", date('d/m/Y', strtotime((string)$doc['date_evenement']))];
+    if (!empty($doc['date_evenement']) && (int)($doc['nb_jours'] ?? 1) > 1) $l2[] = periode_evenement($doc);
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu de livraison', $doc['lieu']];
-    $l2[] = ['Livreur', $settings['nom_entreprise'] ?? ''];
+    if (!$l2) $l2[] = ['Livreur', $settings['nom_entreprise'] ?? ''];
 } else {
     $titre  = $estPro ? 'PROFORMA' : 'FACTURE';
     $entete = [['N° ' . ($estPro ? 'Proforma' : 'Facture'), $doc['numero']],
@@ -102,9 +104,22 @@ if ($type === 'fiche') {
     $t2 = 'Informations'; $l2 = [];
     if (trim((string)($doc['mode_paiement'] ?? '')) !== '') $l2[] = ['Mode de paiement', $doc['mode_paiement']];
     if (trim((string)($doc['activite'] ?? '')) !== '') $l2[] = ['Activité', $doc['activite']];
-    if (!empty($doc['date_evenement'])) $l2[] = ["Date de l'événement", date('d/m/Y', strtotime((string)$doc['date_evenement']))];
+    if (!empty($doc['date_evenement'])) $l2[] = periode_evenement($doc);
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu', $doc['lieu']];
     if (!$l2) { $l2[] = ['Échéance', $doc['date_echeance'] ? date('d/m/Y', strtotime($doc['date_echeance'])) : '—']; }
+}
+
+/* Une prestation peut se dérouler sur plusieurs jours : on affiche alors la
+   période complète plutôt qu'une date isolée. */
+function periode_evenement(array $doc): array {
+    $deb = strtotime((string)$doc['date_evenement']);
+    $nbj = max(1, (int)($doc['nb_jours'] ?? 1));
+    if ($nbj > 1) {
+        $fin = strtotime('+' . ($nbj - 1) . ' day', $deb);
+        return ["Dates de l'événement",
+                date('d/m/Y', $deb) . ' au ' . date('d/m/Y', $fin) . ' — ' . $nbj . ' jours'];
+    }
+    return ["Date de l'événement", date('d/m/Y', $deb)];
 }
 
 /* Descriptions du menu : chaque élément détaillé d'une ligne peut porter sa
@@ -167,9 +182,10 @@ if ($AUTH) {
       <div class="bd">
         <?php
         $nomCli = trim((string)($doc['entreprise'] ?? '')) !== '' ? $doc['entreprise'] : ($doc['client_nom'] ?? '');
+        /* Le livreur a besoin de savoir chez qui aller et comment le joindre.
+           Le reste (email, n° client, montants) figure sur la facture. */
         $infosCli = [['Nom / Société', $nomCli], ['Adresse', $doc['client_adresse'] ?? ''],
-                     ['Téléphone', $doc['client_tel'] ?? ''], ['Email', $doc['client_email'] ?? ''],
-                     ['N° Client', $doc['client_id'] ? sprintf('CL-%04d', (int)$doc['client_id']) : '']];
+                     ['Téléphone', $doc['client_tel'] ?? '']];
         foreach ($infosCli as [$lb, $vl]): if (trim((string)$vl) === '') continue; ?>
         <div class="rw"><span class="lb"><?= e($lb) ?></span><span class="vl"><?= e($vl) ?></span></div>
         <?php endforeach; ?>
@@ -179,10 +195,15 @@ if ($AUTH) {
       <div class="hd">Détails de la livraison</div>
       <div class="bd">
         <?php
-        $infosLiv = [['Activité', $doc['activite'] ?? ''],
-                     ["Date de l'événement", !empty($doc['date_evenement']) ? date('d/m/Y', strtotime((string)$doc['date_evenement'])) : ''],
-                     ['Lieu de livraison', $doc['lieu'] ?? ''],
-                     ['Livreur', $settings['nom_entreprise'] ?? '']];
+        /* La date figure déjà dans le bandeau du haut : on n'affiche ici que la
+           durée, lorsque la prestation se déroule sur plusieurs jours. */
+        $infosLiv = [['Activité', $doc['activite'] ?? '']];
+        if (!empty($doc['date_evenement']) && (int)($doc['nb_jours'] ?? 1) > 1) {
+            $pe = periode_evenement($doc);
+            $infosLiv[] = ['Durée', $pe[1]];
+        }
+        $infosLiv[] = ['Lieu de livraison', $doc['lieu'] ?? ''];
+        $infosLiv[] = ['Livreur', $settings['nom_entreprise'] ?? ''];
         foreach ($infosLiv as [$lb, $vl]): if (trim((string)$vl) === '') continue; ?>
         <div class="rw"><span class="lb"><?= e($lb) ?></span><span class="vl"><?= e($vl) ?></span></div>
         <?php endforeach; ?>
@@ -218,17 +239,19 @@ if ($AUTH) {
     </table>
   <?php elseif ($estLivraison): ?>
     <table>
-      <thead><tr><th style="width:52px">N°</th><th class="l">Désignation</th><th style="width:86px">Qté livrée</th><th style="width:58px">Reçu</th></tr></thead>
+      <thead><tr><th style="width:52px">N°</th><th class="l">Désignation</th><th style="width:96px">Qté livrée</th></tr></thead>
       <tbody>
-        <?php $n=0; foreach ($doc['lignes'] as $l): $n++;
+        <?php /* Le bon de livraison va à l'essentiel : ce qui est livré et en quelle
+                 quantité. Le détail des prestations et les montants figurent déjà
+                 sur la proforma et la facture. */
+        $n=0; foreach ($doc['lignes'] as $l): $n++;
           $incl = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($l['details'] ?? ''))))); ?>
         <tr>
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
-            <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e(element_avec_description($it, $descriptionsPlats)) ?></li><?php endforeach; ?></ul><?php endif; ?>
+            <?php if ($incl): ?><ul class="incl bl-incl"><?php foreach ($incl as $it): ?><li><?= e($it) ?></li><?php endforeach; ?></ul><?php endif; ?>
           </td>
-          <td class="c"><?= qte_fmt($l['quantite']) ?></td>
-          <td class="c"><span class="bl-recu">&#10003;</span></td>
+          <td class="c bl-qte"><?= qte_fmt($l['quantite']) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

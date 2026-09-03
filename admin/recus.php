@@ -31,13 +31,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notes = mb_substr(trim($_POST['notes'] ?? ''), 0, 500);
     $activite = mb_substr(trim($_POST['activite'] ?? ''), 0, 255);
     $date_evt = ($_POST['date_evenement'] ?? '') ?: null;
+    $nb_jours = max(1, min(60, (int)($_POST['nb_jours'] ?? 1)));
     $lieu     = mb_substr(trim($_POST['lieu'] ?? ''), 0, 255);
 
     if ($montant <= 0) { flash('Le montant doit être supérieur à 0.', 'error'); header('Location: ' . $RETOUR); exit; }
 
     if ($id) {
-        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, lieu=? WHERE id=?')
-            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $lieu, $id]);
+        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, nb_jours=?, lieu=? WHERE id=?')
+            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $id]);
         // L'écriture comptable suit la modification
         $st = $pdo->prepare('SELECT numero FROM recus WHERE id=?');
         $st->execute([$id]);
@@ -46,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($LIB . ' modifié.');
     } else {
         $numero = next_numero($pdo, 'recus', $PREF);
-        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0)')
-            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $lieu]);
+        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, nb_jours, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
+            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu]);
         $nid = (int)$pdo->lastInsertId();
         // Toute entrée ou sortie de caisse alimente la comptabilité
         ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite);
@@ -97,6 +98,10 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
     <div class="field"><label>Date du paiement</label><input class="input" type="date" name="date_paiement" value="<?= e($edit['date_paiement'] ?? date('Y-m-d')) ?>"></div>
     <div class="field full"><label>Activité / Description de la prestation</label><input class="input" name="activite" placeholder="ex : Buffet mariage, Cocktail…" value="<?= e($edit['activite'] ?? '') ?>"></div>
     <div class="field"><label>Date de l'événement</label><input class="input" type="date" name="date_evenement" value="<?= e($edit['date_evenement'] ?? '') ?>"></div>
+    <div class="field"><label>Durée (jours)</label>
+      <input class="input" type="number" name="nb_jours" min="1" max="60" value="<?= (int)($edit['nb_jours'] ?? 1) ?: 1 ?>">
+      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une journée.</span>
+    </div>
     <div class="field"><label>Lieu de l'événement</label><input class="input" name="lieu" placeholder="ex : Cocody, Salle des fêtes…" value="<?= e($edit['lieu'] ?? '') ?>"></div>
     <div class="field"><label>Facture liée (facultatif)</label>
       <select class="input" name="facture_id"><option value="">—</option>

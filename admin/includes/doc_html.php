@@ -151,6 +151,9 @@ function doc_html_styles(): string {
                  padding:9px 20px;text-align:center;min-width:92px;display:flex;flex-direction:column;justify-content:center}
   .bl-recap .num b{font-size:19px;line-height:1}
   .bl-recap .num span{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:800;margin-top:2px}
+  /* Sur un bon de livraison, la quantité est l'information principale */
+  .bl-qte{font-weight:800;font-size:13.5px;color:#0a1f44}
+  .bl-incl li{font-size:9.5px}
   .bl-recu{width:17px;height:17px;border:1.5px solid #1f9d55;border-radius:4px;display:inline-flex;
            align-items:center;justify-content:center;color:#1f9d55;font-size:12px;font-weight:900;
            line-height:1;background:#eefaf2}

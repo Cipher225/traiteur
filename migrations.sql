@@ -272,3 +272,7 @@ SELECT
   r.id
 FROM recus r
 WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recu_id = r.id);
+
+-- Durée d'une activité : certaines prestations se déroulent sur plusieurs jours.
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS nb_jours SMALLINT DEFAULT 1 AFTER date_evenement;
+ALTER TABLE recus ADD COLUMN IF NOT EXISTS nb_jours SMALLINT DEFAULT 1 AFTER date_evenement;

@@ -122,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $mode_paie = mb_substr(trim($_POST['mode_paiement'] ?? ''), 0, 60);
     $activite  = mb_substr(trim($_POST['activite'] ?? ''), 0, 255);
     $date_evt  = ($_POST['date_evenement'] ?? '') ?: null;
+    $nb_jours = max(1, min(60, (int)($_POST['nb_jours'] ?? 1)));
     $lieu      = mb_substr(trim($_POST['lieu'] ?? ''), 0, 255);
 
     $desigs = $_POST['designation'] ?? [];
@@ -142,15 +143,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$lignes) { flash('Ajoutez au moins une ligne.', 'error'); header('Location: factures.php'.($retour ?: '').'&edit='.($id?:'new')); exit; }
 
     if ($id) {
-        $pdo->prepare('UPDATE factures SET client_id=?, date_emission=?, date_echeance=?, tva_taux=?, tva_applicable=?, remise=?, notes=?, mode_paiement=?, activite=?, date_evenement=?, lieu=? WHERE id=?')
-            ->execute([$client_id, $date_em, $date_ech, $tva, $tvaOn, $remise, $notes, $mode_paie, $activite, $date_evt, $lieu, $id]);
+        $pdo->prepare('UPDATE factures SET client_id=?, date_emission=?, date_echeance=?, tva_taux=?, tva_applicable=?, remise=?, notes=?, mode_paiement=?, activite=?, date_evenement=?, nb_jours=?, lieu=? WHERE id=?')
+            ->execute([$client_id, $date_em, $date_ech, $tva, $tvaOn, $remise, $notes, $mode_paie, $activite, $date_evt, $nb_jours, $lieu, $id]);
         $pdo->prepare('DELETE FROM facture_lignes WHERE facture_id=?')->execute([$id]);
         flash('Document modifié.');
     } else {
         $prefixe = $type === 'proforma' ? ($settings['prefixe_proforma'] ?? 'PRO') : ($settings['prefixe_facture'] ?? 'FAC');
         $numero = next_numero($pdo, 'factures', $prefixe);
-        $pdo->prepare('INSERT INTO factures (numero, type, client_id, date_emission, date_echeance, tva_taux, tva_applicable, remise, notes, mode_paiement, activite, date_evenement, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
-            ->execute([$numero, $type, $client_id, $date_em, $date_ech, $tva, $tvaOn, $remise, $notes, $mode_paie, $activite, $date_evt, $lieu]);
+        $pdo->prepare('INSERT INTO factures (numero, type, client_id, date_emission, date_echeance, tva_taux, tva_applicable, remise, notes, mode_paiement, activite, date_evenement, nb_jours, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
+            ->execute([$numero, $type, $client_id, $date_em, $date_ech, $tva, $tvaOn, $remise, $notes, $mode_paie, $activite, $date_evt, $nb_jours, $lieu]);
         $id = (int)$pdo->lastInsertId();
         flash(($type==='proforma'?'Proforma ':'Facture ') . $numero . ' créée.');
     }
@@ -272,6 +273,10 @@ admin_header($isPro ? 'Proformas' : 'Factures', $isPro ? 'proformas' : 'factures
       </div>
       <div class="field full"><label>Activité / Description de la prestation</label><input class="input" name="activite" placeholder="ex : Buffet mariage, Cocktail dînatoire, Séminaire…" value="<?= e($edit['activite'] ?? '') ?>"></div>
       <div class="field"><label>Date de l'événement</label><input class="input" type="date" name="date_evenement" value="<?= e($edit['date_evenement'] ?? '') ?>"></div>
+      <div class="field"><label>Durée (jours)</label>
+        <input class="input" type="number" name="nb_jours" min="1" max="60" value="<?= (int)($edit['nb_jours'] ?? 1) ?: 1 ?>">
+        <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une journée.</span>
+      </div>
       <div class="field"><label>Lieu de l'événement</label><input class="input" name="lieu" placeholder="ex : Cocody, Salle des fêtes…" value="<?= e($edit['lieu'] ?? '') ?>"></div>
       <div class="field tva-field">
         <label>TVA</label>
