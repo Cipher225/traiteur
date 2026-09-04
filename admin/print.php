@@ -423,9 +423,9 @@ if ($AUTH) {
     var elDf = document.querySelector('.df'), elDp = document.querySelector('.df-page');
     var hPied = (elDf ? elDf.getBoundingClientRect().height : 0)
               + (elDp ? elDp.getBoundingClientRect().height : 0);
-    /* Une marge de sécurité de 2 mm suffit : forcer davantage ferait basculer le
-       bloc sur une page supplémentaire, ce qui est bien pire qu'un léger espace. */
-    var securite = pageH * (2 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));
+    /* 5 mm de dégagement : assez pour que la signature ne touche jamais le pied de
+       page, assez peu pour ne pas provoquer de page supplémentaire. */
+    var securite = pageH * (5 / (PAGE_MM - HAUT_MM - BAS_MM - RESERVE_MM));
     var espace   = (pages * pageH - securite) - basBloc;
     // Si le bloc est deja bas, on n'y touche pas : sa zone de degagement suffit a le
     // proteger du pied de page (le navigateur le deplace lui-meme si besoin).
@@ -449,6 +449,20 @@ if ($AUTH) {
   if(document.readyState === 'complete') lancerTout();
   else window.addEventListener('load', lancerTout);
   window.addEventListener('beforeprint', lancer);
+
+  /* Sur tablette et téléphone, la mise en page change à la rotation de l'écran et
+     l'impression passe souvent par « Partager », qui ne déclenche pas toujours
+     l'événement d'impression. On recalcule donc aussi dans ces situations. */
+  var minuteur = null;
+  function recalage(){ clearTimeout(minuteur); minuteur = setTimeout(lancer, 180); }
+  window.addEventListener('resize', recalage);
+  window.addEventListener('orientationchange', function(){ setTimeout(lancer, 320); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) recalage(); });
+  if (window.matchMedia) {
+    var mq = window.matchMedia('print');
+    if (mq.addEventListener) mq.addEventListener('change', function(e){ if(e.matches) lancer(); });
+    else if (mq.addListener) mq.addListener(function(e){ if(e.matches) lancer(); });
+  }
   window.imprimerDoc = function(){ lancer(); setTimeout(function(){ lancer(); window.print(); }, 120); };
 })();
 </script>
