@@ -241,11 +241,11 @@ function doc_html_styles(): string {
        est reservee par le calcul de calage (variable "securite"), d'ou l'absence de chevauchement. */
     .cadre-page tfoot{display:table-footer-group}
     .cadre-page > tbody > tr > td{vertical-align:top}
-    .pied-reserve{height:21mm}          /* place réservée au pied de page, chaque page */
-    .df{position:fixed;bottom:6mm;left:0;right:0;margin:0;background:#fff}
+    .pied-reserve{height:19mm}          /* place réservée au pied de page, chaque page */
+    .df{position:fixed;bottom:4mm;left:0;right:0;margin:0;background:#fff}
     /* la ligne "Document emis le..." fait partie du pied de page : elle doit etre fixee
        elle aussi, sinon elle flotte en fin de document et cree une page presque vide. */
-    .df-page{position:fixed;bottom:2mm;left:0;right:0;margin:0;padding:0;background:#fff}
+    .df-page{position:fixed;bottom:1mm;left:0;right:0;margin:0;padding:0;background:#fff}
     /* BLOC AUTH (QR + tampon + signature) : dans le flux -> apparait UNE fois, sur la derniere page */
     /* Le bloc embarque sa propre zone de degagement (22 mm) : comme il est insecable,
        le navigateur le bascule tout seul sur la page suivante s'il ne tient pas

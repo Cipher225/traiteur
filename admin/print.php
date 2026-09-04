@@ -428,7 +428,7 @@ if ($AUTH) {
   /* RESERVE_MM : hauteur que le cadre de page réserve au pied de page sur chaque
      page. Sans la retrancher, le calage placerait la signature trop bas et
      créerait une page vide. */
-  var HAUT_MM = 8, BAS_MM = 16, RESERVE_MM = 21, PAGE_MM = 297;   // doit correspondre au CSS
+  var HAUT_MM = 8, BAS_MM = 16, RESERVE_MM = 19, PAGE_MM = 297;   // doit correspondre au CSS
   function placer(){
     var sheet = document.querySelector('.sheet');
     var auth  = document.querySelector('.auth');
