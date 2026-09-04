@@ -156,6 +156,8 @@ function retourArriere(){
 <script src="<?= asset('../assets/js/img-redim.js') ?>"></script>
 
 <?php $pwaBase='..'; $pwaBouton=false; include __DIR__.'/../../config/pwa_script.php'; ?>
+<script>window.INACTIVITE_SECONDES = <?= (int)INACTIVITE_MAX ?>; window.INACTIVITE_URL = '../login.php?inactif=1';</script>
+<script src="../assets/js/inactivite.js"></script>
 </body>
 </html>
 <?php } ?>

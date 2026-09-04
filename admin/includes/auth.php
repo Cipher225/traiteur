@@ -6,7 +6,7 @@ if (empty($_SESSION['admin_id'])) {
 }
 
 /* ---- Sécurité de session : session unique + déconnexion sur inactivité ---- */
-define('INACTIVITE_MAX', 30 * 60);   // 30 minutes sans activité => déconnexion
+define('INACTIVITE_MAX', 3 * 60);    // 3 minutes sans activité => déconnexion
 (function() use ($pdo) {
     $uid = (int)$_SESSION['admin_id'];
 

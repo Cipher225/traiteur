@@ -239,22 +239,91 @@ if ($AUTH) {
 
   <div style="padding:0 40px" class="tbl-scroll<?= $type==='fiche' ? ' fiche-full' : '' ?>">
   <?php if ($type === 'fiche'): ?>
-    <table>
-      <thead><tr><th class="l">Rubrique</th><th class="r">Gains (<?= e($devise) ?>)</th><th class="r">Retenues (<?= e($devise) ?>)</th></tr></thead>
+    <?php
+    /* Présentation normalisée d'un bulletin de paie : chaque rubrique porte son
+       code, sa base de calcul et son taux, puis la colonne des gains ou celle
+       des retenues. C'est la lecture attendue par un salarié, une banque ou
+       l'inspection du travail. */
+    $base = (float)$doc['salaire_base'];
+    $gains = [
+        ['100', 'Salaire de base',          $base,  null, (float)$doc['salaire_base']],
+        ['110', 'Sursalaire',               null,   null, (float)($doc['sursalaire'] ?? 0)],
+        ['120', 'Prime de transport',       null,   null, (float)($doc['prime_transport'] ?? 0)],
+        ['130', "Prime d'ancienneté",       $base,  null, (float)($doc['prime_anciennete'] ?? 0)],
+        ['140', 'Autres primes',            null,   null, (float)($doc['primes'] ?? 0)],
+        ['150', 'Indemnités',               null,   null, (float)($doc['indemnites'] ?? 0)],
+        ['160', 'Heures supplémentaires',   null,   null, (float)($doc['heures_sup'] ?? 0)],
+    ];
+    $brut = 0.0; foreach ($gains as $g) $brut += $g[4];
+
+    $rets = [
+        ['300', 'CNPS — part salariale',    $brut,  6.3,  (float)($doc['cnps'] ?? 0)],
+        ['310', 'Impôt sur salaire (ITS)',  $brut,  null, (float)($doc['impots'] ?? 0)],
+        ['320', 'Avances / acomptes',       null,   null, (float)($doc['avances'] ?? 0)],
+        ['330', 'Autres retenues',          null,   null, (float)($doc['autres_deductions'] ?? 0)],
+    ];
+    $totalRet = 0.0; foreach ($rets as $r) $totalRet += $r[4];
+    $tx = fn($v) => $v === null ? '' : rtrim(rtrim(number_format($v, 2, ',', ' '), '0'), ',') . ' %';
+    ?>
+    <table class="paie">
+      <thead><tr>
+        <th style="width:46px">Code</th>
+        <th class="l">Libellé</th>
+        <th class="r" style="width:92px">Base</th>
+        <th class="r" style="width:62px">Taux</th>
+        <th class="r" style="width:104px">Gains</th>
+        <th class="r" style="width:104px">Retenues</th>
+      </tr></thead>
       <tbody>
-        <?php
-        $gains = [['Salaire de base',$doc['salaire_base']],['Sursalaire',$doc['sursalaire'] ?? 0],
-                  ['Prime de transport',$doc['prime_transport'] ?? 0],["Prime d'ancienneté",$doc['prime_anciennete'] ?? 0],
-                  ['Autres primes',$doc['primes']],['Indemnités',$doc['indemnites'] ?? 0],['Heures supplémentaires',$doc['heures_sup']]];
-        $rets  = [['CNPS (part salariale)',$doc['cnps']],['Impôt sur salaire (ITS)',$doc['impots']],
-                  ['Avances / acomptes',$doc['avances'] ?? 0],['Autres retenues',$doc['autres_deductions']]];
-        foreach ($gains as $g): if ((float)$g[1] == 0) continue; ?>
-        <tr><td><span class="des"><?= e($g[0]) ?></span></td><td class="r"><?= nf($g[1]) ?></td><td class="r">—</td></tr>
-        <?php endforeach; foreach ($rets as $r): if ((float)$r[1] == 0) continue; ?>
-        <tr><td><span class="des"><?= e($r[0]) ?></span></td><td class="r">—</td><td class="r"><?= nf($r[1]) ?></td></tr>
+        <?php foreach ($gains as $g): if ($g[4] == 0) continue; ?>
+        <tr>
+          <td class="c code"><?= e($g[0]) ?></td>
+          <td><span class="des"><?= e($g[1]) ?></span></td>
+          <td class="r"><?= $g[2] !== null ? nf($g[2]) : '' ?></td>
+          <td class="r"><?= e($tx($g[3])) ?></td>
+          <td class="r fort"><?= nf($g[4]) ?></td>
+          <td class="r"></td>
+        </tr>
         <?php endforeach; ?>
+        <tr class="sous-tot">
+          <td></td><td><span class="des">SALAIRE BRUT</span></td><td></td><td></td>
+          <td class="r"><?= nf($brut) ?></td><td class="r"></td>
+        </tr>
+        <?php foreach ($rets as $r): if ($r[4] == 0) continue; ?>
+        <tr>
+          <td class="c code"><?= e($r[0]) ?></td>
+          <td><span class="des"><?= e($r[1]) ?></span></td>
+          <td class="r"><?= $r[2] !== null ? nf($r[2]) : '' ?></td>
+          <td class="r"><?= e($tx($r[3])) ?></td>
+          <td class="r"></td>
+          <td class="r fort"><?= nf($r[4]) ?></td>
+        </tr>
+        <?php endforeach; ?>
+        <tr class="sous-tot">
+          <td></td><td><span class="des">TOTAL DES RETENUES</span></td><td></td><td></td>
+          <td class="r"></td><td class="r"><?= nf($totalRet) ?></td>
+        </tr>
       </tbody>
     </table>
+
+    <?php
+    /* Charges patronales et cumuls : un bulletin professionnel les fait figurer,
+       même s'ils n'entrent pas dans le net versé au salarié. */
+    $patronale = (float)($doc['cnps_employeur'] ?? 0);
+    $jours = (int)($doc['jours_travailles'] ?? 0);
+    ?>
+    <div class="paie-bas">
+      <div class="pb-box">
+        <div class="pb-hd">Charges patronales</div>
+        <div class="pb-rw"><span>CNPS — part employeur</span><b><?= nf($patronale) ?></b></div>
+        <div class="pb-rw"><span>Coût total employeur</span><b><?= nf($brut + $patronale) ?></b></div>
+      </div>
+      <div class="pb-box">
+        <div class="pb-hd">Période</div>
+        <div class="pb-rw"><span>Jours travaillés</span><b><?= $jours > 0 ? $jours : '—' ?></b></div>
+        <div class="pb-rw"><span>Payé le</span><b><?= !empty($doc['date_paiement']) ? date('d/m/Y', strtotime($doc['date_paiement'])) : '—' ?></b></div>
+      </div>
+    </div>
   <?php elseif ($type === 'recu'): ?>
     <table>
       <thead><tr><th style="width:60px">N°</th><th class="l">Désignation</th><th class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
@@ -264,15 +333,13 @@ if ($AUTH) {
     <table>
       <thead><tr><th style="width:52px">N°</th><th class="l">Désignation</th><th style="width:96px">Qté livrée</th></tr></thead>
       <tbody>
-        <?php /* Le bon de livraison va à l'essentiel : ce qui est livré et en quelle
-                 quantité. Le détail des prestations et les montants figurent déjà
-                 sur la proforma et la facture. */
-        $n=0; foreach ($doc['lignes'] as $l): $n++;
-          $incl = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($l['details'] ?? ''))))); ?>
+        <?php /* Le bon de livraison ne liste que les catégories et leurs quantités.
+                 Le détail des prestations figure sur la proforma et la facture :
+                 le répéter ici allongerait le document sans rien apporter au livreur. */
+        $n=0; foreach ($doc['lignes'] as $l): $n++; ?>
         <tr>
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
-            <?php if ($incl): ?><ul class="incl bl-incl"><?php foreach ($incl as $it): ?><li><?= e($it) ?></li><?php endforeach; ?></ul><?php endif; ?>
           </td>
           <td class="c bl-qte"><?= qte_fmt($l['quantite']) ?></td>
         </tr>

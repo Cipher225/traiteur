@@ -9,7 +9,7 @@ if (empty($_SESSION['admin_id']) || ($_SESSION['admin_role'] ?? '') !== 'client'
 $CLIENT_UID = (int)$_SESSION['admin_id'];
 
 /* ---- Sécurité de session : session unique + déconnexion sur inactivité ---- */
-if (!defined('INACTIVITE_MAX')) define('INACTIVITE_MAX', 30 * 60);
+if (!defined('INACTIVITE_MAX')) define('INACTIVITE_MAX', 3 * 60);
 (function() use ($pdo, $CLIENT_UID) {
     $maintenant = time();
     if (isset($_SESSION['derniere_activite'])
@@ -160,6 +160,8 @@ function retourArriere(){
 <script>window.NOTIF_URL = 'notifications-check.php';</script>
 <script src="../assets/js/notifications-direct.js"></script>
 <?php $pwaBase='..'; $pwaBouton=false; include __DIR__.'/../config/pwa_script.php'; ?>
+<script>window.INACTIVITE_SECONDES = <?= (int)INACTIVITE_MAX ?>; window.INACTIVITE_URL = '../login.php?inactif=1';</script>
+<script src="../assets/js/inactivite.js"></script>
 </body>
 </html>
 <?php }

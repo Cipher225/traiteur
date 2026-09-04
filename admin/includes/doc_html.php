@@ -79,6 +79,21 @@ function doc_html_styles(): string {
     margin-bottom:1px;break-inside:avoid}
   ul.incl li::before{content:'';position:absolute;left:1px;top:5px;width:3.5px;height:3.5px;background:#d4a526}
 
+  /* ---------- Bulletin de paie ---------- */
+  table.paie tbody td{padding:3.5px 10px;font-size:11px}
+  table.paie .code{font-family:'Courier New',monospace;font-size:9.5px;color:#8a9ab5}
+  table.paie td.fort{font-weight:700;color:#0a1f44}
+  table.paie tr.sous-tot td{background:#f2f5fa;border-top:1px solid #cdd6e4;border-bottom:1px solid #cdd6e4;
+    font-weight:800;font-size:10.5px;letter-spacing:.04em;color:#0a1f44;padding:5px 10px}
+  table.paie tr.sous-tot .des{font-weight:800}
+  .paie-bas{display:flex;gap:13px;padding:8px 30px 0}
+  .pb-box{flex:1;border:1px solid #e2c98b;border-radius:9px;overflow:hidden;background:#fff}
+  .pb-hd{color:#b8870f;font-size:9px;letter-spacing:.16em;text-transform:uppercase;font-weight:800;
+    padding:6px 12px 4px;border-bottom:1px solid #f0e2bf}
+  .pb-rw{display:flex;justify-content:space-between;gap:10px;padding:4px 12px;font-size:11px;color:#4a5568}
+  .pb-rw b{color:#0a1f44}
+  .pb-rw + .pb-rw{border-top:1px solid #f5f7fa}
+
   /* ---------- Totaux ---------- */
   .bottom{display:flex;gap:22px;padding:5px 30px 0;align-items:flex-start}
   .lettres{flex:1;padding-top:6px}
