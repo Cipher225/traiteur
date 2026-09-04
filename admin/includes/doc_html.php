@@ -258,7 +258,13 @@ function doc_html_styles(): string {
     .content{page-break-inside:auto}
     .content p{page-break-inside:avoid;orphans:3;widows:3}
     table{page-break-inside:auto}
+    /* L'en-tête du tableau se répète en haut de chaque page, mais jamais seul :
+       s'il n'a plus de ligne à annoncer, il ne doit pas apparaître. */
     thead{display:table-header-group}
+    thead{break-after:avoid;page-break-after:avoid}
+    tbody tr{break-inside:avoid;page-break-inside:avoid}
+    /* Les totaux et la mention finale ne se coupent jamais entre deux pages. */
+    .bottom, .tot, .merci, .lettres{break-inside:avoid;page-break-inside:avoid}
     .bottom,.parts,.cloture{page-break-inside:avoid}
   }
 
