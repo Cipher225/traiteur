@@ -49,13 +49,21 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
     /* ---- Titre et références ---- */
     $titres = ['facture' => 'FACTURE', 'proforma' => 'PROFORMA', 'livraison' => 'BON DE LIVRAISON',
                'recu' => 'REÇU', 'fiche' => 'BULLETIN DE PAIE'];
-    $titre = $titres[$type] ?? 'DOCUMENT';
+    /* Un rapport ou une demande porte le libellé de son propre type
+       (rapport, permission, congé…), défini dans le module des demandes. */
+    $titre = $type === 'rapport'
+        ? mb_strtoupper((string)($doc['type_libelle'] ?? 'RAPPORT'))
+        : ($titres[$type] ?? 'DOCUMENT');
 
     $refs = [];
     if ($type === 'livraison') {
         $refs[] = ['N° Bon', 'BL-' . $doc['numero']];
         $refs[] = ['Date', date('d/m/Y', strtotime($doc['date_emission']))];
 
+    } elseif ($type === 'rapport') {
+        $refs[] = ['N° Document', $doc['numero']];
+        $refs[] = ['Date', date('d/m/Y', strtotime($doc['date_rapport']))];
+        if (!empty($doc['envoye_at'])) $refs[] = ['Transmis le', date('d/m/Y', strtotime($doc['envoye_at']))];
     } elseif ($type === 'fiche') {
         $refs[] = ['N° Bulletin', $doc['numero']];
         $refs[] = ['Période', moisfr((string)$doc['periode'])];
@@ -116,6 +124,18 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   .lignes tbody tr.paire td { background: #f8f9fb; }
   .lignes .des { font-weight: bold; color: #0a1f44; }
   .lignes .det { font-size: 7pt; color: #6e7685; }
+
+  /* Rapports et demandes */
+  .titre-doc { font-size: 11pt; font-weight: bold; color: #0a1f44; text-align: center;
+               margin: 12px 0 8px; letter-spacing: .3px; }
+  .texte { font-size: 9pt; line-height: 1.55; color: #2d3442; text-align: justify; }
+  .texte p { margin: 0 0 7px; }
+  .texte h1 { font-size: 12pt; color: #0a1f44; margin: 10px 0 6px; }
+  .texte h2 { font-size: 10.5pt; color: #0a1f44; margin: 9px 0 5px; }
+  .texte ul, .texte ol { margin: 0 0 7px 16px; }
+  .texte table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  .texte table td, .texte table th { border: .5pt solid #dbe1ea; padding: 4px 6px; font-size: 8.5pt; }
+  .texte img { max-width: 100%; }
 
   /* Totaux */
   .bas { margin-top: 7px; }
@@ -181,7 +201,7 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
      Bon de livraison et bulletin de paie adoptent une présentation sobre, sans
      encadré : deux colonnes de lignes simples, comme sur un relevé bancaire.
      Les factures et proformas conservent leurs cartes. -->
-<?php if (in_array($type, ['livraison', 'fiche'], true)): ?>
+<?php if (in_array($type, ['livraison', 'fiche', 'rapport'], true)): ?>
 <table class="simple"><tr>
   <td width="49%"><?= pdf_bloc_simple($t1, $l1) ?></td>
   <td width="2%"></td>
@@ -232,6 +252,19 @@ function pdf_bloc_simple(string $titre, array $lignes): string {
 /* ---- Contenu des deux cartes, selon le type de document ---- */
 function pdf_blocs_infos(array $s, string $type, array $doc): array {
     $nom = trim((string)($doc['entreprise'] ?? '')) !== '' ? $doc['entreprise'] : ($doc['client_nom'] ?? '');
+
+    if ($type === 'rapport') {
+        $l1 = [['Auteur', $doc['auteur'] ?? ''], ['Type', $doc['type_libelle'] ?? 'Rapport'],
+               ['Date', !empty($doc['date_rapport']) ? date('d/m/Y', strtotime($doc['date_rapport'])) : '']];
+        $l2 = [];
+        if (!empty($doc['date_debut'])) $l2[] = ['Du', date('d/m/Y', strtotime($doc['date_debut']))];
+        if (!empty($doc['date_fin']))   $l2[] = ['Au', date('d/m/Y', strtotime($doc['date_fin']))];
+        if (trim((string)($doc['lieu'] ?? '')) !== '')   $l2[] = ['Lieu', $doc['lieu']];
+        if (trim((string)($doc['motif'] ?? '')) !== '')  $l2[] = ['Motif', $doc['motif']];
+        if (trim((string)($doc['statut'] ?? '')) !== '') $l2[] = ['État', ucfirst((string)$doc['statut'])];
+        if (!$l2) $l2[] = ['Référence', $doc['numero'] ?? ''];
+        return ['Émetteur', $l1, 'Informations', $l2];
+    }
 
     if ($type === 'fiche') {
         return ['Salarié', [
@@ -291,6 +324,14 @@ function pdf_corps(string $type, array $doc, string $devise): string {
     ob_start();
 
     if ($type === 'fiche') { echo pdf_corps_paie($doc, $devise); return ob_get_clean(); }
+
+    if ($type === 'rapport') {
+        /* Le contenu est du texte mis en forme dans l'éditeur : on le reprend tel
+           quel, après nettoyage, dans un cadre de lecture confortable. */
+        echo '<div class="titre-doc">' . e($doc['titre'] ?? '') . '</div>';
+        echo '<div class="texte">' . doc_nettoyer_html((string)($doc['contenu'] ?? '')) . '</div>';
+        return ob_get_clean();
+    }
 
     $estLivraison = ($type === 'livraison');
     ?>

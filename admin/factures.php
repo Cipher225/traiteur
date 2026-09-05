@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $s = get_settings($pdo);
             $typeLbl = $fdoc['type'] === 'proforma' ? 'devis (proforma)' : 'facture';
             $siteUrl = rtrim($s['site_url'] ?? (defined('SITE_URL') ? SITE_URL : ''), '/');
-            $lien = $siteUrl ? $siteUrl . '/admin/print.php?type=' . $fdoc['type'] . '&id=' . $fid : '';
+            $lien = $siteUrl ? $siteUrl . '/admin/pdf.php?type=' . $fdoc['type'] . '&id=' . $fid : '';
             $corps = '<p>Bonjour <strong>' . htmlspecialchars($fdoc['client']) . '</strong>,</p>
                 <p>Veuillez trouver votre ' . $typeLbl . ' <strong>' . htmlspecialchars($fdoc['numero']) . '</strong>.</p>'
                 . ($lien ? '<p style="text-align:center;margin:24px 0"><a href="' . $lien . '" style="background:#d4a526;color:#0a1020;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Consulter le document</a></p>' : '')

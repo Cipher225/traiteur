@@ -310,7 +310,7 @@ function fmt_periode($r) {
                 <span class="badge badge-teal" style="font-size:11px">Envoyé</span>
               <?php endif; ?>
               <?php if ($r['statut']==='envoye'): ?>
-              <a class="btn btn-glass btn-sm" href="rapport_print.php?id=<?= $r['id'] ?>" target="_blank" title="Voir / Imprimer">📄</a>
+              <a class="btn btn-glass btn-sm" href="pdf.php?type=rapport&id=<?= $r['id'] ?>" target="_blank" title="Voir / Imprimer">📄</a>
               <?php endif; ?>
               <?php if ($r['statut']==='brouillon'): ?>
               <a class="btn btn-glass btn-sm" href="rapports.php?edit=<?= $r['id'] ?>" title="Modifier le brouillon">✏️</a>
@@ -373,9 +373,9 @@ function fmt_periode($r) {
           </td>
           <td>
             <div class="td-actions">
-              <a class="btn btn-glass btn-sm" href="rapport_print.php?id=<?= $r['id'] ?>" target="_blank" title="Voir">📄</a>
+              <a class="btn btn-glass btn-sm" href="pdf.php?type=rapport&id=<?= $r['id'] ?>" target="_blank" title="Voir">📄</a>
               
-              <a class="btn btn-glass btn-sm" href="rapport_print.php?id=<?= $r['id'] ?>&auth=1" target="_blank" title="Document authentifiable (QR + signature)">🔐</a>
+              <a class="btn btn-glass btn-sm" href="pdf.php?type=rapport&id=<?= $r['id'] ?>&auth=1" target="_blank" title="Document authentifiable (QR + signature)">🔐</a>
               <form method="post" data-confirm="Supprimer ?"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><button class="btn btn-danger btn-sm" name="supprimer" value="<?= $r['id'] ?>">✕</button></form>
             </div>
           </td>

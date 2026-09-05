@@ -222,7 +222,7 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
       <div style="display:flex;flex-direction:column;gap:10px">
         <?php if ($cmd['proforma_id']): ?>
           <a class="btn btn-glass" href="factures.php?doc=proforma&edit=<?= (int)$cmd['proforma_id'] ?>">✏️ Modifier le devis</a>
-          <a class="btn btn-glass btn-sm" href="print.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>&auth=1" target="_blank">📄 Voir le devis</a>
+          <a class="btn btn-glass btn-sm" href="pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>&auth=1" target="_blank">📄 Voir le devis</a>
         <?php else: ?>
           <form method="post"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="id" value="<?= $cmd['id'] ?>">
             <button class="btn btn-gold" name="generer_devis" value="1" style="width:100%">🧾 Générer le devis</button></form>

@@ -69,13 +69,13 @@ $dossierActif = null; foreach ($dossiers as $d) if ($d['id']==$dsel) $dossierAct
 /* Le coffre ne montre QUE les documents qu'un administrateur a déjà authentifiés
    (présents dans la table documents_auth). */
 $sysDefs = [
-    'factures'  => ['🧾','Factures',            "SELECT f.id, f.numero, f.date_emission AS d, c.nom AS client, c.entreprise, c.type_client FROM factures f JOIN documents_auth a ON a.type='facture' AND a.doc_id=f.id LEFT JOIN clients c ON c.id=f.client_id WHERE f.type='facture' ORDER BY f.date_emission DESC, f.id DESC", 'print.php?auth=1&type=facture&id='],
-    'proformas' => ['📋','Proformas (devis)',    "SELECT f.id, f.numero, f.date_emission AS d, c.nom AS client, c.entreprise, c.type_client FROM factures f JOIN documents_auth a ON a.type='proforma' AND a.doc_id=f.id LEFT JOIN clients c ON c.id=f.client_id WHERE f.type='proforma' ORDER BY f.date_emission DESC, f.id DESC", 'print.php?auth=1&type=proforma&id='],
-    'paiements' => ['💳','Reçus de paiement',  "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN paiements p ON p.recu_id = r.id AND p.statut='paye' JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id ORDER BY r.date_paiement DESC, r.id DESC", 'print.php?auth=1&type=recu&id='],
-    'bs'        => ['📤','Sorties',       "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id WHERE r.type='sortie' ORDER BY r.date_paiement DESC, r.id DESC", 'print.php?auth=1&type=recu&id='],
-    'be'        => ['📥','Entrées',        "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id WHERE r.type='entree' AND NOT EXISTS (SELECT 1 FROM paiements p WHERE p.recu_id=r.id AND p.statut='paye') ORDER BY r.date_paiement DESC, r.id DESC", 'print.php?auth=1&type=recu&id='],
-    'fiches'    => ['📄','Bulletins de paie',     "SELECT p.id, p.numero, CONCAT(p.periode,'-01') AS d FROM fiches_paie p JOIN documents_auth a ON a.type='fiche' AND a.doc_id=p.id ORDER BY p.periode DESC, p.id DESC", 'print.php?auth=1&type=fiche&id='],
-    'rapports'  => ['📝','Rapports & demandes',   "SELECT r.id, r.numero, r.date_rapport AS d FROM rapports r JOIN documents_auth a ON a.doc_id=r.id AND a.type=r.type WHERE r.statut='envoye' ORDER BY r.date_rapport DESC, r.id DESC", 'rapport_print.php?auth=1&id='],
+    'factures'  => ['🧾','Factures',            "SELECT f.id, f.numero, f.date_emission AS d, c.nom AS client, c.entreprise, c.type_client FROM factures f JOIN documents_auth a ON a.type='facture' AND a.doc_id=f.id LEFT JOIN clients c ON c.id=f.client_id WHERE f.type='facture' ORDER BY f.date_emission DESC, f.id DESC", 'pdf.php?type=facture&id='],
+    'proformas' => ['📋','Proformas (devis)',    "SELECT f.id, f.numero, f.date_emission AS d, c.nom AS client, c.entreprise, c.type_client FROM factures f JOIN documents_auth a ON a.type='proforma' AND a.doc_id=f.id LEFT JOIN clients c ON c.id=f.client_id WHERE f.type='proforma' ORDER BY f.date_emission DESC, f.id DESC", 'pdf.php?type=proforma&id='],
+    'paiements' => ['💳','Reçus de paiement',  "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN paiements p ON p.recu_id = r.id AND p.statut='paye' JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id ORDER BY r.date_paiement DESC, r.id DESC", 'pdf.php?type=recu&id='],
+    'bs'        => ['📤','Sorties',       "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id WHERE r.type='sortie' ORDER BY r.date_paiement DESC, r.id DESC", 'pdf.php?type=recu&id='],
+    'be'        => ['📥','Entrées',        "SELECT r.id, r.numero, r.date_paiement AS d, c.nom AS client, c.entreprise, c.type_client FROM recus r JOIN documents_auth a ON a.type='recu' AND a.doc_id=r.id LEFT JOIN clients c ON c.id=r.client_id WHERE r.type='entree' AND NOT EXISTS (SELECT 1 FROM paiements p WHERE p.recu_id=r.id AND p.statut='paye') ORDER BY r.date_paiement DESC, r.id DESC", 'pdf.php?type=recu&id='],
+    'fiches'    => ['📄','Bulletins de paie',     "SELECT p.id, p.numero, CONCAT(p.periode,'-01') AS d FROM fiches_paie p JOIN documents_auth a ON a.type='fiche' AND a.doc_id=p.id ORDER BY p.periode DESC, p.id DESC", 'pdf.php?type=fiche&id='],
+    'rapports'  => ['📝','Rapports & demandes',   "SELECT r.id, r.numero, r.date_rapport AS d FROM rapports r JOIN documents_auth a ON a.doc_id=r.id AND a.type=r.type WHERE r.statut='envoye' ORDER BY r.date_rapport DESC, r.id DESC", 'rapport_pdf.php?id='],
 ];
 $sysCounts = [];
 foreach ($sysDefs as $k=>$def) {
@@ -149,6 +149,9 @@ $csrf = csrf_token();
       require_once __DIR__ . '/includes/rangement.php';
       // ces types portent un client : ils sont rangés année > mois > client
       $aClient = in_array($sysSel, ['factures','proformas','paiements','be','bs'], true);
+      /* Type attendu par le générateur PDF, déduit de la rubrique consultée */
+      $typePdf = ['factures' => 'facture', 'proformas' => 'proforma', 'paiements' => 'recu',
+                  'be' => 'recu', 'bs' => 'recu', 'fiches' => 'fiche'][$sysSel] ?? 'facture';
     ?>
     <div class="panel glass">
       <h2><?= $def[0] ?> <?= e($def[1]) ?> — rangés automatiquement (<?= count($sysDocs) ?>)</h2>
@@ -181,7 +184,8 @@ $csrf = csrf_token();
                 <div class="rng-doc">
                   <span class="num"><?= e($doc['numero']) ?></span>
                   <span class="dt"><?= $doc['d'] ? date('d/m/Y', strtotime($doc['d'])) : '' ?></span>
-                  <span class="acts"><a class="btn btn-glass btn-sm" href="<?= e($def[3].$doc['id']) ?>" target="_blank" title="Consulter / PDF">📄</a></span>
+                  <span class="acts"><a class="btn btn-glass btn-sm" href="<?= e($def[3].$doc['id']) ?>" target="_blank" title="Consulter">📄</a>
+                    <a class="btn btn-gold btn-sm" href="pdf.php?type=<?= e($typePdf) ?>&id=<?= (int)$doc['id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a></span>
                 </div>
                 <?php endforeach; ?>
               </div>
@@ -192,7 +196,8 @@ $csrf = csrf_token();
               <div class="rng-doc">
                 <span class="num"><?= e($doc['numero']) ?></span>
                 <span class="dt"><?= $doc['d'] ? date('d/m/Y', strtotime($doc['d'])) : '' ?></span>
-                <span class="acts"><a class="btn btn-glass btn-sm" href="<?= e($def[3].$doc['id']) ?>" target="_blank" title="Consulter / PDF">📄</a></span>
+                <span class="acts"><a class="btn btn-glass btn-sm" href="<?= e($def[3].$doc['id']) ?>" target="_blank" title="Consulter">📄</a>
+                    <a class="btn btn-gold btn-sm" href="pdf.php?type=<?= e($typePdf) ?>&id=<?= (int)$doc['id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a></span>
               </div>
               <?php endforeach; ?>
             </div>

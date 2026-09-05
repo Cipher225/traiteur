@@ -78,8 +78,8 @@ $sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($dev
                 <span class="dt"><?= date('d/m/Y', strtotime($d[$dateKey])) ?></span>
                 <?php if (isset($d['_ttc'])): ?><span class="mt"><?= money($d['_ttc'], $devise) ?></span>
                 <?php elseif (isset($d['montant'])): ?><span class="mt"><?= money($d['montant'], $devise) ?></span><?php endif; ?>
-                <span class="acts"><a class="btn btn-glass btn-sm" href="doc.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>" target="_blank">📄 Voir</a>
-                  <a class="btn btn-gold btn-sm" href="doc-pdf.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>&dl=1">⬇️ PDF</a></span>
+                <span class="acts"><a class="btn btn-glass btn-sm" href="doc-pdf.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>" target="_blank">📄 Voir</a>
+                  <a class="btn btn-gold btn-sm" href="doc-pdf.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>&dl=1">⬇️ Télécharger</a></span>
               </div>
               <?php endforeach; ?>
             </div>

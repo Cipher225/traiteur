@@ -128,7 +128,8 @@ $devise = $settings['devise'] ?? 'FCFA';
           <td style="font-weight:700"><?= number_format((float)$p['montant'], 0, ',', ' ') ?></td>
           <td><span class="etat-pay ep-<?= e($p['statut']) ?>"><?= e($lib) ?></span></td>
           <td><?php if (!empty($p['recu_id'])): ?>
-              <a class="btn btn-glass btn-sm" href="print.php?type=recu&id=<?= (int)$p['recu_id'] ?>&auth=1" target="_blank">🧾 <?= e($p['recu_num']) ?></a>
+              <a class="btn btn-glass btn-sm" href="pdf.php?type=recu&id=<?= (int)$p['recu_id'] ?>&auth=1" target="_blank">🧾 <?= e($p['recu_num']) ?></a>
+              <a class="btn btn-gold btn-sm" href="pdf.php?type=recu&id=<?= (int)$p['recu_id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a>
               <?php else: ?>—<?php endif; ?></td>
           <td style="text-align:right">
             <?php if ($p['statut'] === 'en_attente'): ?>

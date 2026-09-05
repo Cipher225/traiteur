@@ -145,7 +145,7 @@ admin_header('Relance des impayés', 'relances', $pdo, $settings);
               <div style="font-size:11px;color:var(--ink-faint)">le <?= date('d/m', strtotime($f['derniere_relance'])) ?></div>
               <?php endif; ?></td>
           <td style="text-align:right;white-space:nowrap">
-            <a class="btn btn-glass btn-sm" href="print.php?type=facture&id=<?= (int)$f['id'] ?>&auth=1" target="_blank">🧾</a>
+            <a class="btn btn-glass btn-sm" href="pdf.php?type=facture&id=<?= (int)$f['id'] ?>&auth=1" target="_blank">🧾</a>
             <?php if (!empty($f['client_email'])): ?>
             <form method="post" style="display:inline" onsubmit="return confirm('Envoyer une relance à <?= e($f['client_nom']) ?> ?')">
               <input type="hidden" name="csrf" value="<?= csrf_token() ?>">

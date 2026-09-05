@@ -61,7 +61,7 @@ client_header('Mes commandes', 'commandes', $settings, $CLIENT);
           <div style="font-size:30px">📄</div>
           <strong>Votre devis est prêt !</strong>
           <p style="color:var(--ink-dim);font-size:13px;margin:6px 0 12px">Consultez et téléchargez votre devis personnalisé.</p>
-          <a class="btn btn-gold" href="doc.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>" target="_blank">Voir mon devis</a>
+          <a class="btn btn-gold" href="doc-pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>" target="_blank">Voir mon devis</a>
         </div>
         <?php endif; ?>
       <?php elseif ($cmd['statut']==='nouvelle' || $cmd['statut']==='en_traitement'): ?>

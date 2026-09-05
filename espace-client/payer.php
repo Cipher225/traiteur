@@ -120,7 +120,7 @@ $devise = $settings['devise'] ?? 'FCFA';
           <td><?= number_format((float)$p['montant'], 0, ',', ' ') ?> <?= e($devise) ?></td>
           <td><span class="etat-pay ep-<?= e($p['statut']) ?>"><?= e($lib) ?></span></td>
           <td><?php if (!empty($p['recu_id'])): ?>
-            <a class="btn btn-glass btn-sm" href="doc.php?type=recu&id=<?= (int)$p['recu_id'] ?>" target="_blank">🧾 <?= e($p['recu_num']) ?></a>
+            <a class="btn btn-glass btn-sm" href="doc-pdf.php?type=recu&id=<?= (int)$p['recu_id'] ?>" target="_blank">🧾 <?= e($p['recu_num']) ?></a>
           <?php else: ?>—<?php endif; ?></td>
         </tr>
       <?php endforeach; ?>

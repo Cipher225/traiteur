@@ -204,8 +204,8 @@ calc();
             <option value="brouillon" <?= $fp['statut']==='brouillon'?'selected':'' ?>>Brouillon</option>
             <option value="payee" <?= $fp['statut']==='payee'?'selected':'' ?>>Payé</option>
           </select></form>
-        <a class="btn btn-glass btn-sm" href="print.php?type=fiche&id=<?= $fp['id'] ?>" target="_blank" title="Voir">📄</a>
-        <?php if(is_admin()): ?><a class="btn btn-glass btn-sm" href="print.php?type=fiche&id=<?= $fp['id'] ?>&auth=1" target="_blank" title="Authentifiable">🔐</a><?php endif; ?>
+        <a class="btn btn-glass btn-sm" href="pdf.php?type=fiche&id=<?= $fp['id'] ?>" target="_blank" title="Voir">📄</a>
+        <a class="btn btn-gold btn-sm" href="pdf.php?type=fiche&id=<?= $fp['id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a>
         <a class="btn btn-glass btn-sm" href="paie.php?edit=<?= $fp['id'] ?>" title="Modifier">✏️</a>
         <form method="post" data-confirm="Supprimer <?= e($fp['numero']) ?> ?" style="display:inline"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><button class="btn btn-danger btn-sm" name="supprimer" value="<?= $fp['id'] ?>">✕</button></form>
       </span>

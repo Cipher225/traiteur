@@ -24,16 +24,35 @@ switch ($type) {
     case 'facture': case 'proforma': case 'livraison': $doc = get_facture($pdo, $id); break;
     case 'recu':                                       $doc = get_recu($pdo, $id);    break;
     case 'fiche':                                      $doc = get_fiche($pdo, $id);   break;
+    case 'rapport':
+        require_once __DIR__ . '/includes/demandes.php';
+        $st = $pdo->prepare("SELECT r.*, u.nom AS auteur FROM rapports r
+                             LEFT JOIN users u ON u.id = r.employe_user_id WHERE r.id = ?");
+        $st->execute([$id]);
+        $doc = $st->fetch() ?: null;
+        if ($doc) {
+            $info = demande_type_info((string)($doc['type'] ?? 'rapport'));
+            $doc['type_libelle'] = $info[0] ?? 'Rapport';   // le libellé est la première valeur
+            /* Un employé ne consulte que ses propres documents. */
+            if (!is_admin() && (int)$doc['employe_user_id'] !== (int)($_SESSION['admin_id'] ?? 0)) {
+                http_response_code(403); exit('Accès refusé.');
+            }
+        }
+        break;
 }
 if (!$doc) { http_response_code(404); exit('Document introuvable.'); }
 
 /* ---- Authentification : empreinte et QR, comme sur la version imprimable ---- */
 $qrFichier = $empreinte = $code = null;
 try {
-    $cle = ($type === 'fiche')
-        ? [$doc['numero'], (string)$doc['periode'], (string)$doc['net_a_payer']]
-        : [$doc['numero'], (string)($doc['date_emission'] ?? $doc['date_paiement'] ?? ''),
-           (string)($doc['montant_ttc'] ?? $doc['montant'] ?? '')];
+    if ($type === 'fiche') {
+        $cle = [$doc['numero'], (string)$doc['periode'], (string)$doc['net_a_payer']];
+    } elseif ($type === 'rapport') {
+        $cle = [$doc['numero'], (string)$doc['titre'], (string)$doc['date_rapport']];
+    } else {
+        $cle = [$doc['numero'], (string)($doc['date_emission'] ?? $doc['date_paiement'] ?? ''),
+                (string)($doc['montant_ttc'] ?? $doc['montant'] ?? '')];
+    }
     $empreinte = doc_checksum($cle);
     $code      = doc_token($pdo, $type, (int)$doc['id'], $doc['numero'], $empreinte);
 
@@ -134,7 +153,7 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
 
 /* ---- Nom du fichier ---- */
 $prefixes = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
-             'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie'];
+             'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie', 'rapport' => 'Document'];
 $nom = ($prefixes[$type] ?? 'Document') . '-' . preg_replace('/[^A-Za-z0-9\-]/', '-', $doc['numero']) . '.pdf';
 
 /* Le PDF est produit AVANT de supprimer l'image du QR : le dessin de la

@@ -81,7 +81,7 @@ $devise = $settings['devise'] ?? 'FCFA';
     <p class="pr-txt">Votre reçu <strong><?= e($recu['numero']) ?></strong> est disponible ci-dessous.
        Une copie vous a également été envoyée par email.</p>
     <div class="pr-actions">
-      <a class="btn btn-gold" href="doc.php?type=recu&id=<?= (int)$recu['id'] ?>" target="_blank">🧾 Voir mon reçu</a>
+      <a class="btn btn-gold" href="doc-pdf.php?type=recu&id=<?= (int)$recu['id'] ?>" target="_blank">🧾 Voir mon reçu</a>
       <a class="btn btn-glass" href="payer.php">Retour à mes factures</a>
     </div>
     <?php else: ?>

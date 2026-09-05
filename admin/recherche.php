@@ -112,7 +112,7 @@ $devise = $settings['devise'] ?? 'FCFA';
         case 'factures':
           $lien = ($l['type'] === 'proforma' ? 'factures.php?doc=proforma' : 'factures.php');
           $t = $l['numero']; $d = ($l['client'] ?? '—') . ' · ' . date('d/m/Y', strtotime($l['date_emission'])) . ' · ' . ucfirst($l['statut']);
-          $a = 'print.php?type=' . ($l['type'] === 'proforma' ? 'proforma' : 'facture') . '&id=' . (int)$l['id'] . '&auth=1'; break;
+          $a = 'pdf.php?type=' . ($l['type'] === 'proforma' ? 'proforma' : 'facture') . '&id=' . (int)$l['id'] . '&auth=1'; break;
         case 'clients':
           $lien = 'clients.php?edit=' . (int)$l['id'];
           $t = trim(($l['entreprise'] ?? '') !== '' ? $l['entreprise'] : $l['nom']);
@@ -121,7 +121,7 @@ $devise = $settings['devise'] ?? 'FCFA';
           $lien = 'recus.php' . ($l['type'] === 'entree' ? '?type=entree' : '');
           $t = $l['numero']; $d = ($l['client'] ?? '—') . ' · ' . number_format((float)$l['montant'], 0, ',', ' ') . ' ' . $devise
              . ' · ' . date('d/m/Y', strtotime($l['date_paiement']));
-          $a = 'print.php?type=recu&id=' . (int)$l['id'] . '&auth=1'; break;
+          $a = 'pdf.php?type=recu&id=' . (int)$l['id'] . '&auth=1'; break;
         case 'employes':
           $lien = 'employes.php?edit=' . (int)$l['id'];
           $t = $l['nom']; $d = trim(($l['poste'] ?? '') . ' · ' . ($l['matricule'] ?? '')); $a = ''; break;

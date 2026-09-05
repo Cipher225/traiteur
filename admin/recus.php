@@ -160,8 +160,8 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
       <span class="dt"><?= date('d/m/Y', strtotime($r['date_paiement'])) ?><?= $r['mode_paiement']?' · '.e($r['mode_paiement']):'' ?></span>
       <span class="mt" style="color:var(--teal)"><?= money($r['montant'], $devise) ?></span>
       <span class="acts">
-        <a class="btn btn-glass btn-sm" href="print.php?type=recu&id=<?= $r['id'] ?>" target="_blank" title="Voir">📄</a>
-        <?php if(is_admin()): ?><a class="btn btn-glass btn-sm" href="print.php?type=recu&id=<?= $r['id'] ?>&auth=1" target="_blank" title="Authentifiable">🔐</a><?php endif; ?>
+        <a class="btn btn-glass btn-sm" href="pdf.php?type=recu&id=<?= $r['id'] ?>" target="_blank" title="Voir">📄</a>
+        <a class="btn btn-gold btn-sm" href="pdf.php?type=recu&id=<?= $r['id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a>
         <a class="btn btn-glass btn-sm" href="?type=<?= e($TYPE) ?>&edit=<?= $r['id'] ?>#form" title="Modifier">✏️</a>
         <form method="post" data-confirm="Supprimer <?= e($r['numero']) ?> ?" style="display:inline"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="type" value="<?= e($TYPE) ?>"><button class="btn btn-danger btn-sm" name="supprimer" value="<?= $r['id'] ?>">✕</button></form>
       </span>
