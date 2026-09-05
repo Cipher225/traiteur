@@ -97,7 +97,7 @@ $GAUCHE = $mm(10);
 $DROITE = $largeur - $mm(10);
 /* Le pied de page occupe les 22 derniers millimètres. Le bloc se place
    au-dessus : sa ligne haute est donc à 46 mm du bas de la feuille. */
-$BASE   = $hauteur - $mm(58);
+$BASE   = $hauteur - $mm(60);
 
 $signataire = (string)($settings['signataire_fonction'] ?? 'La Direction');
 $dossier    = realpath(__DIR__ . '/..') . '/uploads/';
@@ -145,9 +145,12 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
 
     if ($fTampon) $c->image($fTampon, $xTampon, $yImg, $lTampon, $hTampon);
 
+    /* Le paraphe se place SOUS le tampon, sans le chevaucher : c'est l'ordre
+       d'un document signé puis cacheté. */
     if ($fSignature) {
         $lSig = $mm(30);
-        $c->image($fSignature, $xTampon + ($lTampon - $lSig) / 2, $yImg + $hTampon - $mm(2), $lSig, $mm(11));
+        $c->image($fSignature, $xTampon + ($lTampon - $lSig) / 2,
+                  $yImg + $hTampon + $mm(1.5), $lSig, $mm(10));
     }
 });
 
