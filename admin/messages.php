@@ -104,20 +104,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
 
         /* L'authentification se décide message par message. Une confirmation de
            rendez-vous n'en a pas besoin ; un devis ou une facture, si. */
-        $authentifier = !empty($_POST['authentifier']);
+        $authentifier    = !empty($_POST['authentifier']);
+        $signaturesTempo = [];
 
         foreach ($liste as $d) {
             $date      = date('Y-m-d H:i:s');
             $reference = signature_reference($pdo);
             $empreinte = signature_empreinte($d['email'], $sujet, $corps, $date);
 
-            $fichier = null;
-            if ($authentifier) {
-                /* L'image de signature est propre à CE message : elle porte sa
-                   référence et son empreinte. */
-                $fichier = $dossier . '/' . $reference . '.png';
-                signature_image($settings, $reference, $empreinte, $fichier);
-            }
+            /* La signature accompagne TOUJOURS le message : elle porte les
+               coordonnées de l'entreprise. Seul le cartouche de vérification
+               (référence, empreinte, QR) dépend du choix d'authentification. */
+            $fichier = $dossier . '/' . $reference . '.png';
+            signature_image($settings, $reference, $empreinte, $fichier, $authentifier);
+            if (!$authentifier) $signaturesTempo[] = $fichier;
 
             $site = adresse_site($settings);
             $urlSig = $site . '/signature-mail.php?c=' . urlencode($reference);
@@ -126,36 +126,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
             /* La signature et le logo voyagent AVEC le message : une image
                chargée depuis Internet serait bloquée par la plupart des
                messageries, et n'apparaîtrait pas chez le destinataire. */
-            $images = [];
+            $images = [['cid' => 'signature-entreprise', 'chemin' => $fichier]];
             $cheminLogo = __DIR__ . '/../uploads/' . (string)($settings['logo'] ?? '');
             if (!empty($settings['logo']) && is_file($cheminLogo)) {
                 $images[] = ['cid' => 'logo-entreprise', 'chemin' => $cheminLogo];
             }
 
-            if ($authentifier) {
-                $images[] = ['cid' => 'signature-entreprise', 'chemin' => $fichier];
-                $message = $corps
-                    . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
-                    . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
-                    . '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
-                    . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
-                    . ($site !== ''
-                        ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
-                    . '</p></div>';
-            } else {
-                /* Sans authentification, on garde une signature sobre : le
-                   message ne doit pas se terminer abruptement. */
-                $coord = array_filter([
-                    trim((string)($settings['telephone'] ?? '')),
-                    trim((string)($settings['email'] ?? '')),
-                ]);
-                $message = $corps
-                    . '<div style="margin-top:24px;border-top:1px solid #e8ecf2;padding-top:14px;'
-                    . 'font-size:12px;color:#6e7685;line-height:1.7">'
-                    . '<strong style="color:#0a1f44;font-size:13px">' . e($settings['nom_entreprise'] ?? '') . '</strong>'
-                    . ($coord ? '<br>' . e(implode(' · ', $coord)) : '')
-                    . '</div>';
-            }
+            $message = $corps
+                . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
+                . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
+                . ($authentifier
+                    ? '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
+                      . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
+                      . ($site !== ''
+                          ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
+                      . '</p>'
+                    : '')
+                . '</div>';
 
             $motif = null;
             $ok = envoyer_email($pdo, $d['email'], $sujet, $message,
@@ -180,6 +167,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
         }
 
         foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }   // fichiers temporaires
+        /* Seules les signatures authentifiées sont conservées : elles servent
+           à la vérification. Les autres n'ont plus d'utilité une fois parties. */
+        if (!$authentifier) {
+            foreach ($signaturesTempo as $sg) { if (is_file($sg)) @unlink($sg); }
+        }
         journaliser($pdo, 'email', 'message', null, $envoyes . ' message(s) — ' . mb_substr($sujet, 0, 80));
         if ($envoyes) flash($envoyes . ' message' . ($envoyes > 1 ? 's envoyés' : ' envoyé') . '. ✉️');
         if (!$erreurs) { header('Location: messages.php'); exit; }
@@ -348,15 +340,14 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
     </div>
 
     <div id="zone-simple" <?= $authCoche ? 'hidden' : '' ?>>
-      <div class="sig-simple">
-        <div class="ss-t">Signature simple</div>
-        <strong><?= e($settings['nom_entreprise'] ?? '') ?></strong>
-        <div><?= e(trim(($settings['telephone'] ?? '') . ' · ' . ($settings['email'] ?? ''), ' ·')) ?></div>
+      <p class="mail-aide" style="margin-top:12px">Voici ce que verra votre destinataire.</p>
+      <div class="mail-sig">
+        <img src="signature-apercu.php?auth=0" alt="Signature" style="width:100%;height:auto;border-radius:8px">
       </div>
       <p class="mail-note" style="margin-top:9px">
-        Sans authentification : ni référence, ni QR. À réserver aux messages courants —
-        confirmation de rendez-vous, remerciement. Pour un devis ou une facture,
-        laissez l'authentification active.
+        Vos coordonnées restent présentes : seul le cartouche de vérification disparaît —
+        ni référence, ni QR. À réserver aux messages courants comme une confirmation de
+        rendez-vous. Pour un devis ou une facture, laissez l'authentification active.
       </p>
     </div>
   </div>

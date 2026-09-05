@@ -47,11 +47,16 @@ function signature_reference(PDO $pdo): string
    Fabrique l'image de signature. Tout est dessiné par le serveur : le
    destinataire reçoit une image, pas du texte modifiable.
    --------------------------------------------------------------------------- */
-function signature_image(array $s, string $reference, string $empreinte, string $chemin): bool
+function signature_image(array $s, string $reference, string $empreinte, string $chemin,
+                        bool $avecAuth = true): bool
 {
     if (!function_exists('imagecreatetruecolor')) return false;
 
-    $L = 1100; $H = 300;                       // haute définition : net sur tous les écrans
+    /* Sans authentification, la signature garde toutes les coordonnées de
+       l'entreprise : seul le cartouche de vérification disparaît. Le bloc de
+       texte occupe alors toute la largeur. */
+    $L = $avecAuth ? 1100 : 820;
+    $H = $avecAuth ? 300  : 250;
     $im = imagecreatetruecolor($L, $H);
     imagesavealpha($im, true);
     imagealphablending($im, true);
@@ -100,7 +105,7 @@ function signature_image(array $s, string $reference, string $empreinte, string 
     $ecrire(mb_strtoupper((string)($s['slogan'] ?? '')), $x, $y + 24, 9, $or);
 
     /* Filet de séparation */
-    imagefilledrectangle($im, 46, 118, $L - 260, 119, $trait);
+    imagefilledrectangle($im, 46, 118, $L - ($avecAuth ? 260 : 46), 119, $trait);
 
     /* Coordonnées */
     $lignes = array_values(array_filter([
@@ -117,7 +122,14 @@ function signature_image(array $s, string $reference, string $empreinte, string 
         $yl += 26;
     }
 
-    /* Bloc d'authentification, à droite */
+    /* Bloc d'authentification, à droite — uniquement si le message est
+       authentifié. Sinon la signature s'arrête aux coordonnées. */
+    if (!$avecAuth) {
+        $ok = imagepng($im, $chemin);
+        imagedestroy($im);
+        return (bool)$ok;
+    }
+
     $xa = $L - 240;
     imagefilledrectangle($im, $xa - 20, 24, $L - 24, $H - 24, imagecolorallocate($im, 250, 250, 252));
     imagerectangle($im, $xa - 20, 24, $L - 24, $H - 24, $trait);
