@@ -186,7 +186,7 @@ if ($AUTH) {
 </div>
 
 <div class="sheet">
-  <table class="cadre-page"><tfoot><tr><td><div class="pied-reserve"><?= doc_html_footer($settings) ?></div></td></tr></tfoot><tbody><tr><td>
+  <table class="cadre-page"><tfoot><tr><td><div class="pied-reserve"></div></td></tr></tfoot><tbody><tr><td>
   <div class="flex-fill">
   <?= doc_html_header($settings, $titre, $entete, '..') ?>
   <?php if ($estLivraison): ?>
@@ -415,6 +415,7 @@ if ($AUTH) {
   </div>
   <?= doc_html_auth($settings, '..', $qrUri, $checksum, $token) ?>
   </td></tr></tbody></table>
+  <?= doc_html_footer($settings) ?>
 </div>
 
 
