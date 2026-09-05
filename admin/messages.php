@@ -124,7 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
                 . '<a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>'
                 . '</p></div>';
 
-            $ok = envoyer_email($pdo, $d['email'], $sujet, $message, (string)($settings['email'] ?? ''), $pieces);
+            $motif = null;
+            $ok = envoyer_email($pdo, $d['email'], $sujet, $message, (string)($settings['email'] ?? ''), $pieces, $motif);
 
             $listePJ = implode(', ', array_map(fn($p) => $p['nom'], $pieces));
             $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,
@@ -134,8 +135,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
                            mb_substr($listePJ, 0, 190),
                            (int)($_SESSION['admin_id'] ?? 0) ?: null, (string)($_SESSION['admin_nom'] ?? ''),
                            $ok ? 'envoye' : 'echoue', $date]);
+            if (!$ok && $motif) {
+                $pdo->prepare('UPDATE emails_envoyes SET erreur=? WHERE reference=?')
+                    ->execute([mb_substr($motif, 0, 250), $reference]);
+            }
 
-            if ($ok) $envoyes++; else $erreurs[] = "L'envoi à " . e($d['email']) . " a échoué.";
+            if ($ok) { $envoyes++; }
+            else { $erreurs[] = "Échec vers " . e($d['email']) . " — " . e($motif ?: 'cause inconnue.'); }
         }
 
         foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }   // fichiers temporaires
@@ -170,8 +176,38 @@ $clients = $pdo->query("SELECT id, nom, entreprise, email, type_client FROM clie
                         WHERE email <> '' ORDER BY COALESCE(NULLIF(entreprise,''), nom)")->fetchAll();
 $historique = $pdo->query("SELECT * FROM emails_envoyes ORDER BY envoye_le DESC LIMIT 30")->fetchAll();
 
-admin_header('Messagerie', 'messages', $pdo, $settings);
+admin_header('E-mail', 'messages', $pdo, $settings);
 ?>
+
+<?php
+/* On rappelle toujours depuis quelle adresse partiront les messages : c'est la
+   première question qu'on se pose, et la première cause d'échec. */
+$expediteur = trim((string)($settings['email'] ?? ''));
+$serveur    = trim((string)($settings['smtp_hote'] ?? ''));
+$fournisseurs = ['smtp.gmail.com' => 'Gmail', 'smtp.hostinger.com' => 'Hostinger',
+                 'smtp.office365.com' => 'Outlook', 'ssl0.ovh.net' => 'OVH',
+                 'smtp.mail.yahoo.com' => 'Yahoo', 'smtp.zoho.com' => 'Zoho'];
+$nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
+?>
+
+<div class="panel glass expediteur">
+  <?php if ($serveur === '' || $expediteur === ''): ?>
+    <span class="ex-ico">⚠️</span>
+    <div class="ex-t">
+      <strong>Aucune adresse d'envoi configurée</strong>
+      <div>Vos messages ne peuvent pas partir. Renseignez votre compte dans
+        <a href="parametres.php?section=<?= substr(md5('Emails'), 0, 8) ?>">Paramètres → Emails</a>,
+        puis lancez le test d'envoi.</div>
+    </div>
+  <?php else: ?>
+    <span class="ex-ico">📤</span>
+    <div class="ex-t">
+      <strong>Vos messages partiront de <?= e($expediteur) ?></strong>
+      <div>Via <?= e($nomFournisseur) ?><?php if (!empty($settings['smtp_port'])): ?> — port <?= e($settings['smtp_port']) ?><?php endif; ?>.
+        <a href="parametres.php?section=<?= substr(md5('Emails'), 0, 8) ?>">Changer de compte ou tester l'envoi</a></div>
+    </div>
+  <?php endif; ?>
+</div>
 
 <?php if ($erreurs): ?>
 <div class="panel glass" style="margin-bottom:14px;border-left:4px solid #f87171">

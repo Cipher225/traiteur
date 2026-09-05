@@ -322,7 +322,7 @@ function all_modules(): array {
         'commandes_client' => ['Commandes clients', '📦', 'commandes-client.php', 'activite', false, false],
         'calendrier'   => ['Calendrier',     '📅', 'calendrier.php',   'activite', false, false],
         'recherche'    => ['Recherche', '🔍', 'recherche.php', 'activite', false, true],
-        'messages'     => ['Messagerie', '✉️', 'messages.php', 'echange', false, false],
+        'messages'     => ['E-mail', '✉️', 'messages.php', 'echange', false, false],
         'annuaire'     => ['Annuaire', '📇', 'annuaire.php', 'commercial', false, false],
         'clients'      => ['Clients',        '👥', 'clients.php',      'commercial', false, false],
         'paiements'    => ['Paiements en ligne', '💳', 'paiements.php', 'finances', false, false],

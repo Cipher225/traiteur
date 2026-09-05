@@ -112,6 +112,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $up->execute([$cle, mb_substr($valeur, 0, 2000)]);
         }
         flash('Paramètres enregistrés. Le site est à jour ✨');
+    } elseif (isset($_POST['tester_email'])) {
+        /* Envoi d'essai : c'est le seul moyen fiable de savoir si la
+           configuration fonctionne, et de connaître la cause exacte d'un refus. */
+        require_once __DIR__ . '/../config/mail.php';
+        $vers = trim($_POST['test_dest'] ?? '');
+        if ($vers === '' || !filter_var($vers, FILTER_VALIDATE_EMAIL)) {
+            flash('Indiquez une adresse valide pour le test.', 'error');
+        } else {
+            $motif = null;
+            $ok = envoyer_email($pdo, $vers, 'Test de configuration — ' . ($settings['nom_entreprise'] ?? ''),
+                '<p>Ce message confirme que votre configuration d\'envoi fonctionne.</p>'
+                . '<p>Vous pouvez maintenant écrire à vos clients depuis la rubrique <strong>E-mail</strong>.</p>',
+                '', [], $motif);
+            if ($ok) flash('Message de test envoyé à ' . e($vers) . '. Vérifiez la boîte de réception. ✅');
+            else     flash('Échec : ' . e($motif ?: 'cause inconnue.'), 'error');
+        }
+        header('Location: parametres.php?section=' . substr(md5('Emails'), 0, 8)); exit;
+
     } elseif (isset($_POST['maj_signature'])) {
         $up = $pdo->prepare('INSERT INTO settings (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)');
         // Le signataire tient maintenant dans un seul champ. Si un ancien "nom du signataire"
@@ -332,6 +350,19 @@ $avanceeOuverte = array_key_exists($sectionOuverte, $avancees) ? $sectionOuverte
     <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('zoho')">🟠 Zoho</button>
   </div>
   <div id="smtp-aide" class="smtp-aide"></div>
+
+  <!-- Essai de configuration : la seule façon sûre de vérifier que tout est bon -->
+  <form method="post" class="smtp-test">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <span class="st-lbl">🧪 Tester la configuration :</span>
+    <input class="input" type="email" name="test_dest" placeholder="votre@adresse.com"
+           value="<?= e($s['email'] ?? '') ?>" required>
+    <button class="btn btn-gold btn-sm" name="tester_email" value="1">Envoyer un test</button>
+  </form>
+  <p class="smtp-note">
+    Enregistrez d'abord vos réglages ci-dessous, puis lancez le test. En cas d'échec,
+    le message vous indiquera précisément ce qui bloque.
+  </p>
 
   <form method="post" class="form-grid">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">

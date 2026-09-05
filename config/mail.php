@@ -34,14 +34,20 @@ function email_config(PDO $pdo): array {
 /* $pieces : liste de fichiers à joindre, chacun sous la forme
    ['chemin' => '/chemin/vers/fichier.pdf', 'nom' => 'Facture.pdf'] */
 function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
-                       string $repondreA = '', array $pieces = []): bool {
+                       string $repondreA = '', array $pieces = [], ?string &$erreur = null): bool {
     $dest = trim($dest);
-    if ($dest === '' || !filter_var($dest, FILTER_VALIDATE_EMAIL)) return false;
+    if ($dest === '' || !filter_var($dest, FILTER_VALIDATE_EMAIL)) {
+        $erreur = "Adresse du destinataire invalide.";
+        return false;
+    }
 
     $cfg = email_config($pdo);
 
     // Les emails peuvent être désactivés globalement (réglage "emails_actifs")
-    if (isset($cfg['emails_actifs']) && $cfg['emails_actifs'] === '0') return false;
+    if (isset($cfg['emails_actifs']) && $cfg['emails_actifs'] === '0') {
+        $erreur = "L'envoi d'emails est désactivé dans Paramètres → Emails.";
+        return false;
+    }
 
     $expediteurNom  = $cfg['nom_entreprise'] ?? 'Groupe Helisce';
     $expediteurMail = $cfg['email'] ?? ($cfg['smtp_user'] ?? 'no-reply@localhost');
@@ -57,11 +63,19 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
             $cfg['smtp_user'],
             $cfg['smtp_pass'] ?? '',
             $expediteurMail, $expediteurNom,
-            $dest, $sujet, $corps, $repondreA, $pieces
+            $dest, $sujet, $corps, $repondreA, $pieces, $erreur
         );
     }
 
-    // --- Repli : mail() natif ---
+    /* --- Repli : mail() natif ---
+       Sans serveur d'envoi configuré, on tente la fonction du système. Elle
+       fonctionne rarement sur un hébergement mutualisé : mieux vaut le dire. */
+    if (empty($cfg['smtp_hote'])) {
+        $erreur = "Aucun serveur d'envoi configuré. Renseignez vos paramètres dans Paramètres → Emails.";
+    } elseif (empty($cfg['smtp_user'])) {
+        $erreur = "Identifiant de connexion manquant dans Paramètres → Emails.";
+    }
+
     $headers  = "MIME-Version: 1.0\r\n";
     $headers .= 'From: ' . email_encode($expediteurNom) . ' <' . $expediteurMail . ">\r\n";
     if ($repondreA) $headers .= 'Reply-To: ' . $repondreA . "\r\n";
@@ -115,11 +129,17 @@ function email_gabarit(string $sujet, string $contenu, string $entreprise, strin
    ---------------------------------------------------------------------------- */
 function smtp_envoyer(string $hote, int $port, string $secure, string $user, string $pass,
                       string $deMail, string $deNom, string $dest, string $sujet, string $corps,
-                      string $repondreA = '', array $pieces = []): bool {
+                      string $repondreA = '', array $pieces = [], ?string &$erreur = null): bool {
     $timeout = 15;
     $transport = ($secure === 'ssl' || $port === 465) ? 'ssl://' : '';
     $fp = @fsockopen($transport . $hote, $port, $errno, $errstr, $timeout);
-    if (!$fp) return false;
+    if (!$fp) {
+        $erreur = "Impossible de joindre $hote sur le port $port. "
+                . ($errstr ? "Réponse : $errstr. " : '')
+                . "Vérifiez le nom du serveur et le port, ou demandez à votre hébergeur "
+                . "si les connexions sortantes vers ce port sont autorisées.";
+        return false;
+    }
     stream_set_timeout($fp, $timeout);
 
     $lire = function() use ($fp) {
@@ -133,26 +153,41 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
         return in_array($code, (array)$codes, true);
     };
 
-    if (!$attendre(220)) { fclose($fp); return false; }
+    if (!$attendre(220)) { $erreur = "Le serveur $hote n'a pas répondu correctement à la connexion."; fclose($fp); return false; }
     $ecrire('EHLO ' . ($_SERVER['SERVER_NAME'] ?? 'localhost')); $lire();
 
     // STARTTLS si demandé (port 587)
     if ($transport === '' && $secure !== 'none') {
         $ecrire('STARTTLS');
-        if (!$attendre(220)) { fclose($fp); return false; }
-        if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) { fclose($fp); return false; }
+        if (!$attendre(220)) { $erreur = "Le serveur a refusé de passer en connexion sécurisée (STARTTLS). Essayez le port 465 en SSL."; fclose($fp); return false; }
+        if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) { $erreur = "La connexion sécurisée n'a pas pu être établie."; fclose($fp); return false; }
         $ecrire('EHLO ' . ($_SERVER['SERVER_NAME'] ?? 'localhost')); $lire();
     }
 
     // Authentification
-    $ecrire('AUTH LOGIN'); if (!$attendre(334)) { fclose($fp); return false; }
-    $ecrire(base64_encode($user)); if (!$attendre(334)) { fclose($fp); return false; }
-    $ecrire(base64_encode($pass)); if (!$attendre(235)) { fclose($fp); return false; }
+    $ecrire('AUTH LOGIN');
+    if (!$attendre(334)) { $erreur = "Le serveur a refusé la méthode d'authentification."; fclose($fp); return false; }
+    $ecrire(base64_encode($user));
+    if (!$attendre(334)) { $erreur = "Identifiant refusé : « $user »."; fclose($fp); return false; }
+    $ecrire(base64_encode($pass));
+    if (!$attendre(235)) {
+        $erreur = "Identifiant ou mot de passe refusé par $hote. "
+                . (stripos($hote, 'gmail') !== false
+                    ? "Avec Gmail, votre mot de passe habituel ne fonctionne PAS : il faut créer un « mot de passe d'application » de 16 caractères (Compte Google → Sécurité → Validation en deux étapes, puis Mots de passe des applications)."
+                    : "Vérifiez l'identifiant et le mot de passe.");
+        fclose($fp); return false;
+    }
 
     // Enveloppe
-    $ecrire('MAIL FROM:<' . $deMail . '>'); if (!$attendre(250)) { fclose($fp); return false; }
-    $ecrire('RCPT TO:<' . $dest . '>'); if (!$attendre([250,251])) { fclose($fp); return false; }
-    $ecrire('DATA'); if (!$attendre(354)) { fclose($fp); return false; }
+    $ecrire('MAIL FROM:<' . $deMail . '>');
+    if (!$attendre(250)) {
+        $erreur = "L'adresse d'expédition « $deMail » a été refusée. "
+                . "Chez la plupart des fournisseurs, elle doit être identique à l'identifiant de connexion.";
+        fclose($fp); return false;
+    }
+    $ecrire('RCPT TO:<' . $dest . '>');
+    if (!$attendre([250,251])) { $erreur = "L'adresse du destinataire « $dest » a été refusée."; fclose($fp); return false; }
+    $ecrire('DATA'); if (!$attendre(354)) { $erreur = "Le serveur a refusé de recevoir le message."; fclose($fp); return false; }
 
     // En-têtes + corps
     $entete  = 'From: ' . email_encode($deNom) . ' <' . $deMail . ">\r\n";
@@ -193,7 +228,7 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
     // Échapper les points en début de ligne (règle SMTP)
     $corpsSmtp = preg_replace('/^\./m', '..', $contenu);
     $ecrire($entete . "\r\n" . $corpsSmtp . "\r\n.");
-    if (!$attendre(250)) { fclose($fp); return false; }
+    if (!$attendre(250)) { $erreur = "Le message a été refusé au moment de la remise."; fclose($fp); return false; }
 
     $ecrire('QUIT'); fclose($fp);
     return true;
