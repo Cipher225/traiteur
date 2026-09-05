@@ -98,9 +98,9 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
     <div class="field"><label>Date du paiement</label><input class="input" type="date" name="date_paiement" value="<?= e($edit['date_paiement'] ?? date('Y-m-d')) ?>"></div>
     <div class="field full"><label>Activité / Description de la prestation</label><input class="input" name="activite" placeholder="ex : Buffet mariage, Cocktail…" value="<?= e($edit['activite'] ?? '') ?>"></div>
     <div class="field"><label>Date de l'événement</label><input class="input" type="date" name="date_evenement" value="<?= e($edit['date_evenement'] ?? '') ?>"></div>
-    <div class="field"><label>Durée (jours)</label>
+    <div class="field"><label>Nombre de jours</label>
       <input class="input" type="number" name="nb_jours" min="1" max="60" value="<?= (int)($edit['nb_jours'] ?? 1) ?: 1 ?>">
-      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une journée.</span>
+      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une seule journée.</span>
     </div>
     <div class="field"><label>Lieu de l'événement</label><input class="input" name="lieu" placeholder="ex : Cocody, Salle des fêtes…" value="<?= e($edit['lieu'] ?? '') ?>"></div>
     <div class="field"><label>Facture liée (facultatif)</label>

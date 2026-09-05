@@ -102,6 +102,19 @@ $BASE   = $hauteur - $mm(60);
 $signataire = (string)($settings['signataire_fonction'] ?? 'La Direction');
 $dossier    = realpath(__DIR__ . '/..') . '/uploads/';
 $fTampon    = !empty($settings['tampon_img'])    && is_file($dossier . $settings['tampon_img'])    ? $dossier . $settings['tampon_img']    : null;
+
+/* On applique au tampon un rendu naturel : légère inclinaison et encrage
+   irrégulier, comme un cachet réellement apposé. La graine dépend du document,
+   pour qu'un même document présente toujours le même tampon. */
+if ($fTampon) {
+    require_once __DIR__ . '/../config/tampon.php';
+    $tmp = __DIR__ . '/../uploads/tmp';
+    if (!is_dir($tmp)) @mkdir($tmp, 0775, true);
+    $fNaturel = $tmp . '/tampon-' . $type . '-' . $id . '.png';
+    if (tampon_naturel($fTampon, $fNaturel, crc32($type . $id . ($doc['numero'] ?? '')))) {
+        $fTampon = $fNaturel;
+    }
+}
 $fSignature = !empty($settings['signature_img']) && is_file($dossier . $settings['signature_img']) ? $dossier . $settings['signature_img'] : null;
 
 $canvas->page_script(function ($page, $pages, $c, $fm)
@@ -145,24 +158,27 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
 
     if ($fTampon) $c->image($fTampon, $xTampon, $yImg, $lTampon, $hTampon);
 
-    /* Le paraphe se place SOUS le tampon, sans le chevaucher : c'est l'ordre
-       d'un document signé puis cacheté. */
+    /* Le paraphe est tracé APRÈS le tampon et vient se poser sur sa partie
+       basse, en débordant légèrement : c'est ainsi qu'on signe un document
+       déjà cacheté. */
     if ($fSignature) {
-        $lSig = $mm(30);
+        $lSig = $mm(34);
         $c->image($fSignature, $xTampon + ($lTampon - $lSig) / 2,
-                  $yImg + $hTampon + $mm(1.5), $lSig, $mm(10));
+                  $yImg + $hTampon - $mm(4), $lSig, $mm(12));
     }
 });
 
 /* ---- Nom du fichier ---- */
 $prefixes = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
              'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie', 'rapport' => 'Document'];
-$nom = ($prefixes[$type] ?? 'Document') . '-' . preg_replace('/[^A-Za-z0-9\-]/', '-', $doc['numero']) . '.pdf';
+$numFichier = ($type === 'livraison') ? numero_bon_livraison($pdo, (int)$doc['id']) : $doc['numero'];
+$nom = ($prefixes[$type] ?? 'Document') . '-' . preg_replace('/[^A-Za-z0-9\-]/', '-', $numFichier) . '.pdf';
 
 /* Le PDF est produit AVANT de supprimer l'image du QR : le dessin de la
    dernière page a besoin du fichier jusqu'au bout. */
 $sortie = $dompdf->output();
 if ($qrFichier && is_file($qrFichier)) @unlink($qrFichier);
+if (!empty($fNaturel) && is_file($fNaturel)) @unlink($fNaturel);
 
 header('Content-Type: application/pdf');
 header('Content-Disposition: ' . (isset($_GET['dl']) ? 'attachment' : 'inline') . '; filename="' . $nom . '"');

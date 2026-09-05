@@ -57,8 +57,9 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
 
     $refs = [];
     if ($type === 'livraison') {
-        $refs[] = ['N° Bon', 'BL-' . $doc['numero']];
+        $refs[] = ['N° Bon', numero_bon_livraison($pdo, (int)$doc['id'])];
         $refs[] = ['Date', date('d/m/Y', strtotime($doc['date_emission']))];
+        $refs[] = ['Réf. facture', $doc['numero']];
 
     } elseif ($type === 'rapport') {
         $refs[] = ['N° Document', $doc['numero']];
@@ -125,6 +126,9 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   .lignes .des { font-weight: bold; color: #0a1f44; }
   .lignes .det { font-size: 7pt; color: #6e7685; }
 
+  .mention-liv { margin-top: 9px; padding: 8px 12px; font-size: 8.5pt; color: #41485a;
+                 background: #f6f8fb; border: .5pt solid #e3e8f0; border-radius: 5px; }
+
   /* Rapports et demandes */
   .titre-doc { font-size: 11pt; font-weight: bold; color: #0a1f44; text-align: center;
                margin: 12px 0 8px; letter-spacing: .3px; }
@@ -159,18 +163,40 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   /* Pied de page : répété automatiquement sur chaque page */
   .pied { position: fixed; bottom: -16mm; left: 0; right: 0; height: 16mm;
           border-top: 1.4pt solid #d4a526; padding-top: 4px; }
-  .pied td { font-size: 6.5pt; color: #6e7685; vertical-align: top; padding: 0 6px; line-height: 1.4; }
+  .pied td { font-size: 6.5pt; color: #6e7685; vertical-align: top; padding: 0 5px; line-height: 1.4; }
+  .pied .mention td { padding: 0; }
+  .pied .pastille { width: 16px; vertical-align: top; }
+  .pied .cercle { width: 9px; height: 9px; border: .7pt solid #d4a526; border-radius: 5px;
+                  margin-top: 2px; padding: 2px; }
+  .pied .point { width: 3px; height: 3px; background: #d4a526; border-radius: 2px; }
+  .pied .txt { padding-left: 3px; }
   .pied b { color: #0a1f44; font-size: 6.8pt; }
   .pied .emis { text-align: center; font-size: 5.8pt; color: #9aa3b4; font-style: italic; padding-top: 3px; }
 </style></head><body>
 
 <!-- ================= PIED DE PAGE (sur toutes les pages) ================= -->
+<?php
+/* Chaque mention légale est précédée d'une pastille dorée : un cercle fin avec
+   un point plein au centre, comme sur le papier à en-tête. */
+$site = preg_replace('#^https?://#', '', (string)($settings['site_url'] ?? ''));
+$colonnes = [
+    ['27%', '<b>' . e(mb_strtoupper(($settings['nom_entreprise'] ?? '') . ' ' . ($settings['forme_juridique'] ?? ''))) . '</b><br>' . e($settings['adresse'] ?? '')],
+    ['23%', e($settings['telephone'] ?? '') . (!empty($settings['whatsapp']) ? '<br>' . e($settings['whatsapp']) : '')],
+    ['27%', e($settings['email'] ?? '') . ($site ? '<br>' . e($site) : '')],
+    ['23%', (!empty($settings['rccm']) ? 'RC : ' . e($settings['rccm']) : '')
+          . (!empty($settings['ncc']) ? '<br>N° Contribuable : ' . e($settings['ncc']) : '')],
+];
+?>
 <div class="pied">
   <table><tr>
-    <td width="27%"><b><?= e($settings['nom_entreprise'] ?? '') ?></b><br><?= e($settings['adresse'] ?? '') ?></td>
-    <td width="23%"><?= e($settings['telephone'] ?? '') ?><br><?= e($settings['telephone2'] ?? '') ?></td>
-    <td width="27%"><?= e($settings['email'] ?? '') ?><br><?= e($settings['site_web'] ?? '') ?></td>
-    <td width="23%">RC : <?= e($settings['rccm'] ?? '') ?><br>N° CC : <?= e($settings['ncc'] ?? '') ?></td>
+    <?php foreach ($colonnes as [$largeur, $contenu]): ?>
+    <td width="<?= $largeur ?>">
+      <table class="mention"><tr>
+        <td width="16" class="pastille"><div class="cercle"><div class="point"></div></div></td>
+        <td class="txt"><?= $contenu ?></td>
+      </tr></table>
+    </td>
+    <?php endforeach; ?>
   </tr></table>
   <div class="emis">Document émis le <?= date('d/m/Y à H:i') ?></div>
 </div>
@@ -291,8 +317,15 @@ function pdf_blocs_infos(array $s, string $type, array $doc): array {
     if (trim((string)($doc['mode_paiement'] ?? '')) !== '') $l2[] = ['Mode de paiement', $doc['mode_paiement']];
     if (trim((string)($doc['activite'] ?? '')) !== '')      $l2[] = ['Activité', $doc['activite']];
     if (!empty($doc['date_evenement'])) {
-        $p = pdf_periode($doc);
-        $l2[] = [$p[0], $p[1]];
+        /* Le client souhaite lire la date de l'événement, puis sa durée sur une
+           ligne distincte : c'est plus clair qu'une période écrite d'un bloc. */
+        $mois = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        $deb = strtotime((string)$doc['date_evenement']);
+        $l2[] = ["Date de l'événement",
+                 date('j', $deb) . ' ' . $mois[(int)date('n', $deb)] . ' ' . date('Y', $deb)];
+        $nbj = max(1, (int)($doc['nb_jours'] ?? 1));
+        $l2[] = ['Nombre de jours', $nbj . ($nbj > 1 ? ' jours' : ' jour')];
     }
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu', $doc['lieu']];
     if ($type === 'livraison') $l2[] = ['Livreur', $s['nom_entreprise'] ?? ''];
@@ -382,11 +415,9 @@ function pdf_corps(string $type, array $doc, string $devise): string {
       </td>
     </tr></table>
     <?php else: ?>
-    <table class="bas"><tr><td class="lettres" style="padding-top:8px">
+    <div class="mention-liv">
       <?= e($GLOBALS['settings']['mention_livraison'] ?? 'Marchandises livrées et reçues en bon état.') ?>
-    </td><td width="22%" class="r">
-      <table class="tot"><tr class="grand"><td class="c"><?= count($doc['lignes']) ?> ARTICLES</td></tr></table>
-    </td></tr></table>
+    </div>
     <?php endif;
 
     return ob_get_clean();

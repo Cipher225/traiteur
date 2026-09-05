@@ -322,6 +322,7 @@ function all_modules(): array {
         'commandes_client' => ['Commandes clients', '📦', 'commandes-client.php', 'activite', false, false],
         'calendrier'   => ['Calendrier',     '📅', 'calendrier.php',   'activite', false, false],
         'recherche'    => ['Recherche', '🔍', 'recherche.php', 'activite', false, true],
+        'annuaire'     => ['Annuaire', '📇', 'annuaire.php', 'commercial', false, false],
         'clients'      => ['Clients',        '👥', 'clients.php',      'commercial', false, false],
         'paiements'    => ['Paiements en ligne', '💳', 'paiements.php', 'finances', false, false],
         'finances'     => ['Bilan financier', '📊', 'finances.php', 'finances', true, false],
@@ -503,6 +504,28 @@ function money($n, string $devise = 'FCFA'): string {
 }
 
 /* Génère un numéro de document séquentiel : PREFIXE-ANNÉE-0001 */
+/* Numéro du bon de livraison : attribué à la première édition, puis conservé.
+   Il suit sa propre séquence et ne dépend pas du numéro de facture. */
+function numero_bon_livraison(PDO $pdo, int $factureId): string {
+    $st = $pdo->prepare('SELECT bl_numero FROM factures WHERE id=?');
+    $st->execute([$factureId]);
+    $num = trim((string)$st->fetchColumn());
+    if ($num !== '') return $num;
+
+    $annee = date('Y');
+    $st = $pdo->prepare("SELECT bl_numero FROM factures WHERE bl_numero LIKE ?
+                         ORDER BY bl_numero DESC LIMIT 1");
+    $st->execute(['BL-' . $annee . '-%']);
+    $dernier = $st->fetchColumn();
+    $n = $dernier ? ((int)substr($dernier, -4)) + 1 : 1;
+    $num = sprintf('BL-%s-%04d', $annee, $n);
+
+    try {
+        $pdo->prepare('UPDATE factures SET bl_numero=? WHERE id=?')->execute([$num, $factureId]);
+    } catch (Throwable $e) { /* l'édition ne doit jamais échouer pour un numéro */ }
+    return $num;
+}
+
 function next_numero(PDO $pdo, string $table, string $prefixe): string {
     $annee = date('Y');
     $like = $prefixe . '-' . $annee . '-%';

@@ -878,3 +878,38 @@ WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.recu_id = r.id);
 -- Durée d'une activité : certaines prestations se déroulent sur plusieurs jours.
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS nb_jours SMALLINT DEFAULT 1 AFTER date_evenement;
 ALTER TABLE recus ADD COLUMN IF NOT EXISTS nb_jours SMALLINT DEFAULT 1 AFTER date_evenement;
+
+-- =====================================================================
+--  ANNUAIRE TÉLÉPHONIQUE
+--  Plusieurs interlocuteurs peuvent exister chez un même client : le
+--  gérant, la personne qui commande, celle qui règle les factures…
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS contacts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT DEFAULT NULL,
+  nom VARCHAR(120) NOT NULL,
+  poste VARCHAR(100) DEFAULT '',
+  telephone VARCHAR(40) DEFAULT '',
+  telephone2 VARCHAR(40) DEFAULT '',
+  whatsapp VARCHAR(40) DEFAULT '',
+  email VARCHAR(190) DEFAULT '',
+  adresse VARCHAR(255) DEFAULT '',
+  principal TINYINT(1) DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX (client_id), INDEX (nom),
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+);
+
+-- Reprise : chaque client déjà enregistré devient son contact principal.
+INSERT INTO contacts (client_id, nom, poste, telephone, email, adresse, principal)
+SELECT c.id, c.nom,
+       CASE WHEN COALESCE(c.entreprise,'') <> '' THEN 'Contact principal' ELSE '' END,
+       COALESCE(c.telephone,''), COALESCE(c.email,''), COALESCE(c.adresse,''), 1
+FROM clients c
+WHERE NOT EXISTS (SELECT 1 FROM contacts k WHERE k.client_id = c.id AND k.principal = 1);
+
+-- Numérotation propre au bon de livraison : il ne reprend plus le numéro de la
+-- facture. Le numéro est attribué à la première édition du bon, puis conservé.
+ALTER TABLE factures ADD COLUMN IF NOT EXISTS bl_numero VARCHAR(40) DEFAULT NULL;
