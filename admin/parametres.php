@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: parametres.php?section=wave'); exit;
     } elseif (isset($_POST['maj_email'])) {
         $up = $pdo->prepare('INSERT INTO settings (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)');
-        $champs = ['smtp_hote','smtp_port','smtp_user','smtp_secure','email'];
+        $champs = ['smtp_hote','smtp_port','smtp_user','smtp_secure','email','fournisseur_mail'];
         foreach ($champs as $k) { if (isset($_POST[$k])) $up->execute([$k, mb_substr(trim($_POST[$k]), 0, 200)]); }
         // Mot de passe SMTP : ne l'écraser que si un nouveau est saisi
         if (!empty($_POST['smtp_pass'])) $up->execute(['smtp_pass', trim($_POST['smtp_pass'])]);
@@ -315,7 +315,8 @@ $avanceeOuverte = array_key_exists($sectionOuverte, $avancees) ? $sectionOuverte
 <div class="panel glass">
   <h2>✉️ Emails automatiques (SMTP)</h2>
   <p style="color:var(--ink-dim);font-size:13.5px;margin-top:-6px">
-    Configurez un compte email pour l'envoi automatique (confirmations de devis, factures…).
+    Configurez le compte depuis lequel partiront vos messages. Aucun envoi n'est automatique :
+    vous rédigez et envoyez depuis la Messagerie.
     Choisissez votre fournisseur ci-dessous pour remplir automatiquement les réglages techniques,
     puis saisissez simplement votre adresse et votre mot de passe.
   </p>
@@ -327,6 +328,8 @@ $avanceeOuverte = array_key_exists($sectionOuverte, $avancees) ? $sectionOuverte
     <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('gmail')">📧 Gmail</button>
     <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('outlook')">📨 Outlook</button>
     <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('ovh')">🇫🇷 OVH</button>
+    <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('yahoo')">🟣 Yahoo</button>
+    <button type="button" class="btn btn-glass btn-sm" onclick="smtpPreset('zoho')">🟠 Zoho</button>
   </div>
   <div id="smtp-aide" class="smtp-aide"></div>
 
@@ -334,9 +337,10 @@ $avanceeOuverte = array_key_exists($sectionOuverte, $avancees) ? $sectionOuverte
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
     <label class="chk-line full" style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <input type="checkbox" name="emails_actifs" value="1" <?= (($s['emails_actifs'] ?? '1') !== '0') ? 'checked' : '' ?>>
-      <span>Activer l'envoi automatique d'emails</span>
+      <span>Autoriser l'envoi d'emails depuis l'application</span>
     </label>
     <div class="field"><label>Email expéditeur (adresse d'envoi)</label><input class="input" type="email" id="smtp_email" name="email" value="<?= e($s['email'] ?? '') ?>" placeholder="contact@mondomaine.com"></div>
+    <input type="hidden" id="fournisseur_mail" name="fournisseur_mail" value="<?= e($s['fournisseur_mail'] ?? '') ?>">
     <div class="field"><label>Serveur SMTP</label><input class="input" id="smtp_hote" name="smtp_hote" value="<?= e($s['smtp_hote'] ?? '') ?>" placeholder="smtp.hostinger.com"></div>
     <div class="field"><label>Port</label><input class="input" id="smtp_port" name="smtp_port" value="<?= e($s['smtp_port'] ?? '587') ?>" placeholder="587"></div>
     <div class="field"><label>Sécurité</label>
@@ -370,9 +374,15 @@ function smtpPreset(fournisseur) {
     outlook: { hote:'smtp.office365.com', port:'587', secure:'tls',
       aide:'Pour Outlook / Office 365 : utilisez votre adresse complète comme identifiant et votre mot de passe. Un mot de passe d\'application peut être requis si la double authentification est active.' },
     ovh: { hote:'ssl0.ovh.net', port:'587', secure:'tls',
-      aide:'Pour OVH : utilisez l\'adresse email créée dans votre espace client OVH comme identifiant, avec son mot de passe.' }
+      aide:'Pour OVH : utilisez l\'adresse email créée dans votre espace client OVH comme identifiant, avec son mot de passe.' },
+    yahoo: { hote:'smtp.mail.yahoo.com', port:'587', secure:'tls',
+      aide:'Pour Yahoo : créez un <strong>mot de passe d\'application</strong> (Compte Yahoo → Sécurité → Générer un mot de passe d\'application) et utilisez-le ici.' },
+    zoho: { hote:'smtp.zoho.com', port:'587', secure:'tls',
+      aide:'Pour Zoho Mail : utilisez votre adresse complète comme identifiant. Si la double authentification est active, générez un mot de passe spécifique à l\'application.' }
   };
   var p = presets[fournisseur]; if (!p) return;
+  var champFournisseur = document.getElementById('fournisseur_mail');
+  if (champFournisseur) champFournisseur.value = fournisseur;
   document.getElementById('smtp_hote').value = p.hote;
   document.getElementById('smtp_port').value = p.port;
   document.getElementById('smtp_secure').value = p.secure;

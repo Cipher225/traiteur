@@ -31,7 +31,10 @@ function email_config(PDO $pdo): array {
     return $cfg;
 }
 
-function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml, string $repondreA = ''): bool {
+/* $pieces : liste de fichiers à joindre, chacun sous la forme
+   ['chemin' => '/chemin/vers/fichier.pdf', 'nom' => 'Facture.pdf'] */
+function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
+                       string $repondreA = '', array $pieces = []): bool {
     $dest = trim($dest);
     if ($dest === '' || !filter_var($dest, FILTER_VALIDATE_EMAIL)) return false;
 
@@ -54,16 +57,34 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
             $cfg['smtp_user'],
             $cfg['smtp_pass'] ?? '',
             $expediteurMail, $expediteurNom,
-            $dest, $sujet, $corps, $repondreA
+            $dest, $sujet, $corps, $repondreA, $pieces
         );
     }
 
     // --- Repli : mail() natif ---
     $headers  = "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
     $headers .= 'From: ' . email_encode($expediteurNom) . ' <' . $expediteurMail . ">\r\n";
     if ($repondreA) $headers .= 'Reply-To: ' . $repondreA . "\r\n";
-    return @mail($dest, email_encode($sujet), $corps, $headers);
+
+    if ($pieces) {
+        $limite = '=_' . bin2hex(random_bytes(12));
+        $headers .= 'Content-Type: multipart/mixed; boundary="' . $limite . '"' . "\r\n";
+        $contenu  = "--$limite\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" . $corps . "\r\n";
+        foreach ($pieces as $p) {
+            if (empty($p['chemin']) || !is_file($p['chemin'])) continue;
+            $nom = $p['nom'] ?? basename($p['chemin']);
+            $contenu .= "--$limite\r\n";
+            $contenu .= 'Content-Type: application/octet-stream; name="' . $nom . '"' . "\r\n";
+            $contenu .= "Content-Transfer-Encoding: base64\r\n";
+            $contenu .= 'Content-Disposition: attachment; filename="' . $nom . '"' . "\r\n\r\n";
+            $contenu .= chunk_split(base64_encode(file_get_contents($p['chemin']))) . "\r\n";
+        }
+        $contenu .= "--$limite--";
+    } else {
+        $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $contenu = $corps;
+    }
+    return @mail($dest, email_encode($sujet), $contenu, $headers);
 }
 
 /* Encodage MIME d'un texte (accents dans le sujet / le nom) */
@@ -93,7 +114,8 @@ function email_gabarit(string $sujet, string $contenu, string $entreprise, strin
    Gère STARTTLS (port 587) et SSL direct (port 465).
    ---------------------------------------------------------------------------- */
 function smtp_envoyer(string $hote, int $port, string $secure, string $user, string $pass,
-                      string $deMail, string $deNom, string $dest, string $sujet, string $corps, string $repondreA = ''): bool {
+                      string $deMail, string $deNom, string $dest, string $sujet, string $corps,
+                      string $repondreA = '', array $pieces = []): bool {
     $timeout = 15;
     $transport = ($secure === 'ssl' || $port === 465) ? 'ssl://' : '';
     $fp = @fsockopen($transport . $hote, $port, $errno, $errstr, $timeout);
@@ -138,10 +160,38 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
     if ($repondreA) $entete .= 'Reply-To: ' . $repondreA . "\r\n";
     $entete .= 'Subject: ' . email_encode($sujet) . "\r\n";
     $entete .= "MIME-Version: 1.0\r\n";
-    $entete .= "Content-Type: text/html; charset=UTF-8\r\n";
     $entete .= 'Date: ' . date('r') . "\r\n";
+
+    /* Avec des fichiers joints, le message devient « multipart » : une partie
+       pour le texte, une partie par fichier. Sans fichier, on garde un message
+       HTML simple, plus léger. */
+    if ($pieces) {
+        $limite = '=_' . bin2hex(random_bytes(12));
+        $entete .= 'Content-Type: multipart/mixed; boundary="' . $limite . '"' . "\r\n";
+        $contenu  = "--$limite\r\n";
+        $contenu .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $contenu .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+        $contenu .= $corps . "\r\n";
+        foreach ($pieces as $p) {
+            if (empty($p['chemin']) || !is_file($p['chemin'])) continue;
+            $nom  = $p['nom'] ?? basename($p['chemin']);
+            $type = $p['type'] ?? (function_exists('mime_content_type')
+                        ? (mime_content_type($p['chemin']) ?: 'application/octet-stream')
+                        : 'application/octet-stream');
+            $contenu .= "--$limite\r\n";
+            $contenu .= 'Content-Type: ' . $type . '; name="' . $nom . '"' . "\r\n";
+            $contenu .= "Content-Transfer-Encoding: base64\r\n";
+            $contenu .= 'Content-Disposition: attachment; filename="' . $nom . '"' . "\r\n\r\n";
+            $contenu .= chunk_split(base64_encode(file_get_contents($p['chemin']))) . "\r\n";
+        }
+        $contenu .= "--$limite--";
+    } else {
+        $entete .= "Content-Type: text/html; charset=UTF-8\r\n";
+        $contenu = $corps;
+    }
+
     // Échapper les points en début de ligne (règle SMTP)
-    $corpsSmtp = preg_replace('/^\./m', '..', $corps);
+    $corpsSmtp = preg_replace('/^\./m', '..', $contenu);
     $ecrire($entete . "\r\n" . $corpsSmtp . "\r\n.");
     if (!$attendre(250)) { fclose($fp); return false; }
 

@@ -343,3 +343,6 @@ CREATE TABLE IF NOT EXISTS emails_envoyes (
   INDEX (reference), INDEX (destinataire), INDEX (envoye_le),
   FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
 );
+
+-- Fournisseur de messagerie retenu (Gmail, Hostinger, Outlook…)
+INSERT IGNORE INTO settings (cle, valeur) VALUES ('fournisseur_mail','');

@@ -70,7 +70,9 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
         $refs[] = ['Période', moisfr((string)$doc['periode'])];
     } else {
         $refs[] = ['N° ' . ucfirst($type === 'proforma' ? 'proforma' : 'facture'), $doc['numero']];
-        $refs[] = ['Date', date('d/m/Y', strtotime($doc['date_emission']))];
+        /* Selon le type, la date porte un nom différent : on prend celle qui existe. */
+        $quand = $doc['date_emission'] ?? $doc['date_paiement'] ?? $doc['created_at'] ?? 'now';
+        $refs[] = ['Date', date('d/m/Y', strtotime((string)$quand))];
         if (!empty($doc['date_echeance'])) $refs[] = ['Échéance', date('d/m/Y', strtotime($doc['date_echeance']))];
     }
 
@@ -358,6 +360,35 @@ function pdf_corps(string $type, array $doc, string $devise): string {
 
     if ($type === 'fiche') { echo pdf_corps_paie($doc, $devise); return ob_get_clean(); }
 
+    if ($type === 'recu') {
+        /* Un reçu porte un montant unique, pas un tableau de lignes. */
+        $montant = (float)($doc['montant'] ?? 0);
+        $entree  = ($doc['type'] ?? 'entree') === 'entree';
+        ob_start(); ?>
+        <table class="lignes">
+          <thead><tr><th style="text-align:left">Motif</th><th width="30%" class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
+          <tbody><tr>
+            <td><span class="des"><?= e($doc['motif'] ?? ($entree ? 'Encaissement' : 'Décaissement')) ?></span></td>
+            <td class="r"><b><?= nf($montant) ?></b></td>
+          </tr></tbody>
+        </table>
+        <table class="bas"><tr>
+          <td width="52%" class="lettres">
+            <?= $entree ? 'Reçu du client la somme de :' : 'Versé la somme de :' ?><br>
+            <span class="mt"><?= e(ucfirst_fr(montant_lettres((int)$montant)) . ' ' . $devise) ?></span>
+          </td>
+          <td width="48%">
+            <table class="tot"><tr class="grand">
+              <td><?= $entree ? 'MONTANT REÇU' : 'MONTANT VERSÉ' ?></td>
+              <td class="r"><?= nf($montant) ?> <?= e($devise) ?></td>
+            </tr></table>
+          </td>
+        </tr></table>
+        <?php
+        return ob_get_clean();
+    }
+
+
     if ($type === 'rapport') {
         /* Le contenu est du texte mis en forme dans l'éditeur : on le reprend tel
            quel, après nettoyage, dans un cadre de lecture confortable. */
@@ -379,7 +410,7 @@ function pdf_corps(string $type, array $doc, string $devise): string {
         <?php endif; ?>
       </tr></thead>
       <tbody>
-      <?php $n = 0; foreach ($doc['lignes'] as $l): $n++;
+      <?php $n = 0; foreach (($doc['lignes'] ?? []) as $l): $n++;
         $det = $estLivraison ? [] : array_values(array_filter(array_map('trim',
                preg_split('/\r?\n/', (string)($l['details'] ?? ''))))); ?>
         <tr class="<?= $n % 2 === 0 ? 'paire' : '' ?>">

@@ -35,10 +35,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
             ];
         }
     }
-    foreach (preg_split('/[\s,;]+/', (string)($_POST['manuels'] ?? '')) as $adr) {
+    foreach ((array)($_POST['manuels_liste'] ?? []) as $adr) {
         $adr = trim($adr);
         if ($adr !== '' && filter_var($adr, FILTER_VALIDATE_EMAIL)) {
             $liste[mb_strtolower($adr)] = ['email' => $adr, 'nom' => '', 'client_id' => null];
+        }
+    }
+
+    /* ---- Pièces jointes ----
+       Deux origines : les documents de l'application, régénérés en PDF au
+       moment de l'envoi, et les fichiers choisis sur l'ordinateur ou le
+       téléphone. */
+    $pieces = [];
+    $tempo  = [];
+    $dossierPJ = __DIR__ . '/../uploads/tmp';
+    if (!is_dir($dossierPJ)) @mkdir($dossierPJ, 0775, true);
+
+    foreach ((array)($_POST['docs'] ?? []) as $ref) {
+        if (!preg_match('/^(facture|proforma|livraison|recu|fiche):(\d+)$/', (string)$ref, $m)) continue;
+        $chemin = $dossierPJ . '/pj-' . $m[1] . '-' . $m[2] . '-' . bin2hex(random_bytes(3)) . '.pdf';
+        $cmdType = $m[1]; $cmdId = (int)$m[2];
+
+        /* On appelle le générateur de PDF en interne : le client reçoit
+           exactement le document qu'il verrait à l'écran. */
+        $_GET['type'] = $cmdType; $_GET['id'] = (string)$cmdId;
+        ob_start();
+        try { include __DIR__ . '/pdf-piece.php'; } catch (Throwable $e) {}
+        $pdf = ob_get_clean();
+
+        if ($pdf !== '' && strncmp($pdf, '%PDF', 4) === 0) {
+            file_put_contents($chemin, $pdf);
+            $noms = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
+                     'recu' => 'Recu', 'fiche' => 'Bulletin'];
+            $pieces[] = ['chemin' => $chemin, 'nom' => ($noms[$cmdType] ?? 'Document') . '-' . $cmdId . '.pdf',
+                         'type' => 'application/pdf'];
+            $tempo[] = $chemin;
+        }
+    }
+
+    /* Fichiers envoyés depuis l'appareil */
+    if (!empty($_FILES['fichiers']['name'][0])) {
+        $autorises = ['pdf','jpg','jpeg','png','webp','doc','docx','xls','xlsx','txt','zip'];
+        foreach ($_FILES['fichiers']['name'] as $i => $nom) {
+            if ($_FILES['fichiers']['error'][$i] !== UPLOAD_ERR_OK) continue;
+            $ext = strtolower(pathinfo($nom, PATHINFO_EXTENSION));
+            if (!in_array($ext, $autorises, true)) {
+                $erreurs[] = 'Format non autorisé : ' . e($nom); continue;
+            }
+            if ($_FILES['fichiers']['size'][$i] > 8 * 1024 * 1024) {
+                $erreurs[] = 'Fichier trop lourd (8 Mo maximum) : ' . e($nom); continue;
+            }
+            $dest = $dossierPJ . '/pj-' . bin2hex(random_bytes(5)) . '.' . $ext;
+            if (move_uploaded_file($_FILES['fichiers']['tmp_name'][$i], $dest)) {
+                $pieces[] = ['chemin' => $dest, 'nom' => preg_replace('/[^\w.\-]/u', '_', $nom)];
+                $tempo[] = $dest;
+            }
         }
     }
 
@@ -73,22 +124,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
                 . '<a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>'
                 . '</p></div>';
 
-            $ok = envoyer_email($pdo, $d['email'], $sujet, $message, (string)($settings['email'] ?? ''));
+            $ok = envoyer_email($pdo, $d['email'], $sujet, $message, (string)($settings['email'] ?? ''), $pieces);
 
+            $listePJ = implode(', ', array_map(fn($p) => $p['nom'], $pieces));
             $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,
-                           client_id, sujet, corps, envoye_par, envoye_par_nom, statut, envoye_le)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+                           client_id, sujet, corps, piece_jointe, envoye_par, envoye_par_nom, statut, envoye_le)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([$reference, $empreinte, $d['email'], $d['nom'], $d['client_id'], $sujet, $corps,
+                           mb_substr($listePJ, 0, 190),
                            (int)($_SESSION['admin_id'] ?? 0) ?: null, (string)($_SESSION['admin_nom'] ?? ''),
                            $ok ? 'envoye' : 'echoue', $date]);
 
             if ($ok) $envoyes++; else $erreurs[] = "L'envoi à " . e($d['email']) . " a échoué.";
         }
 
+        foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }   // fichiers temporaires
         journaliser($pdo, 'email', 'message', null, $envoyes . ' message(s) — ' . mb_substr($sujet, 0, 80));
         if ($envoyes) flash($envoyes . ' message' . ($envoyes > 1 ? 's envoyés' : ' envoyé') . '. ✉️');
         if (!$erreurs) { header('Location: messages.php'); exit; }
     }
+}
+
+/* ---- Historique : l'administrateur peut le purger ---- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger_historique'])) {
+    csrf_check();
+    if (!is_admin()) { flash('Action réservée à l\'administrateur.', 'error'); }
+    else {
+        $quoi = $_POST['purger_historique'];
+        if ($quoi === 'tout') {
+            $n = (int)$pdo->query('SELECT COUNT(*) FROM emails_envoyes')->fetchColumn();
+            $pdo->exec('DELETE FROM emails_envoyes');
+            journaliser($pdo, 'purge', 'messagerie', null, $n . ' message(s) effacé(s) de l\'historique');
+            flash($n . ' message(s) effacé(s) de l\'historique.');
+        } else {
+            $id = (int)$quoi;
+            $pdo->prepare('DELETE FROM emails_envoyes WHERE id=?')->execute([$id]);
+            journaliser($pdo, 'purge', 'messagerie', $id, 'Message retiré de l\'historique');
+            flash('Message retiré de l\'historique.');
+        }
+    }
+    header('Location: messages.php'); exit;
 }
 
 $clients = $pdo->query("SELECT id, nom, entreprise, email, type_client FROM clients
@@ -104,40 +179,71 @@ admin_header('Messagerie', 'messages', $pdo, $settings);
 </div>
 <?php endif; ?>
 
-<form method="post" id="form-mail">
+<form method="post" id="form-mail" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
 
 <div class="mail-duo">
   <!-- ============ Destinataires ============ -->
   <div class="panel glass">
     <h2>👥 Destinataires</h2>
-    <p class="mail-aide">Cochez vos clients, ou saisissez des adresses libres. Rien ne part sans votre validation.</p>
+    <p class="mail-aide">Choisissez un client dans la liste, ou saisissez une adresse. Rien ne part sans votre validation.</p>
 
-    <input class="input" id="filtre-clients" placeholder="Filtrer la liste…" style="margin-bottom:9px">
-
-    <div class="mail-clients" id="liste-clients">
-      <?php foreach ($clients as $c):
-        $nom = trim((string)$c['entreprise']) !== '' ? $c['entreprise'] : $c['nom']; ?>
-      <label class="mc-l" data-cle="<?= e(mb_strtolower($nom . ' ' . $c['email'])) ?>">
-        <input type="checkbox" name="clients[]" value="<?= (int)$c['id'] ?>">
-        <span class="mc-ic"><?= ($c['type_client'] ?? '') === 'entreprise' ? '🏢' : '👤' ?></span>
-        <span class="mc-t"><span class="mc-n"><?= e($nom) ?></span><span class="mc-e"><?= e($c['email']) ?></span></span>
-      </label>
-      <?php endforeach; ?>
-      <?php if (!$clients): ?><div class="mail-vide">Aucun client n'a d'adresse email enregistrée.</div><?php endif; ?>
-    </div>
-
-    <div style="display:flex;gap:8px;margin:9px 0">
-      <button type="button" class="btn btn-glass btn-sm" id="tout-cocher">Tout cocher</button>
-      <button type="button" class="btn btn-glass btn-sm" id="tout-decocher">Tout décocher</button>
-      <span class="mail-compte" id="compte-sel">0 sélectionné</span>
+    <div class="field">
+      <label>Client</label>
+      <div class="mail-ajout">
+        <select class="input" id="sel-client">
+          <option value="">— Choisir un client —</option>
+          <?php foreach ($clients as $cl):
+            $nom = trim((string)$cl['entreprise']) !== '' ? $cl['entreprise'] : $cl['nom']; ?>
+          <option value="<?= (int)$cl['id'] ?>" data-email="<?= e($cl['email']) ?>" data-nom="<?= e($nom) ?>">
+            <?= ($cl['type_client'] ?? '') === 'entreprise' ? '🏢 ' : '👤 ' ?><?= e($nom) ?> — <?= e($cl['email']) ?>
+          </option>
+          <?php endforeach; ?>
+        </select>
+        <button type="button" class="btn btn-glass" id="add-client">Ajouter</button>
+      </div>
     </div>
 
     <div class="field">
-      <label>Adresses libres</label>
-      <textarea class="input" name="manuels" rows="2" placeholder="adresse@exemple.ci, autre@exemple.ci"><?= e($_POST['manuels'] ?? '') ?></textarea>
-      <span class="mail-note">Séparez par une virgule, un point-virgule ou un retour à la ligne.</span>
+      <label>Autre adresse</label>
+      <div class="mail-ajout">
+        <input class="input" type="email" id="mail-libre" placeholder="adresse@exemple.ci">
+        <button type="button" class="btn btn-glass" id="add-libre">Ajouter</button>
+      </div>
     </div>
+
+    <label style="display:block;margin:10px 0 6px;font-size:12.5px;font-weight:600;color:var(--ink-dim)">
+      Destinataires retenus <span class="mail-compte" id="compte-sel">0</span></label>
+    <div class="mail-jetons" id="jetons-dest">
+      <span class="mj-vide">Aucun destinataire pour l'instant.</span>
+    </div>
+    <div id="champs-dest"></div>
+
+    <!-- ============ Pièces jointes ============ -->
+    <h2 style="margin-top:20px">📎 Pièces jointes</h2>
+    <p class="mail-aide">Les documents du client sélectionné, ou un fichier de votre appareil.</p>
+
+    <div class="field">
+      <label>Document du client</label>
+      <div class="mail-ajout">
+        <select class="input" id="sel-doc" disabled>
+          <option value="">— Choisissez d'abord un client —</option>
+        </select>
+        <button type="button" class="btn btn-glass" id="add-doc">Joindre</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Fichier de l'ordinateur ou du téléphone</label>
+      <input class="input" type="file" name="fichiers[]" id="fichiers" multiple
+             accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt,.zip">
+      <span class="mail-note">8 Mo maximum par fichier.</span>
+    </div>
+
+    <div class="mail-jetons" id="jetons-pj">
+      <span class="mj-vide">Aucune pièce jointe.</span>
+    </div>
+    <div id="champs-pj"></div>
   </div>
 
   <!-- ============ Signature ============ -->
@@ -209,20 +315,34 @@ admin_header('Messagerie', 'messages', $pdo, $settings);
 <?php if ($historique): ?>
 <div class="panel glass" style="margin-top:14px">
   <h2>📜 Messages envoyés</h2>
+  <?php if (is_admin()): ?>
+  <form method="post" style="margin:-40px 0 12px;display:flex;justify-content:flex-end"
+        onsubmit="return confirm('Effacer tout l\'historique des messages envoyés ? Cette action est définitive.')">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <button class="btn btn-glass btn-sm" name="purger_historique" value="tout">🧹 Vider l'historique</button>
+  </form>
+  <?php endif; ?>
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>Date</th><th>Destinataire</th><th>Objet</th><th>Référence</th><th>Par</th><th>État</th></tr></thead>
+      <thead><tr><th>Date</th><th>Destinataire</th><th>Objet</th><th>Pièces</th><th>Référence</th><th>État</th><th></th></tr></thead>
       <tbody>
       <?php foreach ($historique as $h): ?>
         <tr>
           <td style="white-space:nowrap"><?= date('d/m/Y H:i', strtotime($h['envoye_le'])) ?></td>
           <td><?= e($h['destinataire_nom'] ?: $h['destinataire']) ?>
             <div style="font-size:11px;color:var(--ink-faint)"><?= e($h['destinataire']) ?></div></td>
-          <td style="font-size:12.5px"><?= e(mb_substr($h['sujet'], 0, 60)) ?></td>
+          <td style="font-size:12.5px"><?= e(mb_substr($h['sujet'], 0, 50)) ?></td>
+          <td style="font-size:11.5px;color:var(--ink-faint)">
+            <?= trim((string)$h['piece_jointe']) !== '' ? '📎 ' . e(mb_substr($h['piece_jointe'], 0, 40)) : '—' ?></td>
           <td style="font-family:monospace;font-size:11.5px"><?= e($h['reference']) ?></td>
-          <td style="font-size:12px"><?= e($h['envoye_par_nom']) ?></td>
           <td><span class="etat-pay <?= $h['statut'] === 'envoye' ? 'ep-paye' : 'ep-echoue' ?>">
             <?= $h['statut'] === 'envoye' ? 'Envoyé' : 'Échec' ?></span></td>
+          <td><?php if (is_admin()): ?>
+            <form method="post" style="display:inline" onsubmit="return confirm('Retirer ce message de l\'historique ?')">
+              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+              <button class="btn btn-danger btn-sm" name="purger_historique" value="<?= (int)$h['id'] ?>">✕</button>
+            </form>
+          <?php endif; ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
@@ -269,45 +389,140 @@ admin_header('Messagerie', 'messages', $pdo, $settings);
     if (noms[i]) ed.innerHTML = modeles[noms[i]];
   });
 
-  /* Filtre de la liste des clients */
-  var filtre = document.getElementById('filtre-clients');
-  filtre.addEventListener('input', function () {
-    var v = this.value.toLowerCase();
-    document.querySelectorAll('.mc-l').forEach(function (l) {
-      l.style.display = l.dataset.cle.indexOf(v) >= 0 ? '' : 'none';
-    });
+  /* ---------------------------------------------------------------
+     Destinataires et pièces jointes sous forme de jetons : on voit
+     d'un coup d'œil qui recevra le message et ce qu'il contiendra.
+     --------------------------------------------------------------- */
+  var dests = [];   // { email, nom, client }
+  var pjs   = [];   // { ref, libelle }
+
+  function dessinerJetons() {
+    var zd = document.getElementById('jetons-dest');
+    var cd = document.getElementById('champs-dest');
+    zd.innerHTML = ''; cd.innerHTML = '';
+    if (!dests.length) {
+      zd.innerHTML = '<span class="mj-vide">Aucun destinataire pour l\'instant.</span>';
+    } else {
+      dests.forEach(function (d, i) {
+        var j = document.createElement('span');
+        j.className = 'mj';
+        j.innerHTML = '<b>' + (d.nom || d.email) + '</b>' + (d.nom ? '<i>' + d.email + '</i>' : '') +
+                      '<button type="button" data-i="' + i + '" class="mj-x">✕</button>';
+        zd.appendChild(j);
+        var h = document.createElement('input');
+        h.type = 'hidden'; h.name = d.client ? 'clients[]' : 'manuels_liste[]';
+        h.value = d.client ? d.client : d.email;
+        cd.appendChild(h);
+      });
+    }
+    document.getElementById('compte-sel').textContent = dests.length;
+
+    var zp = document.getElementById('jetons-pj');
+    var cp = document.getElementById('champs-pj');
+    zp.innerHTML = ''; cp.innerHTML = '';
+    if (!pjs.length) {
+      zp.innerHTML = '<span class="mj-vide">Aucune pièce jointe.</span>';
+    } else {
+      pjs.forEach(function (p, i) {
+        var j = document.createElement('span');
+        j.className = 'mj mj-pj';
+        j.innerHTML = '📄 <b>' + p.libelle + '</b><button type="button" data-p="' + i + '" class="mj-x">✕</button>';
+        zp.appendChild(j);
+        var h = document.createElement('input');
+        h.type = 'hidden'; h.name = 'docs[]'; h.value = p.ref;
+        cp.appendChild(h);
+      });
+    }
+
+    var n = dests.length;
+    document.getElementById('resume-envoi').textContent =
+      n ? 'Le message partira à ' + n + ' destinataire(s).' : 'Aucun destinataire choisi.';
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('mj-x')) return;
+    if (e.target.dataset.i !== undefined) dests.splice(+e.target.dataset.i, 1);
+    if (e.target.dataset.p !== undefined) pjs.splice(+e.target.dataset.p, 1);
+    dessinerJetons();
   });
 
-  function cases() { return Array.prototype.slice.call(document.querySelectorAll('input[name="clients[]"]')); }
-  function majCompte() {
-    var n = cases().filter(function (c) { return c.checked; }).length;
-    document.getElementById('compte-sel').textContent = n + ' sélectionné' + (n > 1 ? 's' : '');
-    var m = document.querySelector('textarea[name="manuels"]').value.trim();
-    var libres = m ? m.split(/[\s,;]+/).filter(Boolean).length : 0;
-    document.getElementById('resume-envoi').textContent =
-      (n + libres) > 0 ? 'Le message partira à ' + (n + libres) + ' destinataire(s).' : 'Aucun destinataire choisi.';
-  }
-  document.addEventListener('change', function (e) {
-    if (e.target.name === 'clients[]') majCompte();
+  var selClient = document.getElementById('sel-client');
+
+  document.getElementById('add-client').addEventListener('click', function () {
+    var o = selClient.options[selClient.selectedIndex];
+    if (!o || !o.value) return;
+    if (dests.some(function (d) { return d.email === o.dataset.email; })) return;
+    dests.push({ email: o.dataset.email, nom: o.dataset.nom, client: o.value });
+    dessinerJetons();
   });
-  document.querySelector('textarea[name="manuels"]').addEventListener('input', majCompte);
-  document.getElementById('tout-cocher').addEventListener('click', function () {
-    cases().forEach(function (c) { if (c.closest('.mc-l').style.display !== 'none') c.checked = true; }); majCompte();
+
+  document.getElementById('add-libre').addEventListener('click', function () {
+    var champ = document.getElementById('mail-libre');
+    var v = champ.value.trim();
+    if (!v) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { alert('Adresse email invalide.'); return; }
+    if (!dests.some(function (d) { return d.email === v; })) dests.push({ email: v, nom: '', client: null });
+    champ.value = '';
+    dessinerJetons();
   });
-  document.getElementById('tout-decocher').addEventListener('click', function () {
-    cases().forEach(function (c) { c.checked = false; }); majCompte();
+  document.getElementById('mail-libre').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('add-libre').click(); }
   });
-  majCompte();
+
+  /* Documents du client : chargés dès qu'on le choisit. */
+  var selDoc = document.getElementById('sel-doc');
+  selClient.addEventListener('change', function () {
+    var cid = this.value;
+    selDoc.innerHTML = '<option value="">Chargement…</option>';
+    selDoc.disabled = true;
+    if (!cid) { selDoc.innerHTML = '<option value="">— Choisissez d\'abord un client —</option>'; return; }
+
+    fetch('documents-client.php?client=' + encodeURIComponent(cid), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (liste) {
+        if (!liste.length) { selDoc.innerHTML = '<option value="">Aucun document pour ce client</option>'; return; }
+        selDoc.innerHTML = '<option value="">— Choisir un document —</option>';
+        liste.forEach(function (d) {
+          var o = document.createElement('option');
+          o.value = d.type + ':' + d.id;
+          o.textContent = d.libelle;
+          selDoc.appendChild(o);
+        });
+        selDoc.disabled = false;
+      })
+      .catch(function () { selDoc.innerHTML = '<option value="">Chargement impossible</option>'; });
+  });
+
+  document.getElementById('add-doc').addEventListener('click', function () {
+    var o = selDoc.options[selDoc.selectedIndex];
+    if (!o || !o.value) return;
+    if (pjs.some(function (p) { return p.ref === o.value; })) return;
+    pjs.push({ ref: o.value, libelle: o.textContent.trim() });
+    dessinerJetons();
+  });
+
+  /* Fichiers de l'appareil : on affiche simplement leur nom. */
+  document.getElementById('fichiers').addEventListener('change', function () {
+    var noms = Array.prototype.map.call(this.files, function (f) { return f.name; });
+    var info = document.getElementById('jetons-pj');
+    if (noms.length) {
+      var s = document.createElement('span');
+      s.className = 'mj mj-fichier';
+      s.innerHTML = '📎 <b>' + noms.join(', ') + '</b>';
+      info.appendChild(s);
+    }
+  });
+
+  dessinerJetons();
 
   /* Confirmation avant envoi : un message parti ne se rattrape pas. */
   document.getElementById('form-mail').addEventListener('submit', function (e) {
     champ.value = ed.innerHTML;
-    var n = cases().filter(function (c) { return c.checked; }).length;
-    var m = document.querySelector('textarea[name="manuels"]').value.trim();
-    var libres = m ? m.split(/[\s,;]+/).filter(Boolean).length : 0;
-    var total = n + libres;
-    if (total === 0) { alert('Choisissez au moins un destinataire.'); e.preventDefault(); return; }
-    if (!confirm('Envoyer ce message à ' + total + ' destinataire(s) ?')) e.preventDefault();
+    if (!dests.length) { alert('Choisissez au moins un destinataire.'); e.preventDefault(); return; }
+    var pj = pjs.length + document.getElementById('fichiers').files.length;
+    var texte = 'Envoyer ce message à ' + dests.length + ' destinataire(s)'
+              + (pj ? ' avec ' + pj + ' pièce(s) jointe(s)' : '') + ' ?';
+    if (!confirm(texte)) e.preventDefault();
   });
 })();
 </script>
