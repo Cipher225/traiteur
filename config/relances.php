@@ -116,11 +116,15 @@ function envoyer_relance(PDO $pdo, array $f, array $settings, string $origine = 
 }
 
 /* ---------- Passage automatique (appelé chaque jour) ---------- */
+/* Les relances ne partent JAMAIS toutes seules : rien ne s'envoie sans une
+   action explicite de votre part. Cette fonction n'est conservée que pour un
+   éventuel usage manuel groupé depuis la page Impayés. */
 function relances_automatiques(PDO $pdo): array {
+    return ['actif' => false, 'envoyees' => 0];
+}
+
+function relances_groupees(PDO $pdo): array {
     $settings = get_settings($pdo);
-    if (($settings['relances_actives'] ?? '0') !== '1') {
-        return ['actif' => false, 'envoyees' => 0];
-    }
     $n = 0;
     foreach (factures_impayees($pdo) as $f) {
         if (!$f['relancable']) continue;

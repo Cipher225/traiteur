@@ -78,31 +78,12 @@ admin_header('Relance des impayés', 'relances', $pdo, $settings);
 </div>
 
 <div class="panel glass" style="margin-bottom:14px">
-  <h2>✉️ Relances automatiques</h2>
-  <div class="pay-etat">
-    <span class="pay-pastille <?= $actives ? 'on' : 'off' ?>"></span>
-    <div>
-      <strong><?= $actives ? 'Activées' : 'Désactivées' ?></strong>
-      <div style="font-size:12.5px;color:var(--ink-faint)">
-        <?php if ($actives): ?>
-          Chaque nuit, les factures échues reçoivent un rappel : <?php
-          echo implode(' · ', array_map(fn($n, $d) => 'niveau ' . $n . ' à ' . $d['jours'] . ' j',
-              array_keys(relance_niveaux()), relance_niveaux())); ?>.
-          Un même client n'est jamais relancé plus d'une fois tous les <?= RELANCE_INTERVALLE ?> jours.
-        <?php else: ?>
-          Aucun rappel n'est envoyé automatiquement. Vous pouvez relancer manuellement ci-dessous.
-        <?php endif; ?>
-      </div>
-    </div>
-    <?php if (is_admin()): ?>
-    <form method="post" style="margin-left:auto">
-      <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-      <button class="btn <?= $actives ? 'btn-glass' : 'btn-gold' ?>" name="bascule" value="<?= $actives ? '0' : '1' ?>">
-        <?= $actives ? '⏸️ Désactiver' : '▶️ Activer' ?>
-      </button>
-    </form>
-    <?php endif; ?>
-  </div>
+  <h2>✉️ Relance des impayés</h2>
+  <p style="color:var(--ink-faint);font-size:13.5px;margin:-8px 0 0">
+    Aucun message ne part automatiquement. Vous choisissez qui relancer et quand :
+    utilisez le bouton ✉️ en face d'une facture, ou « Tout relancer » pour l'ensemble
+    des factures échues.
+  </p>
   <?php if (empty($settings['smtp_hote'])): ?>
   <p style="margin:12px 0 0;font-size:12.5px;color:#f0b429">
     ⚠️ Aucun serveur d'envoi configuré : les emails ne partiront pas.

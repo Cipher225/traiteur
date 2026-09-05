@@ -2292,3 +2292,52 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
   .an-info{flex:1 1 100%}
   .an-coord{flex:1 1 auto}
 }
+
+/* ============================================================
+   MESSAGERIE SORTANTE
+   ============================================================ */
+.mail-duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mail-aide{color:var(--ink-faint);font-size:12.5px;margin:-8px 0 12px;line-height:1.55}
+.mail-note{font-size:11.5px;color:var(--ink-faint)}
+.mail-compte{font-size:12px;color:var(--gold);font-weight:600;margin-left:auto;align-self:center}
+.mail-clients{max-height:250px;overflow-y:auto;border-radius:12px;padding:5px;
+  background:rgba(0,0,0,.14);border:1px solid var(--glass-border)}
+.mc-l{display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:9px;cursor:pointer}
+.mc-l:hover{background:var(--glass-border-soft)}
+.mc-ic{font-size:14px;flex-shrink:0}
+.mc-t{flex:1;min-width:0}
+.mc-n{display:block;font-size:12.5px;font-weight:600;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mc-e{display:block;font-size:11px;color:var(--ink-faint);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-vide{padding:14px;font-size:12.5px;color:var(--ink-faint);text-align:center}
+.mail-sig{padding:9px;border-radius:12px;background:#fff;margin-bottom:12px}
+.mail-secu{padding:12px 14px;border-radius:12px;font-size:12px;line-height:1.6;
+  background:rgba(212,165,38,.07);border:1px solid rgba(212,165,38,.24);color:var(--ink-dim)}
+.ms-t{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--gold);margin-bottom:7px}
+.ms-l{margin-bottom:4px}
+.ms-l b{color:var(--ink)}
+.ms-n{margin-top:8px;padding-top:8px;border-top:1px solid rgba(212,165,38,.2);
+  font-size:11.5px;color:var(--ink-faint);font-style:italic}
+
+/* Éditeur de message */
+.ed-barre{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:8px 10px;
+  border-radius:12px 12px 0 0;background:var(--glass-border-soft);border:1px solid var(--glass-border);
+  border-bottom:none}
+.ed-barre button{min-width:30px;height:29px;padding:0 8px;border-radius:8px;cursor:pointer;
+  font-size:12.5px;color:var(--ink-dim);background:transparent;border:1px solid transparent}
+.ed-barre button:hover{background:rgba(255,255,255,.08);color:var(--ink)}
+.ed-barre select{height:29px;padding:0 7px;border-radius:8px;font-size:12px;color:var(--ink-dim);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.ed-sep{width:1px;height:18px;background:var(--glass-border);margin:0 3px}
+.ed-zone{min-height:230px;padding:16px 18px;border-radius:0 0 12px 12px;overflow-y:auto;
+  background:#fff;color:#1f2430;font-size:14px;line-height:1.6;
+  border:1px solid var(--glass-border);border-top:none}
+.ed-zone:focus{outline:none;border-color:rgba(212,165,38,.5)}
+.ed-zone h2{font-size:18px;color:#0a1f44;margin:12px 0 8px}
+.ed-zone h3{font-size:15px;color:#0a1f44;margin:10px 0 6px}
+.ed-zone p{margin:0 0 9px}
+.ed-zone a{color:#b8870f}
+
+@media (max-width:900px){ .mail-duo{grid-template-columns:1fr} }

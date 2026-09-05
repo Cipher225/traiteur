@@ -921,3 +921,27 @@ INSERT IGNORE INTO settings (cle, valeur) VALUES
  ('prefixe_sortie',    'BS'),
  ('prefixe_livraison', 'BL'),
  ('prefixe_rapport',   'RAP');
+
+-- =====================================================================
+--  MESSAGERIE SORTANTE
+--  Chaque message envoyé est consigné avec sa référence et son empreinte :
+--  c'est ce qui permet au destinataire de vérifier son authenticité.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS emails_envoyes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  reference VARCHAR(30) NOT NULL UNIQUE,
+  empreinte VARCHAR(20) NOT NULL,
+  destinataire VARCHAR(190) NOT NULL,
+  destinataire_nom VARCHAR(150) DEFAULT '',
+  client_id INT DEFAULT NULL,
+  sujet VARCHAR(255) NOT NULL,
+  corps LONGTEXT,
+  piece_jointe VARCHAR(190) DEFAULT '',
+  envoye_par INT DEFAULT NULL,
+  envoye_par_nom VARCHAR(120) DEFAULT '',
+  statut ENUM('envoye','echoue') DEFAULT 'envoye',
+  erreur VARCHAR(255) DEFAULT '',
+  envoye_le TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (reference), INDEX (destinataire), INDEX (envoye_le),
+  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL
+);
