@@ -93,14 +93,32 @@ $st = $pdo->prepare($sql);
 $st->execute($args);
 $contacts = $st->fetchAll();
 
-/* Regroupement : entreprises d'un côté, particuliers de l'autre */
-$groupes = ['entreprise' => [], 'individuel' => [], 'libre' => []];
+/* Regroupement. Une entreprise compte souvent plusieurs interlocuteurs : le
+   gérant, la personne qui commande, celle qui règle. On rassemble donc tous
+   les contacts d'une même société sous un seul bloc, plutôt que de les
+   éparpiller dans une longue liste. */
+$societes = [];      // entreprises, chacune avec ses interlocuteurs
+$particuliers = [];  // clients individuels
+$libres = [];        // fournisseurs et partenaires, sans client rattaché
+
 foreach ($contacts as $ct) {
-    if (!$ct['client_id'])                              $groupes['libre'][] = $ct;
-    elseif (($ct['type_client'] ?? '') === 'entreprise' || trim((string)$ct['entreprise']) !== '')
-                                                        $groupes['entreprise'][] = $ct;
-    else                                                $groupes['individuel'][] = $ct;
+    if (!$ct['client_id']) { $libres[] = $ct; continue; }
+
+    $estEntreprise = (($ct['type_client'] ?? '') === 'entreprise')
+                  || trim((string)$ct['entreprise']) !== '';
+    if (!$estEntreprise) { $particuliers[] = $ct; continue; }
+
+    $cid = (int)$ct['client_id'];
+    if (!isset($societes[$cid])) {
+        $societes[$cid] = [
+            'nom'       => trim((string)$ct['entreprise']) !== '' ? $ct['entreprise'] : $ct['client_nom'],
+            'client_id' => $cid,
+            'contacts'  => [],
+        ];
+    }
+    $societes[$cid]['contacts'][] = $ct;
 }
+uasort($societes, fn($a, $b) => strcasecmp($a['nom'], $b['nom']));
 
 $edit = null;
 if (isset($_GET['edit'])) {
@@ -118,8 +136,8 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
 
 <div class="stats-row" style="margin-bottom:14px">
   <div class="stat-card"><div class="stat-val"><?= count($contacts) ?></div><div class="stat-lbl">Contacts</div></div>
-  <div class="stat-card"><div class="stat-val"><?= count($groupes['entreprise']) ?></div><div class="stat-lbl">Entreprises</div></div>
-  <div class="stat-card"><div class="stat-val"><?= count($groupes['individuel']) ?></div><div class="stat-lbl">Particuliers</div></div>
+  <div class="stat-card"><div class="stat-val"><?= count($societes) ?></div><div class="stat-lbl">Entreprises</div></div>
+  <div class="stat-card"><div class="stat-val"><?= count($particuliers) ?></div><div class="stat-lbl">Particuliers</div></div>
 </div>
 
 <div class="panel glass" style="margin-bottom:14px">
@@ -127,66 +145,71 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
     <input class="input" name="q" value="<?= e($q) ?>" placeholder="Nom, société, fonction, numéro…" style="flex:1;min-width:220px">
     <button class="btn btn-gold">🔍 Rechercher</button>
     <?php if ($q !== ''): ?><a class="btn btn-glass" href="annuaire.php">Effacer</a><?php endif; ?>
-    <a class="btn btn-glass" href="#form">➕ Nouveau contact</a>
+    <a class="btn btn-glass" href="annuaire.php?nouveau=0#form">➕ Nouveau contact</a>
   </form>
 </div>
 
-<?php foreach ($groupes as $cle => $liste): if (!$liste) continue; [$ico, $titre] = $titres[$cle]; ?>
-<div class="panel glass" style="margin-bottom:14px">
-  <h2><?= $ico ?> <?= e($titre) ?> <span class="cnt"><?= count($liste) ?></span></h2>
-  <div class="annuaire">
-    <?php foreach ($liste as $ct):
-      $societe = trim((string)($ct['entreprise'] ?? '')) !== '' ? $ct['entreprise'] : ($ct['client_nom'] ?? '');
-      $initiale = mb_strtoupper(mb_substr($ct['nom'], 0, 1)); ?>
-    <div class="an-carte">
-      <div class="an-tete">
-        <div class="an-ava <?= $cle === 'entreprise' ? 'ent' : ($cle === 'libre' ? 'lib' : 'ind') ?>"><?= e($initiale) ?></div>
-        <div class="an-id">
-          <div class="an-nom"><?= e($ct['nom']) ?>
-            <?php if ($ct['principal']): ?><span class="an-tag">Principal</span><?php endif; ?></div>
-          <?php if ($ct['poste']): ?><div class="an-poste"><?= e($ct['poste']) ?></div><?php endif; ?>
-          <?php if ($societe): ?><div class="an-soc"><?= e($societe) ?></div><?php endif; ?>
-        </div>
+<?php
+/* Une ligne de contact : compacte, tout tient sur une seule ligne pour qu'un
+   annuaire de cent personnes reste consultable d'un coup d'œil. */
+function ligne_contact(array $ct, bool $admin): void {
+    $tel = trim((string)$ct['telephone']) !== '' ? $ct['telephone'] : ($ct['telephone2'] ?? '');
+    ?>
+    <div class="an-ligne">
+      <div class="an-pt"><?= e(mb_strtoupper(mb_substr($ct['nom'], 0, 1))) ?></div>
+      <div class="an-info">
+        <div class="an-n"><?= e($ct['nom']) ?><?php if ($ct['principal']): ?><span class="an-tag">Principal</span><?php endif; ?></div>
+        <?php if ($ct['poste']): ?><div class="an-p"><?= e($ct['poste']) ?></div><?php endif; ?>
       </div>
-
-      <div class="an-lignes">
-        <?php if ($ct['telephone']): ?>
-        <a class="an-l" href="tel:<?= e(preg_replace('/\s+/', '', $ct['telephone'])) ?>"><span>📞</span><?= e($ct['telephone']) ?></a>
-        <?php endif; ?>
-        <?php if ($ct['telephone2']): ?>
-        <a class="an-l" href="tel:<?= e(preg_replace('/\s+/', '', $ct['telephone2'])) ?>"><span>📞</span><?= e($ct['telephone2']) ?></a>
-        <?php endif; ?>
-        <?php if ($ct['whatsapp']): ?>
-        <a class="an-l wa" href="https://wa.me/<?= e(preg_replace('/\D+/', '', $ct['whatsapp'])) ?>" target="_blank" rel="noopener"><span>💬</span><?= e($ct['whatsapp']) ?></a>
-        <?php endif; ?>
-        <?php if ($ct['email']): ?>
-        <a class="an-l" href="mailto:<?= e($ct['email']) ?>"><span>✉️</span><?= e($ct['email']) ?></a>
-        <?php endif; ?>
-        <?php if ($ct['adresse']): ?>
-        <div class="an-l"><span>📍</span><?= e($ct['adresse']) ?></div>
-        <?php endif; ?>
-        <?php if (!$ct['telephone'] && !$ct['telephone2'] && !$ct['email']): ?>
-        <div class="an-vide">Aucune coordonnée — complétez la fiche</div>
-        <?php endif; ?>
+      <div class="an-coord">
+        <?php if ($tel): ?><a class="an-c" href="tel:<?= e(preg_replace('/\s+/', '', $tel)) ?>">📞 <?= e($tel) ?></a><?php endif; ?>
+        <?php if ($ct['whatsapp']): ?><a class="an-c wa" href="https://wa.me/<?= e(preg_replace('/\D+/', '', $ct['whatsapp'])) ?>" target="_blank" rel="noopener" title="WhatsApp">💬</a><?php endif; ?>
+        <?php if ($ct['email']): ?><a class="an-c" href="mailto:<?= e($ct['email']) ?>" title="<?= e($ct['email']) ?>">✉️</a><?php endif; ?>
+        <?php if (!$tel && !$ct['email']): ?><span class="an-manque">à compléter</span><?php endif; ?>
       </div>
-
-      <div class="an-actions">
-        <a class="btn btn-glass btn-sm" href="annuaire.php?edit=<?= (int)$ct['id'] ?>#form">✏️ Modifier</a>
-        <?php if ($ct['client_id']): ?>
-        <a class="btn btn-glass btn-sm" href="clients.php?edit=<?= (int)$ct['client_id'] ?>">👥 Client</a>
-        <?php endif; ?>
-        <?php if (is_admin()): ?>
-        <form method="post" style="display:inline" onsubmit="return confirm('Supprimer <?= e($ct['nom']) ?> de l\'annuaire ?')">
+      <div class="an-act">
+        <a class="an-b" href="annuaire.php?edit=<?= (int)$ct['id'] ?>#form" title="Modifier">✏️</a>
+        <?php if ($admin): ?>
+        <form method="post" style="display:inline" onsubmit="return confirm('Supprimer <?= e($ct['nom']) ?> ?')">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-          <button class="btn btn-danger btn-sm" name="supprimer" value="<?= (int)$ct['id'] ?>">✕</button>
+          <button class="an-b sup" name="supprimer" value="<?= (int)$ct['id'] ?>" title="Supprimer">✕</button>
         </form>
         <?php endif; ?>
       </div>
     </div>
-    <?php endforeach; ?>
+    <?php
+}
+?>
+
+<?php if ($societes): ?>
+<div class="panel glass" style="margin-bottom:14px">
+  <h2>🏢 Entreprises <span class="cnt"><?= count($societes) ?></span></h2>
+  <?php foreach ($societes as $s): ?>
+  <div class="an-soc-bloc">
+    <div class="an-soc-tete">
+      <span class="an-soc-nom">🏢 <?= e($s['nom']) ?></span>
+      <span class="an-soc-nb"><?= count($s['contacts']) ?> contact<?= count($s['contacts']) > 1 ? 's' : '' ?></span>
+      <a class="an-soc-add" href="annuaire.php?nouveau=<?= $s['client_id'] ?>#form">➕ Ajouter</a>
+    </div>
+    <?php foreach ($s['contacts'] as $ct) ligne_contact($ct, is_admin()); ?>
   </div>
+  <?php endforeach; ?>
 </div>
-<?php endforeach; ?>
+<?php endif; ?>
+
+<?php if ($particuliers): ?>
+<div class="panel glass" style="margin-bottom:14px">
+  <h2>👤 Particuliers <span class="cnt"><?= count($particuliers) ?></span></h2>
+  <?php foreach ($particuliers as $ct) ligne_contact($ct, is_admin()); ?>
+</div>
+<?php endif; ?>
+
+<?php if ($libres): ?>
+<div class="panel glass" style="margin-bottom:14px">
+  <h2>📇 Fournisseurs &amp; partenaires <span class="cnt"><?= count($libres) ?></span></h2>
+  <?php foreach ($libres as $ct) ligne_contact($ct, is_admin()); ?>
+</div>
+<?php endif; ?>
 
 <?php if (!$contacts): ?>
 <div class="panel glass" style="margin-bottom:14px">
@@ -195,8 +218,18 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
 </div>
 <?php endif; ?>
 
-<div class="panel glass" id="form">
-  <h2><?= $edit ? '✏️ Modifier le contact' : '➕ Nouveau contact' ?></h2>
+<?php
+/* Le formulaire reste replié : il ne s'ouvre qu'à la demande, pour laisser
+   toute la place à l'annuaire lui-même. Il s'ouvre automatiquement quand on
+   modifie un contact ou qu'on en ajoute un à une société. */
+$ouvert = (bool)$edit || isset($_GET['nouveau']);
+$clientPre = (int)($_GET['nouveau'] ?? 0);
+?>
+<details class="panel glass panel-pliable" id="form" <?= $ouvert ? 'open' : '' ?>>
+  <summary class="panel-titre">
+    <span><?= $edit ? '✏️ Modifier le contact' : '➕ Ajouter un contact' ?></span>
+    <span class="chev">▾</span>
+  </summary>
   <form method="post" class="form-grid">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
     <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
@@ -211,7 +244,7 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
       <select class="input" name="client_id">
         <option value="">— Contact libre —</option>
         <?php foreach ($clients as $cl): $lb = trim((string)$cl['entreprise']) !== '' ? $cl['entreprise'] : $cl['nom']; ?>
-        <option value="<?= (int)$cl['id'] ?>" <?= (int)($edit['client_id'] ?? 0) === (int)$cl['id'] ? 'selected' : '' ?>><?= e($lb) ?></option>
+        <option value="<?= (int)$cl['id'] ?>" <?= (int)($edit['client_id'] ?? $clientPre) === (int)$cl['id'] ? 'selected' : '' ?>><?= e($lb) ?></option>
         <?php endforeach; ?>
       </select>
       <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">Un contact libre n'est rattaché à aucun client.</span>
@@ -247,6 +280,6 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
       <?php if ($edit): ?><a class="btn btn-glass" href="annuaire.php">Annuler</a><?php endif; ?>
     </div>
   </form>
-</div>
+</details>
 
 <?php admin_footer(); ?>

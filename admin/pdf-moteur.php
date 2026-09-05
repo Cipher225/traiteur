@@ -328,7 +328,7 @@ function pdf_blocs_infos(array $s, string $type, array $doc): array {
         $l2[] = ['Nombre de jours', $nbj . ($nbj > 1 ? ' jours' : ' jour')];
     }
     if (trim((string)($doc['lieu'] ?? '')) !== '') $l2[] = ['Lieu', $doc['lieu']];
-    if ($type === 'livraison') $l2[] = ['Livreur', $s['nom_entreprise'] ?? ''];
+
     if (!$l2) $l2[] = ['Devise', $s['devise'] ?? 'FCFA'];
 
     return [$type === 'livraison' ? 'Livré à' : 'Client', $l1, $type === 'livraison' ? 'Livraison' : 'Informations', $l2];
@@ -372,7 +372,7 @@ function pdf_corps(string $type, array $doc, string $devise): string {
       <thead><tr>
         <th width="6%">N°</th>
         <th style="text-align:left">Désignation</th>
-        <th width="12%">Qté</th>
+        <th width="14%"><?= $estLivraison ? 'Qté livrée' : 'Qté' ?></th>
         <?php if (!$estLivraison): ?>
         <th width="20%" class="r">Prix unit. (<?= e($devise) ?>)</th>
         <th width="20%" class="r">Montant (<?= e($devise) ?>)</th>
