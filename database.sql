@@ -913,3 +913,11 @@ WHERE NOT EXISTS (SELECT 1 FROM contacts k WHERE k.client_id = c.id AND k.princi
 -- Numérotation propre au bon de livraison : il ne reprend plus le numéro de la
 -- facture. Le numéro est attribué à la première édition du bon, puis conservé.
 ALTER TABLE factures ADD COLUMN IF NOT EXISTS bl_numero VARCHAR(40) DEFAULT NULL;
+
+-- Préfixes de numérotation manquants : tous doivent être modifiables
+-- depuis Paramètres → Facturation.
+INSERT IGNORE INTO settings (cle, valeur) VALUES
+ ('prefixe_entree',    'BE'),
+ ('prefixe_sortie',    'BS'),
+ ('prefixe_livraison', 'BL'),
+ ('prefixe_rapport',   'RAP');

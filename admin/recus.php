@@ -7,7 +7,7 @@ $TYPE   = ($_GET['type'] ?? ($_POST['type'] ?? '')) === 'entree' ? 'entree' : 's
 $LIB    = $TYPE === 'entree' ? 'Entrée' : 'Sortie';
 $LIBS   = $TYPE === 'entree' ? 'Entrées' : 'Sorties';
 $ICONE  = $TYPE === 'entree' ? '📥' : '📤';
-$PREF   = $TYPE === 'entree' ? 'BE' : 'BS';
+$PREF   = $TYPE === 'entree' ? ($settings['prefixe_entree'] ?? 'BE') : ($settings['prefixe_sortie'] ?? 'BS');
 $RETOUR = 'recus.php' . ($TYPE === 'entree' ? '?type=entree' : '');
 $devise = $settings['devise'] ?? 'FCFA';
 $modes = modes_paiement();

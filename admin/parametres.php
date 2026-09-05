@@ -65,10 +65,23 @@ $groupes = [
     'Facturation' => ['🧾', [
         'devise'          => 'Devise (ex : FCFA)',
         'tva_taux'        => 'Taux de TVA par défaut (%)',
-        'prefixe_facture' => 'Préfixe des factures (ex : FAC)',
-        'prefixe_fiche'   => 'Préfixe des fiches de paie (ex : PAIE)',
         'mentions_facture'=> 'Mentions par défaut sur les factures',
         'mention_livraison'=> 'Mention sur le bon de livraison',
+        /* Préfixes de numérotation : chaque type de document a le sien.
+           Ils déterminent la forme des numéros, par exemple FAC-2026-0001. */
+        'prefixe_facture'   => 'N° facture (ex : FAC)',
+        'prefixe_proforma'  => 'N° proforma (ex : PRO)',
+        'prefixe_livraison' => 'N° bon de livraison (ex : BL)',
+        'prefixe_entree'    => 'N° entrée de caisse (ex : BE)',
+        'prefixe_sortie'    => 'N° sortie de caisse (ex : BS)',
+        'prefixe_recu'      => 'N° reçu de paiement (ex : REC)',
+        'prefixe_fiche'     => 'N° bulletin de paie (ex : PAIE)',
+        'prefixe_commande'  => 'N° commande client (ex : CMD)',
+        'prefixe_rapport'   => 'N° rapport (ex : RAP)',
+        'prefixe_permission'=> 'N° demande de permission (ex : PERM)',
+        'prefixe_conge'     => 'N° demande de congé (ex : CONGE)',
+        'prefixe_maladie'   => 'N° congé maladie (ex : MAL)',
+        'prefixe_explication'=> "N° réponse à demande d'explication (ex : EXPL)",
     ]],
 
 ];
@@ -87,7 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // insère la clé si absente, sinon met à jour
         $up = $pdo->prepare('INSERT INTO settings (cle, valeur) VALUES (?, ?) ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)');
         foreach ($champs as $cle => $label) {
-            if (isset($_POST[$cle])) $up->execute([$cle, mb_substr(trim($_POST[$cle]), 0, 2000)]);
+            if (!isset($_POST[$cle])) continue;
+            $valeur = trim($_POST[$cle]);
+            /* Un préfixe de numérotation doit rester court et sans caractère
+               parasite : il compose des numéros du type FAC-2026-0001. */
+            if (str_starts_with($cle, 'prefixe_')) {
+                $valeur = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $valeur));
+                if ($valeur === '') $valeur = strtoupper(substr($cle, 8, 3));
+                $valeur = mb_substr($valeur, 0, 8);
+            }
+            $up->execute([$cle, mb_substr($valeur, 0, 2000)]);
         }
         flash('Paramètres enregistrés. Le site est à jour ✨');
     } elseif (isset($_POST['maj_signature'])) {

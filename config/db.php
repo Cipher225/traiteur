@@ -513,12 +513,19 @@ function numero_bon_livraison(PDO $pdo, int $factureId): string {
     if ($num !== '') return $num;
 
     $annee = date('Y');
+    /* Le préfixe est réglable dans Paramètres → Facturation. */
+    $prefixe = 'BL';
+    try {
+        $p = $pdo->query("SELECT valeur FROM settings WHERE cle='prefixe_livraison'")->fetchColumn();
+        if (trim((string)$p) !== '') $prefixe = strtoupper(trim((string)$p));
+    } catch (Throwable $e) {}
+
     $st = $pdo->prepare("SELECT bl_numero FROM factures WHERE bl_numero LIKE ?
                          ORDER BY bl_numero DESC LIMIT 1");
-    $st->execute(['BL-' . $annee . '-%']);
+    $st->execute([$prefixe . '-' . $annee . '-%']);
     $dernier = $st->fetchColumn();
     $n = $dernier ? ((int)substr($dernier, -4)) + 1 : 1;
-    $num = sprintf('BL-%s-%04d', $annee, $n);
+    $num = sprintf('%s-%s-%04d', $prefixe, $annee, $n);
 
     try {
         $pdo->prepare('UPDATE factures SET bl_numero=? WHERE id=?')->execute([$num, $factureId]);
