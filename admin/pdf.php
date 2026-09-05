@@ -61,14 +61,79 @@ $dompdf->loadHtml($html, 'UTF-8');
 $dompdf->setPaper('A4', 'portrait');
 $dompdf->render();
 
+/* ============================================================================
+   BLOC D'AUTHENTIFICATION — dessiné sur la DERNIÈRE page seulement
+   ----------------------------------------------------------------------------
+   Un élément « fixe » se répéterait sur toutes les pages. On dessine donc
+   directement sur la page finale, à une hauteur constante, juste au-dessus du
+   pied de page : le bloc est ainsi toujours au même endroit, quel que soit le
+   nombre de pages ou la longueur du contenu.
+   ============================================================================ */
+$canvas  = $dompdf->getCanvas();
+$largeur = $canvas->get_width();       // 595 pt pour une page A4
+$hauteur = $canvas->get_height();      // 842 pt
+
+$mm  = fn($v) => $v * 2.834645;        // millimètres → points
+$GAUCHE = $mm(10);
+$DROITE = $largeur - $mm(10);
+/* Le pied de page occupe les 22 derniers millimètres. Le bloc se place
+   au-dessus : sa ligne haute est donc à 46 mm du bas de la feuille. */
+$BASE   = $hauteur - $mm(46);
+
+$signataire = (string)($settings['signataire_fonction'] ?? 'La Direction');
+$dossier    = realpath(__DIR__ . '/..') . '/uploads/';
+$fTampon    = !empty($settings['tampon_img'])    && is_file($dossier . $settings['tampon_img'])    ? $dossier . $settings['tampon_img']    : null;
+$fSignature = !empty($settings['signature_img']) && is_file($dossier . $settings['signature_img']) ? $dossier . $settings['signature_img'] : null;
+
+$canvas->page_script(function ($page, $pages, $c, $fm)
+        use ($qrFichier, $empreinte, $code, $signataire, $fTampon, $fSignature, $GAUCHE, $DROITE, $BASE, $mm) {
+
+    if ($page !== $pages) return;      // uniquement la dernière page
+
+    $police = $fm->getFont('DejaVu Sans');
+    $gras   = $fm->getFont('DejaVu Sans', 'bold');
+    $or     = [0.72, 0.53, 0.15];
+    $gris   = [0.43, 0.46, 0.52];
+    $marine = [0.04, 0.12, 0.27];
+
+    // Filet de séparation
+    $c->line($GAUCHE, $BASE, $DROITE, $BASE, [0.91, 0.93, 0.95], 0.7);
+
+    $y = $BASE + $mm(2);
+
+    // ---- Colonne de gauche : QR et empreinte ----
+    $xTexte = $GAUCHE;
+    if ($qrFichier && is_file($qrFichier)) {
+        $c->image($qrFichier, $GAUCHE, $y, $mm(17), $mm(17));
+        $xTexte = $GAUCHE + $mm(20);
+    }
+    $c->text($xTexte, $y + 1,  'DOCUMENT AUTHENTIFIABLE', $gras, 6.5, $or, 0.8);
+    $c->text($xTexte, $y + 11, "Scannez le code pour vérifier l'authenticité", $police, 6.2, $gris);
+    if ($empreinte) $c->text($xTexte, $y + 20, 'Empreinte : ' . $empreinte, $police, 6.2, $gris);
+    if ($code)      $c->text($xTexte, $y + 29, 'Code : ' . mb_substr($code, 0, 14) . '…', $police, 6.2, $gris);
+
+    // ---- Colonne de droite : signataire, tampon et paraphe ----
+    $l = $fm->getTextWidth($signataire, $gras, 8);
+    $c->text($DROITE - $l, $y + 1, $signataire, $gras, 8, $marine);
+    $c->line($DROITE - $mm(62), $y + 12, $DROITE, $y + 12, [0.70, 0.73, 0.78], 0.6);
+
+    $yImg = $y + $mm(5.5);
+    if ($fTampon)    $c->image($fTampon,    $DROITE - $mm(60), $yImg, $mm(26), $mm(10));
+    if ($fSignature) $c->image($fSignature, $DROITE - $mm(26), $yImg, $mm(20), $mm(8));
+});
+
 /* ---- Nom du fichier ---- */
 $prefixes = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
              'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie'];
 $nom = ($prefixes[$type] ?? 'Document') . '-' . preg_replace('/[^A-Za-z0-9\-]/', '-', $doc['numero']) . '.pdf';
 
+/* Le PDF est produit AVANT de supprimer l'image du QR : le dessin de la
+   dernière page a besoin du fichier jusqu'au bout. */
+$sortie = $dompdf->output();
 if ($qrFichier && is_file($qrFichier)) @unlink($qrFichier);
 
 header('Content-Type: application/pdf');
 header('Content-Disposition: ' . (isset($_GET['dl']) ? 'attachment' : 'inline') . '; filename="' . $nom . '"');
+header('Content-Length: ' . strlen($sortie));
 header('Cache-Control: private, max-age=0, must-revalidate');
-echo $dompdf->output();
+echo $sortie;

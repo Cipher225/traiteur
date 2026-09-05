@@ -78,9 +78,10 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
 
   /* En-tête */
   .ent td { vertical-align: middle; padding: 0 0 4px; }
-  .ent .soc { font-size: 12pt; font-weight: bold; color: #0a1f44; letter-spacing: .5px; }
+  .ent .soc { font-size: 11.5pt; font-weight: bold; color: #0a1f44; letter-spacing: .5px; }
   .ent .slg { font-size: 6pt; color: #b8870f; letter-spacing: .8px; text-transform: uppercase; }
-  .ent .ttl { font-size: 17pt; font-weight: bold; color: #0a1f44; letter-spacing: 3px; text-align: right; }
+  .ent .ttl { font-size: 16pt; font-weight: bold; color: #0a1f44; letter-spacing: 3.5px;
+               text-align: right; vertical-align: bottom; padding-bottom: 3px; }
   .filet { border-bottom: 1.6pt solid #d4a526; height: 2px; margin: 2px 0 5px; }
   .refs { text-align: right; font-size: 8pt; color: #4a5568; padding-bottom: 6px; }
   .refs b { color: #0a1f44; }
@@ -147,12 +148,12 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
 
 <!-- ================= EN-TÊTE ================= -->
 <table class="ent"><tr>
-  <td width="45%">
-    <?php if ($logo): ?><img src="<?= $logo ?>" style="max-height:52px"><br><?php endif; ?>
+  <td width="42%" class="c">
+    <?php if ($logo): ?><img src="<?= $logo ?>" style="max-height:46px"><br><?php endif; ?>
     <span class="soc"><?= e(mb_strtoupper($settings['nom_entreprise'] ?? '')) ?></span><br>
     <span class="slg"><?= e($settings['slogan'] ?? '') ?></span>
   </td>
-  <td width="55%" class="ttl"><?= e($titre) ?></td>
+  <td width="58%" class="ttl"><?= e($titre) ?></td>
 </tr></table>
 <div class="filet"></div>
 <div class="refs">
@@ -169,35 +170,10 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
 
 <?= pdf_corps($type, $doc, $devise) ?>
 
-<!-- ================= AUTHENTIFICATION ================= -->
-<table class="auth"><tr>
-  <td width="55%">
-    <table><tr>
-      <?php if ($qrFichier): ?>
-      <td width="66"><img src="<?= $qrFichier ?>" style="width:58px;height:58px"></td>
-      <?php endif; ?>
-      <td>
-        <div class="qtit">Document authentifiable</div>
-        <div class="qtxt">Scannez le code pour vérifier l'authenticité<br>
-          <?= $empreinte ? 'Empreinte : ' . e($empreinte) . '<br>' : '' ?>
-          <?= $code ? 'Code : ' . e(mb_substr($code, 0, 14)) . '…' : '' ?></div>
-      </td>
-    </tr></table>
-  </td>
-  <td width="45%" class="sig">
-    <div class="nom"><?= e($settings['signataire_fonction'] ?? 'La Direction') ?></div>
-    <?php /* Le générateur de PDF ne superpose pas les images par marges négatives :
-             on les place proprement côte à côte, tampon puis paraphe. */ ?>
-    <table style="margin-top:4px"><tr>
-      <?php if ($tampon): ?>
-      <td class="c" width="55%"><img src="<?= $tampon ?>" style="width:96px"></td>
-      <?php endif; ?>
-      <?php if ($signature): ?>
-      <td class="c"><img src="<?= $signature ?>" style="width:70px"></td>
-      <?php endif; ?>
-    </tr></table>
-  </td>
-</tr></table>
+<?php /* Le bloc d'authentification n'est pas placé ici : il est dessiné sur la
+         DERNIÈRE page uniquement, juste au-dessus du pied de page. Cette zone
+         vide garantit que le contenu ne vienne jamais s'y superposer. */ ?>
+<div style="height:26mm"></div>
 
 </body></html>
 <?php
