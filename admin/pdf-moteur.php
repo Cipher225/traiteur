@@ -55,7 +55,7 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
     if ($type === 'livraison') {
         $refs[] = ['N° Bon', 'BL-' . $doc['numero']];
         $refs[] = ['Date', date('d/m/Y', strtotime($doc['date_emission']))];
-        $refs[] = ['Réf. facture', $doc['numero']];
+
     } elseif ($type === 'fiche') {
         $refs[] = ['N° Bulletin', $doc['numero']];
         $refs[] = ['Période', moisfr((string)$doc['periode'])];
@@ -81,9 +81,10 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   .ent .soc { font-size: 11.5pt; font-weight: bold; color: #0a1f44; letter-spacing: .5px; }
   .ent .slg { font-size: 6pt; color: #b8870f; letter-spacing: .8px; text-transform: uppercase; }
   .ent .ttl { font-size: 16pt; font-weight: bold; color: #0a1f44; letter-spacing: 3.5px;
-               text-align: right; vertical-align: bottom; padding-bottom: 3px; }
-  .filet { border-bottom: 1.6pt solid #d4a526; height: 2px; margin: 2px 0 5px; }
-  .refs { text-align: right; font-size: 8pt; color: #4a5568; padding-bottom: 6px; }
+               text-align: right; }
+  .filet { border-bottom: 1.6pt solid #d4a526; height: 2px; margin: 3px 0 4px; }
+  .sep { border-bottom: 1.2pt solid #d4a526; height: 1px; margin: 0 0 7px; }
+  .refs { text-align: right; font-size: 8pt; color: #4a5568; }
   .refs b { color: #0a1f44; }
 
   /* Cartes */
@@ -93,10 +94,18 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   .carte .hd { color: #b8870f; font-size: 6.5pt; font-weight: bold; letter-spacing: 1.4px;
                text-transform: uppercase; padding: 5px 9px 3px; border-bottom: .6pt solid #f0e2bf; }
   .carte .bd { padding: 4px 9px 6px; }
-  .carte .lb { color: #6e7685; font-size: 8pt; }
-  .carte .vl { color: #0a1f44; font-weight: bold; font-size: 8pt; text-align: right; }
+  .carte .lb { color: #6e7685; font-size: 8pt; width: 38%; }
+  .carte .vl { color: #0a1f44; font-weight: bold; font-size: 8pt; text-align: right; width: 62%; }
   .carte tr td { padding: 2px 0; border-bottom: .5pt solid #f2f5f9; }
   .carte tr:last-child td { border-bottom: none; }
+
+  /* Présentation sobre (bon de livraison, bulletin de paie) */
+  .simple td { vertical-align: top; padding: 0; }
+  .sbloc .stit { font-size: 6.5pt; font-weight: bold; letter-spacing: 1.4px; text-transform: uppercase;
+                 color: #b8870f; border-bottom: .8pt solid #d4a526; padding-bottom: 3px; margin-bottom: 4px; }
+  .sbloc table { width: 100%; }
+  .sbloc .slb { color: #6e7685; font-size: 8pt; width: 40%; padding: 2px 0; }
+  .sbloc .svl { color: #0a1f44; font-weight: bold; font-size: 8pt; width: 60%; padding: 2px 0; }
 
   /* Tableau des lignes */
   .lignes { margin-top: 8px; }
@@ -146,34 +155,51 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
   <div class="emis">Document émis le <?= date('d/m/Y à H:i') ?></div>
 </div>
 
-<!-- ================= EN-TÊTE ================= -->
+<!-- ================= PAPIER À EN-TÊTE =================
+     Le filet doré part du titre et s'arrête avant le logo, puis les références
+     se placent dessous. Un second filet ferme l'en-tête : c'est la disposition
+     d'un papier à en-tête classique. -->
 <table class="ent"><tr>
-  <td width="42%" class="c">
+  <td width="40%" class="c">
     <?php if ($logo): ?><img src="<?= $logo ?>" style="max-height:46px"><br><?php endif; ?>
     <span class="soc"><?= e(mb_strtoupper($settings['nom_entreprise'] ?? '')) ?></span><br>
     <span class="slg"><?= e($settings['slogan'] ?? '') ?></span>
   </td>
-  <td width="58%" class="ttl"><?= e($titre) ?></td>
+  <td width="60%">
+    <div class="ttl"><?= e($titre) ?></div>
+    <div class="filet"></div>
+    <div class="refs">
+      <?php foreach ($refs as $i => $r): ?>
+        <?= $i ? ' &nbsp;&nbsp;&nbsp; ' : '' ?><?= e($r[0]) ?> <b><?= e($r[1]) ?></b>
+      <?php endforeach; ?>
+    </div>
+  </td>
 </tr></table>
-<div class="filet"></div>
-<div class="refs">
-  <?php foreach ($refs as $i => $r): ?>
-    <?= $i ? ' &nbsp;&nbsp; ' : '' ?><?= e($r[0]) ?> <b><?= e($r[1]) ?></b>
-  <?php endforeach; ?>
-</div>
+<div class="sep"></div>
 
-<!-- ================= CARTES D'INFORMATIONS ================= -->
+<!-- ================= INFORMATIONS =================
+     Bon de livraison et bulletin de paie adoptent une présentation sobre, sans
+     encadré : deux colonnes de lignes simples, comme sur un relevé bancaire.
+     Les factures et proformas conservent leurs cartes. -->
+<?php if (in_array($type, ['livraison', 'fiche'], true)): ?>
+<table class="simple"><tr>
+  <td width="49%"><?= pdf_bloc_simple($t1, $l1) ?></td>
+  <td width="2%"></td>
+  <td width="49%"><?= pdf_bloc_simple($t2, $l2) ?></td>
+</tr></table>
+<?php else: ?>
 <table class="cartes"><tr>
   <td class="gauche"><?= pdf_carte($t1, $l1) ?></td>
   <td><?= pdf_carte($t2, $l2) ?></td>
 </tr></table>
+<?php endif; ?>
 
 <?= pdf_corps($type, $doc, $devise) ?>
 
 <?php /* Le bloc d'authentification n'est pas placé ici : il est dessiné sur la
          DERNIÈRE page uniquement, juste au-dessus du pied de page. Cette zone
          vide garantit que le contenu ne vienne jamais s'y superposer. */ ?>
-<div style="height:26mm"></div>
+<div style="height:38mm"></div>
 
 </body></html>
 <?php
@@ -191,6 +217,16 @@ function pdf_carte(string $titre, array $lignes): string {
     }
     if ($vide) $o .= '<tr><td class="lb">—</td><td class="vl"></td></tr>';
     return $o . '</table></div></div>';
+}
+
+/* ---- Bloc sobre, sans encadré : un titre souligné puis des lignes simples ---- */
+function pdf_bloc_simple(string $titre, array $lignes): string {
+    $o = '<div class="sbloc"><div class="stit">' . e($titre) . '</div><table>';
+    foreach ($lignes as $l) {
+        if (trim((string)$l[1]) === '') continue;
+        $o .= '<tr><td class="slb">' . e($l[0]) . '</td><td class="svl">' . e((string)$l[1]) . '</td></tr>';
+    }
+    return $o . '</table></div>';
 }
 
 /* ---- Contenu des deux cartes, selon le type de document ---- */

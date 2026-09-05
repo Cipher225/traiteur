@@ -78,7 +78,7 @@ $GAUCHE = $mm(10);
 $DROITE = $largeur - $mm(10);
 /* Le pied de page occupe les 22 derniers millimètres. Le bloc se place
    au-dessus : sa ligne haute est donc à 46 mm du bas de la feuille. */
-$BASE   = $hauteur - $mm(46);
+$BASE   = $hauteur - $mm(58);
 
 $signataire = (string)($settings['signataire_fonction'] ?? 'La Direction');
 $dossier    = realpath(__DIR__ . '/..') . '/uploads/';
@@ -117,9 +117,19 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
     $c->text($DROITE - $l, $y + 1, $signataire, $gras, 8, $marine);
     $c->line($DROITE - $mm(62), $y + 12, $DROITE, $y + 12, [0.70, 0.73, 0.78], 0.6);
 
-    $yImg = $y + $mm(5.5);
-    if ($fTampon)    $c->image($fTampon,    $DROITE - $mm(60), $yImg, $mm(26), $mm(10));
-    if ($fSignature) $c->image($fSignature, $DROITE - $mm(26), $yImg, $mm(20), $mm(8));
+    /* Tampon à sa taille réelle sur A4 (42 mm, comme un cachet d'entreprise),
+       et paraphe juste en dessous — l'ordre habituel sur un document signé. */
+    $lTampon = $mm(42);
+    $hTampon = $mm(16);
+    $xTampon = $DROITE - $mm(52);
+    $yImg    = $y + $mm(5);
+
+    if ($fTampon) $c->image($fTampon, $xTampon, $yImg, $lTampon, $hTampon);
+
+    if ($fSignature) {
+        $lSig = $mm(30);
+        $c->image($fSignature, $xTampon + ($lTampon - $lSig) / 2, $yImg + $hTampon - $mm(2), $lSig, $mm(11));
+    }
 });
 
 /* ---- Nom du fichier ---- */
