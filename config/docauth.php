@@ -42,7 +42,7 @@ function doc_checksum(array $parts): string {
 
 /* URL complète de vérification encodée dans le QR. */
 function doc_verify_url(array $settings, string $token): string {
-    $base = rtrim($settings['site_url'] ?? '', '/');
+    $base = adresse_site($settings);
     if ($base === '') return 'VERIF:' . $token;
     return $base . '/verifier.php?c=' . $token;
 }

@@ -112,20 +112,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
             $fichier = $dossier . '/' . $reference . '.png';
             signature_image($settings, $reference, $empreinte, $fichier);
 
-            $site = rtrim((string)($settings['site_url'] ?? ''), '/');
+            $site = adresse_site($settings);
             $urlSig = $site . '/signature-mail.php?c=' . urlencode($reference);
             $urlVerif = $site . '/verifier-email.php?c=' . urlencode($reference);
 
+            /* La signature et le logo voyagent AVEC le message : une image
+               chargée depuis Internet serait bloquée par la plupart des
+               messageries, et n'apparaîtrait pas chez le destinataire. */
+            $images = [['cid' => 'signature-entreprise', 'chemin' => $fichier]];
+            $cheminLogo = __DIR__ . '/../uploads/' . (string)($settings['logo'] ?? '');
+            if (!empty($settings['logo']) && is_file($cheminLogo)) {
+                $images[] = ['cid' => 'logo-entreprise', 'chemin' => $cheminLogo];
+            }
+
             $message = $corps
                 . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
-                . '<img src="' . e($urlSig) . '" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
+                . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
                 . '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
-                . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong> — '
-                . '<a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>'
+                . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
+                . ($urlVerif !== '/verifier-email.php?c=' . urlencode($reference)
+                    ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
                 . '</p></div>';
 
             $motif = null;
-            $ok = envoyer_email($pdo, $d['email'], $sujet, $message, (string)($settings['email'] ?? ''), $pieces, $motif);
+            $ok = envoyer_email($pdo, $d['email'], $sujet, $message,
+                                (string)($settings['email'] ?? ''), $pieces, $motif, $images);
 
             $listePJ = implode(', ', array_map(fn($p) => $p['nom'], $pieces));
             $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,

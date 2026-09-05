@@ -33,8 +33,13 @@ function email_config(PDO $pdo): array {
 
 /* $pieces : liste de fichiers à joindre, chacun sous la forme
    ['chemin' => '/chemin/vers/fichier.pdf', 'nom' => 'Facture.pdf'] */
+/* $images : images intégrées au message, sous la forme
+   ['cid' => 'signature', 'chemin' => '/chemin/image.png'].
+   Une image intégrée s'affiche toujours, alors qu'une image chargée depuis
+   Internet est bloquée par défaut dans la plupart des messageries. */
 function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
-                       string $repondreA = '', array $pieces = [], ?string &$erreur = null): bool {
+                       string $repondreA = '', array $pieces = [], ?string &$erreur = null,
+                       array $images = []): bool {
     $dest = trim($dest);
     if ($dest === '' || !filter_var($dest, FILTER_VALIDATE_EMAIL)) {
         $erreur = "Adresse du destinataire invalide.";
@@ -52,7 +57,9 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
     $expediteurNom  = $cfg['nom_entreprise'] ?? 'Groupe Helisce';
     $expediteurMail = $cfg['email'] ?? ($cfg['smtp_user'] ?? 'no-reply@localhost');
 
-    $corps = email_gabarit($sujet, $corpsHtml, $expediteurNom, (string)($cfg['slogan'] ?? ''));
+    $avecLogo = false;
+    foreach ($images as $img) { if (($img['cid'] ?? '') === 'logo-entreprise') $avecLogo = true; }
+    $corps = email_gabarit($sujet, $corpsHtml, $expediteurNom, (string)($cfg['slogan'] ?? ''), $avecLogo);
 
     // --- Mode SMTP si configuré ---
     if (!empty($cfg['smtp_hote']) && !empty($cfg['smtp_user'])) {
@@ -63,7 +70,7 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
             $cfg['smtp_user'],
             $cfg['smtp_pass'] ?? '',
             $expediteurMail, $expediteurNom,
-            $dest, $sujet, $corps, $repondreA, $pieces, $erreur
+            $dest, $sujet, $corps, $repondreA, $pieces, $erreur, $images
         );
     }
 
@@ -107,18 +114,25 @@ function email_encode(string $t): string {
 }
 
 /* Gabarit HTML navy & or de l'entreprise */
-function email_gabarit(string $sujet, string $contenu, string $entreprise, string $slogan = ''): string {
+function email_gabarit(string $sujet, string $contenu, string $entreprise, string $slogan = '',
+                       bool $avecLogo = false): string {
     $an = date('Y');
+    /* Le logo est une image intégrée au message (cid) : il s'affiche même
+       lorsque la messagerie bloque les images provenant d'Internet. */
+    $logo = $avecLogo
+        ? '<img src="cid:logo-entreprise" alt="' . htmlspecialchars($entreprise) . '" style="max-height:64px;max-width:200px;display:block;margin:0 auto 12px">'
+        : '';
     return '<!DOCTYPE html><html><body style="margin:0;background:#f4f6fb;font-family:Arial,sans-serif">
       <div style="max-width:600px;margin:0 auto;background:#fff">
         <div style="background:linear-gradient(135deg,#0a1f44,#020714);padding:26px 30px;text-align:center">
+          ' . $logo . '
           <div style="color:#fff;font-size:20px;font-weight:bold;letter-spacing:1px">' . htmlspecialchars($entreprise) . '</div>
           ' . ($slogan !== '' ? '<div style="color:#d4a526;font-size:12px;margin-top:4px;letter-spacing:2px;text-transform:uppercase">' . htmlspecialchars($slogan) . '</div>' : '') . '
         </div>
         <div style="height:3px;background:linear-gradient(90deg,#d4a526,#b8870f)"></div>
         <div style="padding:30px;color:#1a2744;font-size:15px;line-height:1.6">' . $contenu . '</div>
         <div style="padding:20px 30px;background:#0a1f44;color:#a9b7d0;font-size:12px;text-align:center">
-          © ' . $an . ' ' . htmlspecialchars($entreprise) . ' — Cet email vous a été envoyé automatiquement.
+          © ' . $an . ' ' . htmlspecialchars($entreprise) . '
         </div>
       </div></body></html>';
 }
@@ -129,7 +143,8 @@ function email_gabarit(string $sujet, string $contenu, string $entreprise, strin
    ---------------------------------------------------------------------------- */
 function smtp_envoyer(string $hote, int $port, string $secure, string $user, string $pass,
                       string $deMail, string $deNom, string $dest, string $sujet, string $corps,
-                      string $repondreA = '', array $pieces = [], ?string &$erreur = null): bool {
+                      string $repondreA = '', array $pieces = [], ?string &$erreur = null,
+                      array $images = []): bool {
     $timeout = 15;
     $transport = ($secure === 'ssl' || $port === 465) ? 'ssl://' : '';
     $fp = @fsockopen($transport . $hote, $port, $errno, $errstr, $timeout);
@@ -200,13 +215,36 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
     /* Avec des fichiers joints, le message devient « multipart » : une partie
        pour le texte, une partie par fichier. Sans fichier, on garde un message
        HTML simple, plus léger. */
+    /* Le corps du message : du HTML, éventuellement accompagné d'images
+       intégrées (signature, logo). L'ensemble forme un bloc « related ». */
+    $bloc = function () use ($corps, $images) {
+        if (!$images) {
+            return "Content-Type: text/html; charset=UTF-8\r\n"
+                 . "Content-Transfer-Encoding: 8bit\r\n\r\n" . $corps . "\r\n";
+        }
+        $lim = '=_rel_' . bin2hex(random_bytes(8));
+        $o  = 'Content-Type: multipart/related; boundary="' . $lim . '"' . "\r\n\r\n";
+        $o .= "--$lim\r\nContent-Type: text/html; charset=UTF-8\r\n";
+        $o .= "Content-Transfer-Encoding: 8bit\r\n\r\n" . $corps . "\r\n";
+        foreach ($images as $img) {
+            if (empty($img['chemin']) || !is_file($img['chemin'])) continue;
+            $type = function_exists('mime_content_type')
+                  ? (mime_content_type($img['chemin']) ?: 'image/png') : 'image/png';
+            $o .= "--$lim\r\n";
+            $o .= 'Content-Type: ' . $type . "\r\n";
+            $o .= "Content-Transfer-Encoding: base64\r\n";
+            $o .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
+            $o .= 'Content-Disposition: inline; filename="' . $img['cid'] . '.png"' . "\r\n\r\n";
+            $o .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
+        }
+        return $o . "--$lim--\r\n";
+    };
+
     if ($pieces) {
         $limite = '=_' . bin2hex(random_bytes(12));
         $entete .= 'Content-Type: multipart/mixed; boundary="' . $limite . '"' . "\r\n";
         $contenu  = "--$limite\r\n";
-        $contenu .= "Content-Type: text/html; charset=UTF-8\r\n";
-        $contenu .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
-        $contenu .= $corps . "\r\n";
+        $contenu .= $bloc();
         foreach ($pieces as $p) {
             if (empty($p['chemin']) || !is_file($p['chemin'])) continue;
             $nom  = $p['nom'] ?? basename($p['chemin']);
@@ -218,6 +256,21 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
             $contenu .= "Content-Transfer-Encoding: base64\r\n";
             $contenu .= 'Content-Disposition: attachment; filename="' . $nom . '"' . "\r\n\r\n";
             $contenu .= chunk_split(base64_encode(file_get_contents($p['chemin']))) . "\r\n";
+        }
+        $contenu .= "--$limite--";
+    } elseif ($images) {
+        $limite = '=_rel_' . bin2hex(random_bytes(8));
+        $entete .= 'Content-Type: multipart/related; boundary="' . $limite . '"' . "\r\n";
+        $contenu  = "--$limite\r\nContent-Type: text/html; charset=UTF-8\r\n";
+        $contenu .= "Content-Transfer-Encoding: 8bit\r\n\r\n" . $corps . "\r\n";
+        foreach ($images as $img) {
+            if (empty($img['chemin']) || !is_file($img['chemin'])) continue;
+            $contenu .= "--$limite\r\n";
+            $contenu .= "Content-Type: image/png\r\n";
+            $contenu .= "Content-Transfer-Encoding: base64\r\n";
+            $contenu .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
+            $contenu .= 'Content-Disposition: inline; filename="' . $img['cid'] . '.png"' . "\r\n\r\n";
+            $contenu .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
         }
         $contenu .= "--$limite--";
     } else {

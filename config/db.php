@@ -534,6 +534,37 @@ function numero_bon_livraison(PDO $pdo, int $factureId): string {
     return $num;
 }
 
+/* ----------------------------------------------------------------------------
+   Adresse publique du site, utilisée dans les emails et les QR de vérification.
+   Ordre de priorité : la variable SITE_URL du serveur, puis le réglage saisi,
+   puis le domaine réellement utilisé. Une adresse « localhost » est écartée :
+   elle ne fonctionnerait chez aucun destinataire.
+   ---------------------------------------------------------------------------- */
+function adresse_site(array $settings = []): string {
+    $candidats = [];
+    if (defined('SITE_URL') && trim((string)SITE_URL) !== '') $candidats[] = (string)SITE_URL;
+    if (!empty($settings['site_url']))                        $candidats[] = (string)$settings['site_url'];
+
+    foreach ($candidats as $u) {
+        $u = rtrim(trim($u), '/');
+        if ($u === '') continue;
+        if (!preg_match('#^https?://#i', $u)) $u = 'https://' . $u;
+        if (preg_match('#//(localhost|127\.0\.0\.1|::1)#i', $u)) continue;   // inutilisable en dehors du serveur
+        return $u;
+    }
+
+    /* Dernier recours : le domaine par lequel on accède à l'application. */
+    if (!empty($_SERVER['HTTP_HOST'])) {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+              || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $hote = $_SERVER['HTTP_HOST'];
+        if (!preg_match('#^(localhost|127\.0\.0\.1|::1)#i', $hote)) {
+            return ($https ? 'https://' : 'http://') . $hote;
+        }
+    }
+    return '';
+}
+
 function next_numero(PDO $pdo, string $table, string $prefixe): string {
     $annee = date('Y');
     $like = $prefixe . '-' . $annee . '-%';
