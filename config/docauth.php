@@ -92,6 +92,33 @@ function qr_svg(string $text, int $scale = 4, int $quiet = 2): string {
 }
 
 /* QR en data-URI (pour <img> dans Dompdf). */
+/* Écrit le QR code dans un fichier PNG.
+   Le SVG convient au navigateur, mais le générateur de PDF ne lit que les
+   images matricielles : on produit donc un PNG avec GD. */
+function qr_png_fichier(string $text, string $chemin, int $scale = 5, int $quiet = 2): bool {
+    if (!function_exists('imagecreatetruecolor')) return false;
+    $m = qr_matrix($text);
+    if (!$m) return false;
+    $n = count($m);
+    $taille = ($n + 2 * $quiet) * $scale;
+    $im = imagecreatetruecolor($taille, $taille);
+    $blanc = imagecolorallocate($im, 255, 255, 255);
+    $noir  = imagecolorallocate($im, 0, 0, 0);
+    imagefilledrectangle($im, 0, 0, $taille, $taille, $blanc);
+    for ($y = 0; $y < $n; $y++) {
+        for ($x = 0; $x < $n; $x++) {
+            if (!empty($m[$y][$x])) {
+                $px = ($x + $quiet) * $scale;
+                $py = ($y + $quiet) * $scale;
+                imagefilledrectangle($im, $px, $py, $px + $scale - 1, $py + $scale - 1, $noir);
+            }
+        }
+    }
+    $ok = imagepng($im, $chemin);
+    imagedestroy($im);
+    return (bool)$ok;
+}
+
 function qr_datauri(string $text, int $scale = 4): string {
     return 'data:image/svg+xml;base64,' . base64_encode(qr_svg($text, $scale));
 }

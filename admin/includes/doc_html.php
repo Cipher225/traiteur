@@ -48,7 +48,7 @@ function doc_html_styles(): string {
      dessous, quelle que soit la longueur du document. */
   .cadre-page{width:100%;border-collapse:collapse}
   .cadre-page > tbody > tr > td, .cadre-page > tfoot > tr > td{padding:0;border:none}
-  .pied-reserve{height:0}
+  .pied-reserve{height:auto}
 
   /* ---------- Blocs Client / Informations ---------- */
   .parts{display:flex;gap:24px;padding:9px 30px 2px}
@@ -241,11 +241,13 @@ function doc_html_styles(): string {
        est reservee par le calcul de calage (variable "securite"), d'ou l'absence de chevauchement. */
     .cadre-page tfoot{display:table-footer-group}
     .cadre-page > tbody > tr > td{vertical-align:top}
-    .pied-reserve{height:19mm}          /* place réservée au pied de page, chaque page */
-    .df{position:fixed;bottom:4mm;left:0;right:0;margin:0;background:#fff}
-    /* la ligne "Document emis le..." fait partie du pied de page : elle doit etre fixee
-       elle aussi, sinon elle flotte en fin de document et cree une page presque vide. */
-    .df-page{position:fixed;bottom:1mm;left:0;right:0;margin:0;padding:0;background:#fff}
+    /* Le pied de page vit DANS le pied du cadre : il se répète sur chaque page et
+       reste collé au bas de la zone de contenu. Contrairement à un élément fixé sur
+       la feuille, il suit la marge réellement accordée par le navigateur — y compris
+       lorsque celui-ci réserve de la place pour ses propres mentions. */
+    .pied-reserve{height:auto;min-height:17mm;padding-top:2mm}
+    .df{position:static;margin:0;background:#fff}
+    .df-page{position:static;margin:0;padding:0;background:#fff}
     /* BLOC AUTH (QR + tampon + signature) : dans le flux -> apparait UNE fois, sur la derniere page */
     /* Le bloc embarque sa propre zone de degagement (22 mm) : comme il est insecable,
        le navigateur le bascule tout seul sur la page suivante s'il ne tient pas

@@ -6,6 +6,9 @@ config/config.local.php
 uploads/*
 !uploads/.htaccess
 !uploads/.gitkeep
+!uploads/tmp/
+!uploads/tmp/.htaccess
+!uploads/tmp/.gitkeep
 !uploads/coffre/
 !uploads/coffre/.htaccess
 !uploads/coffre/.gitkeep

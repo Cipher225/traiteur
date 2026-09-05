@@ -39,6 +39,8 @@ $renderDoc = function($f) use ($doc, $devise) {
         <a class="btn btn-glass btn-sm" href="print.php?type=<?= $doc ?>&id=<?= $f['id'] ?>" target="_blank" title="Voir / Imprimer">📄</a>
         <?php if(is_admin()): ?><a class="btn btn-glass btn-sm" href="print.php?type=<?= $doc ?>&id=<?= $f['id'] ?>&auth=1" target="_blank" title="Authentifiable">🔐</a><?php endif; ?>
         <?php if($doc==='facture'): ?><a class="btn btn-glass btn-sm" href="print.php?type=livraison&id=<?= $f['id'] ?><?= is_admin() ? '&auth=1' : '' ?>" target="_blank" title="Bon de livraison">🚚</a><?php endif; ?>
+        <?php /* PDF fabriqué par le serveur : rendu identique sur tous les appareils */ ?>
+        <a class="btn btn-gold btn-sm" href="pdf.php?type=<?= $doc ?>&id=<?= $f['id'] ?>&dl=1" title="Télécharger en PDF">⬇️</a>
         <a class="btn btn-glass btn-sm" href="<?= $doc==='proforma'?'factures.php?doc=proforma&':'factures.php?' ?>edit=<?= $f['id'] ?>" title="Modifier">✏️</a>
         <?php if(is_admin()): ?>
         <form method="post" style="display:inline" data-confirm="Envoyer ce document par email au client ?">
