@@ -129,7 +129,7 @@ function signature_image(array $s, string $reference, string $empreinte, string 
     $ecrire($empreinte, $xa, 140, 11, $marine, true);
 
     /* QR de vérification */
-    $url = adresse_site($s) . '/verifier-email.php?c=' . $reference;
+    $url = adresse_site($s) . '/verifier.php?c=' . $reference;   // page unique
     $tmp = sys_get_temp_dir() . '/qr-sig-' . $reference . '.png';
     if (function_exists('qr_png_fichier') && qr_png_fichier($url, $tmp, 4, 1)) {
         $qr = @imagecreatefrompng($tmp);

@@ -102,37 +102,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
         $dossier = __DIR__ . '/../uploads/signatures';
         if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
 
+        /* L'authentification se décide message par message. Une confirmation de
+           rendez-vous n'en a pas besoin ; un devis ou une facture, si. */
+        $authentifier = !empty($_POST['authentifier']);
+
         foreach ($liste as $d) {
             $date      = date('Y-m-d H:i:s');
             $reference = signature_reference($pdo);
             $empreinte = signature_empreinte($d['email'], $sujet, $corps, $date);
 
-            /* L'image de signature est propre à CE message : elle porte sa
-               référence et son empreinte. */
-            $fichier = $dossier . '/' . $reference . '.png';
-            signature_image($settings, $reference, $empreinte, $fichier);
+            $fichier = null;
+            if ($authentifier) {
+                /* L'image de signature est propre à CE message : elle porte sa
+                   référence et son empreinte. */
+                $fichier = $dossier . '/' . $reference . '.png';
+                signature_image($settings, $reference, $empreinte, $fichier);
+            }
 
             $site = adresse_site($settings);
             $urlSig = $site . '/signature-mail.php?c=' . urlencode($reference);
-            $urlVerif = $site . '/verifier-email.php?c=' . urlencode($reference);
+            $urlVerif = $site . '/verifier.php?c=' . urlencode($reference);
 
             /* La signature et le logo voyagent AVEC le message : une image
                chargée depuis Internet serait bloquée par la plupart des
                messageries, et n'apparaîtrait pas chez le destinataire. */
-            $images = [['cid' => 'signature-entreprise', 'chemin' => $fichier]];
+            $images = [];
             $cheminLogo = __DIR__ . '/../uploads/' . (string)($settings['logo'] ?? '');
             if (!empty($settings['logo']) && is_file($cheminLogo)) {
                 $images[] = ['cid' => 'logo-entreprise', 'chemin' => $cheminLogo];
             }
 
-            $message = $corps
-                . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
-                . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
-                . '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
-                . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
-                . ($urlVerif !== '/verifier-email.php?c=' . urlencode($reference)
-                    ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
-                . '</p></div>';
+            if ($authentifier) {
+                $images[] = ['cid' => 'signature-entreprise', 'chemin' => $fichier];
+                $message = $corps
+                    . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
+                    . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
+                    . '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
+                    . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
+                    . ($site !== ''
+                        ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
+                    . '</p></div>';
+            } else {
+                /* Sans authentification, on garde une signature sobre : le
+                   message ne doit pas se terminer abruptement. */
+                $coord = array_filter([
+                    trim((string)($settings['telephone'] ?? '')),
+                    trim((string)($settings['email'] ?? '')),
+                ]);
+                $message = $corps
+                    . '<div style="margin-top:24px;border-top:1px solid #e8ecf2;padding-top:14px;'
+                    . 'font-size:12px;color:#6e7685;line-height:1.7">'
+                    . '<strong style="color:#0a1f44;font-size:13px">' . e($settings['nom_entreprise'] ?? '') . '</strong>'
+                    . ($coord ? '<br>' . e(implode(' · ', $coord)) : '')
+                    . '</div>';
+            }
 
             $motif = null;
             $ok = envoyer_email($pdo, $d['email'], $sujet, $message,
@@ -140,12 +163,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
 
             $listePJ = implode(', ', array_map(fn($p) => $p['nom'], $pieces));
             $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,
-                           client_id, sujet, corps, piece_jointe, envoye_par, envoye_par_nom, statut, envoye_le)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+                           client_id, sujet, corps, piece_jointe, envoye_par, envoye_par_nom,
+                           statut, envoye_le, authentifie)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([$reference, $empreinte, $d['email'], $d['nom'], $d['client_id'], $sujet, $corps,
                            mb_substr($listePJ, 0, 190),
                            (int)($_SESSION['admin_id'] ?? 0) ?: null, (string)($_SESSION['admin_nom'] ?? ''),
-                           $ok ? 'envoye' : 'echoue', $date]);
+                           $ok ? 'envoye' : 'echoue', $date, $authentifier ? 1 : 0]);
             if (!$ok && $motif) {
                 $pdo->prepare('UPDATE emails_envoyes SET erreur=? WHERE reference=?')
                     ->execute([mb_substr($motif, 0, 250), $reference]);
@@ -296,7 +320,21 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
   <!-- ============ Signature ============ -->
   <div class="panel glass">
     <h2>🔏 Signature de l'entreprise</h2>
-    <p class="mail-aide">Ajoutée automatiquement au bas de chaque message.</p>
+
+    <?php $authDefaut = ($settings['signature_auth_defaut'] ?? '1') !== '0'; ?>
+    <?php $authCoche = !empty($_POST['authentifier']) || (empty($_POST['envoyer']) && $authDefaut); ?>
+    <label class="bascule <?= $authCoche ? 'actif' : '' ?>">
+      <input type="checkbox" name="authentifier" value="1" id="bascule-auth"
+             <?= (!empty($_POST['authentifier']) || (empty($_POST['envoyer']) && $authDefaut)) ? 'checked' : '' ?>>
+      <span class="bc-piste"><span class="bc-rond"></span></span>
+      <span class="bc-txt">
+        <strong>Signature authentifiable</strong>
+        <span>Référence unique, QR de vérification et empreinte du message.</span>
+      </span>
+    </label>
+
+    <div id="zone-sig" <?= $authCoche ? '' : 'hidden' ?>>
+    <p class="mail-aide" style="margin-top:12px">Voici ce que verra votre destinataire.</p>
     <div class="mail-sig">
       <img src="signature-apercu.php" alt="Signature" style="width:100%;height:auto;border-radius:8px">
     </div>
@@ -306,6 +344,20 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
       <div class="ms-l"><b>2.</b> La signature est une <b>image fabriquée par le serveur</b> : elle ne peut pas être modifiée dans un client de messagerie.</div>
       <div class="ms-l"><b>3.</b> Le destinataire scanne le code ou clique le lien : le serveur <b>confirme</b> que ce message vient bien de vous.</div>
       <div class="ms-n">Une copie de l'image reste possible — c'est vrai de toute image. Mais un message contrefait n'aura pas de référence valide : la vérification échouera et la fraude sera visible.</div>
+    </div>
+    </div>
+
+    <div id="zone-simple" <?= $authCoche ? 'hidden' : '' ?>>
+      <div class="sig-simple">
+        <div class="ss-t">Signature simple</div>
+        <strong><?= e($settings['nom_entreprise'] ?? '') ?></strong>
+        <div><?= e(trim(($settings['telephone'] ?? '') . ' · ' . ($settings['email'] ?? ''), ' ·')) ?></div>
+      </div>
+      <p class="mail-note" style="margin-top:9px">
+        Sans authentification : ni référence, ni QR. À réserver aux messages courants —
+        confirmation de rendez-vous, remerciement. Pour un devis ou une facture,
+        laissez l'authentification active.
+      </p>
     </div>
   </div>
 </div>
@@ -381,7 +433,8 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
           <td style="font-size:12.5px"><?= e(mb_substr($h['sujet'], 0, 50)) ?></td>
           <td style="font-size:11.5px;color:var(--ink-faint)">
             <?= trim((string)$h['piece_jointe']) !== '' ? '📎 ' . e(mb_substr($h['piece_jointe'], 0, 40)) : '—' ?></td>
-          <td style="font-family:monospace;font-size:11.5px"><?= e($h['reference']) ?></td>
+          <td style="font-family:monospace;font-size:11.5px">
+            <?= empty($h['authentifie']) ? '<span style="font-family:inherit;color:var(--ink-faint)">non authentifié</span>' : e($h['reference']) ?></td>
           <td><span class="etat-pay <?= $h['statut'] === 'envoye' ? 'ep-paye' : 'ep-echoue' ?>">
             <?= $h['statut'] === 'envoye' ? 'Envoyé' : 'Échec' ?></span></td>
           <td><?php if (is_admin()): ?>
@@ -491,6 +544,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
     if (e.target.dataset.i !== undefined) dests.splice(+e.target.dataset.i, 1);
     if (e.target.dataset.p !== undefined) pjs.splice(+e.target.dataset.p, 1);
     dessinerJetons();
+
   });
 
   var selClient = document.getElementById('sel-client');
@@ -561,6 +615,17 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
   });
 
   dessinerJetons();
+
+  /* Bascule de l'authentification : l'aperçu montre aussitôt ce que recevra
+     le destinataire selon le choix. */
+  var bascule = document.getElementById('bascule-auth');
+  function majSignature() {
+    var actif = bascule.checked;
+    document.getElementById('zone-sig').hidden = !actif;
+    document.getElementById('zone-simple').hidden = actif;
+    bascule.closest('.bascule').classList.toggle('actif', actif);
+  }
+  bascule.addEventListener('change', majSignature);
 
   /* Confirmation avant envoi : un message parti ne se rattrape pas. */
   document.getElementById('form-mail').addEventListener('submit', function (e) {

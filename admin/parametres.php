@@ -169,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($champs as $k) { if (isset($_POST[$k])) $up->execute([$k, mb_substr(trim($_POST[$k]), 0, 200)]); }
         // Mot de passe SMTP : ne l'écraser que si un nouveau est saisi
         if (!empty($_POST['smtp_pass'])) $up->execute(['smtp_pass', trim($_POST['smtp_pass'])]);
+        $up->execute(['signature_auth_defaut', empty($_POST['signature_auth_defaut']) ? '0' : '1']);
         $up->execute(['emails_actifs', isset($_POST['emails_actifs']) ? '1' : '0']);
         flash('Réglages email enregistrés.');
     } elseif (isset($_POST['maj_google'])) {
@@ -369,6 +370,10 @@ $avanceeOuverte = array_key_exists($sectionOuverte, $avancees) ? $sectionOuverte
     <label class="chk-line full" style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
       <input type="checkbox" name="emails_actifs" value="1" <?= (($s['emails_actifs'] ?? '1') !== '0') ? 'checked' : '' ?>>
       <span>Autoriser l'envoi d'emails depuis l'application</span>
+    </label>
+    <label class="chk-line full" style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <input type="checkbox" name="signature_auth_defaut" value="1" <?= (($s['signature_auth_defaut'] ?? '1') !== '0') ? 'checked' : '' ?>>
+      <span>Activer la signature authentifiable par défaut (modifiable à chaque envoi)</span>
     </label>
     <div class="field"><label>Email expéditeur (adresse d'envoi)</label><input class="input" type="email" id="smtp_email" name="email" value="<?= e($s['email'] ?? '') ?>" placeholder="contact@mondomaine.com"></div>
     <input type="hidden" id="fournisseur_mail" name="fournisseur_mail" value="<?= e($s['fournisseur_mail'] ?? '') ?>">

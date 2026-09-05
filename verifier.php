@@ -4,8 +4,32 @@ require __DIR__ . '/config/docauth.php';
 $settings = get_settings($pdo);
 $ent = $settings['nom_entreprise'] ?? 'Groupe Helisce';
 
-$code = $_GET['c'] ?? ($_POST['c'] ?? '');
+/* Une seule adresse de vérification pour TOUT : documents et messages.
+   Le code saisi peut être un jeton de document ou une référence d'email —
+   le client n'a qu'une page à retenir. */
+$code = trim((string)($_GET['c'] ?? ($_POST['c'] ?? '')));
+$code = preg_replace('/\s+/', '', $code);
 $auth = $code !== '' ? doc_verify($pdo, $code) : null;
+
+/* Référence d'email : GH-2026-A4F91C */
+$mail = null;
+if (!$auth && $code !== '') {
+    try {
+        /* Seuls les messages envoyés AVEC authentification sont vérifiables :
+           les autres n'ont jamais communiqué de référence. */
+        $st = $pdo->prepare('SELECT reference, destinataire, sujet, envoye_le
+                             FROM emails_envoyes
+                             WHERE reference = ? AND statut = "envoye" AND COALESCE(authentifie,1) = 1');
+        $st->execute([strtoupper($code)]);
+        $mail = $st->fetch() ?: null;
+    } catch (Throwable $e) { $mail = null; }
+}
+
+/* L'adresse n'est jamais dévoilée en entier : c'est une donnée personnelle. */
+$masquer = function (string $m): string {
+    [$a, $b] = array_pad(explode('@', $m, 2), 2, '');
+    return mb_substr($a, 0, 2) . str_repeat('•', max(2, mb_strlen($a) - 2)) . '@' . $b;
+};
 
 // Détails du document authentifié
 $typeLabels = [
@@ -77,7 +101,7 @@ if ($auth) {
   <?php if ($code === ''): ?>
     <div class="vhead"><div class="ic">🔎</div><h1>Vérifier un document</h1><p>Saisissez le code d'authentification figurant sur le document, ou scannez le QR code.</p></div>
     <form method="get" class="vform">
-      <input class="input" name="c" placeholder="Code du document" required style="flex:1">
+      <input class="input" name="c" placeholder="Code du document ou référence du message" required style="flex:1">
       <button class="btn btn-gold">Vérifier</button>
     </form>
   <?php elseif ($auth): ?>
@@ -90,8 +114,22 @@ if ($auth) {
       <tr><td class="k">Authentifié le</td><td class="v"><?= date('d/m/Y', strtotime($auth['created_at'])) ?></td></tr>
     </table>
     <p class="vfoot">Comparez ces informations avec votre exemplaire papier. En cas de différence (montant, nom, date…), le document en votre possession est une falsification.</p>
+  <?php elseif ($mail): ?>
+    <div class="vhead ok"><div class="ic">✅</div><h1>Message authentique</h1>
+      <p>Ce message a bien été envoyé par <strong><?= e($ent) ?></strong>.</p></div>
+    <div class="vseal">🔐 Envoyé par <?= e($ent) ?></div>
+    <table class="vtable">
+      <tr><td class="k">Type</td><td class="v">Message électronique</td></tr>
+      <tr><td class="k">Référence</td><td class="v"><?= e($mail['reference']) ?></td></tr>
+      <tr><td class="k">Objet</td><td class="v"><?= e($mail['sujet']) ?></td></tr>
+      <tr><td class="k">Destinataire</td><td class="v"><?= e($masquer($mail['destinataire'])) ?></td></tr>
+      <tr><td class="k">Envoyé le</td><td class="v"><?= date('d/m/Y à H:i', strtotime($mail['envoye_le'])) ?></td></tr>
+    </table>
+    <p class="vfoot">Si le message que vous avez reçu diffère de ces informations (objet, date),
+      soyez prudent : il pourrait s'agir d'une contrefaçon.</p>
+
   <?php else: ?>
-    <div class="vhead no"><div class="ic">⚠️</div><h1>Document non reconnu</h1><p>Aucun document authentique ne correspond à ce code. Ce document pourrait être falsifié ou le code mal saisi.</p></div>
+    <div class="vhead no"><div class="ic">⚠️</div><h1>Code non reconnu</h1><p>Aucun document ni message authentique ne correspond à ce code. Il pourrait s'agir d'une falsification, ou le code a été mal saisi.</p></div>
     <form method="get" class="vform">
       <input class="input" name="c" placeholder="Ressaisir le code" style="flex:1">
       <button class="btn btn-gold">Réessayer</button>

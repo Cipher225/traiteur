@@ -948,3 +948,7 @@ CREATE TABLE IF NOT EXISTS emails_envoyes (
 
 -- Fournisseur de messagerie retenu (Gmail, Hostinger, Outlook…)
 INSERT IGNORE INTO settings (cle, valeur) VALUES ('fournisseur_mail','');
+
+-- Authentification des messages : activable au cas par cas.
+ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS authentifie TINYINT(1) DEFAULT 1;
+INSERT IGNORE INTO settings (cle, valeur) VALUES ('signature_auth_defaut','1');
