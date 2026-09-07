@@ -962,3 +962,22 @@ ALTER TABLE emails_envoyes
 ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS approuve_par INT DEFAULT NULL;
 ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS approuve_le DATETIME DEFAULT NULL;
 ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS pieces_ref TEXT;
+
+-- Fichiers joints par un employé : conservés jusqu'à la décision de l'admin.
+ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS fichiers TEXT;
+
+-- =====================================================================
+--  RENTABILITÉ PAR ACTIVITÉ
+--  Une dépense n'a pas toujours de client (loyer, salaires, carburant).
+--  En revanche, elle se rattache souvent à une prestation précise : on
+--  peut alors comparer ce qu'une activité a rapporté et ce qu'elle a
+--  coûté, et connaître son bénéfice réel.
+-- =====================================================================
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS facture_id INT DEFAULT NULL;
+ALTER TABLE recus       ADD COLUMN IF NOT EXISTS categorie VARCHAR(80) DEFAULT '';
+
+-- Reprise : les écritures déjà rattachées à un reçu héritent de son activité.
+UPDATE transactions t
+  JOIN recus r ON r.id = t.recu_id
+   SET t.facture_id = r.facture_id
+ WHERE t.facture_id IS NULL AND r.facture_id IS NOT NULL;

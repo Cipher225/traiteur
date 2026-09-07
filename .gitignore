@@ -9,6 +9,9 @@ uploads/*
 !uploads/tmp/
 !uploads/tmp/.htaccess
 !uploads/tmp/.gitkeep
+!uploads/tmp/attente/
+!uploads/tmp/attente/.htaccess
+!uploads/tmp/attente/.gitkeep
 !uploads/signatures/
 !uploads/signatures/.htaccess
 !uploads/signatures/.gitkeep

@@ -2462,3 +2462,46 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 [data-theme="light"] .ev-traitement{ color:#6d28d9 }
 [data-theme="light"] .ev-confirmee{ color:#047857 }
 [data-theme="light"] .google-etat.on{ color:#047857 }
+
+/* Lecture d'un message avant approbation */
+.lire-msg summary{cursor:pointer;color:var(--gold);font-size:12px;list-style:none;padding:2px 0}
+.lire-msg summary::-webkit-details-marker{display:none}
+.lm-corps{margin-top:8px;padding:12px 14px;border-radius:10px;max-height:280px;overflow-y:auto;
+  background:#fff;color:#1f2430;font-size:12.5px;line-height:1.6}
+.lm-corps h1,.lm-corps h2,.lm-corps h3{color:#0a1f44;margin:8px 0 5px}
+.lm-corps p{margin:0 0 7px}
+.lm-pj{margin-top:8px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:11.5px}
+.lm-pj strong{color:var(--ink);font-size:11px}
+.lm-pj a,.lm-pj span{padding:3px 9px;border-radius:16px;text-decoration:none;color:var(--ink-dim);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.lm-pj a:hover{color:var(--gold);border-color:rgba(212,165,38,.4)}
+
+/* Bandeau à fond marine : son texte reste clair dans les deux thèmes.
+   Sans cela, en mode clair, le texte devient noir sur bleu et disparaît. */
+.tone-blue h2,
+.tone-blue h3,
+.tone-blue p,
+.tone-blue .tb-txt,
+.tone-blue strong,
+.tone-blue span{ color:#e7ecf5 !important }
+.tone-blue .tb-txt{ color:#c3cee2 !important }
+.tone-blue strong{ color:#f0c14b !important }
+
+/* ============================================================
+   RENTABILITÉ PAR ACTIVITÉ
+   ============================================================ */
+.rent-resume{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px}
+.rr-b{padding:12px 15px;border-radius:13px;text-align:center;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.rr-v{display:block;font-family:var(--font-display);font-size:18px;font-weight:800;
+  color:var(--ink);letter-spacing:-.02em}
+.rr-l{display:block;font-size:11.5px;color:var(--ink-faint);margin-top:3px}
+.rent-jauge{height:6px;border-radius:4px;background:var(--glass-border-soft);overflow:hidden}
+.rent-jauge span{display:block;height:100%;border-radius:4px}
+.rent-jauge.bon span{background:linear-gradient(90deg,#34d399,#10b981)}
+.rent-jauge.moyen span{background:linear-gradient(90deg,#fbbf24,#f0b429)}
+.rent-jauge.faible span{background:linear-gradient(90deg,#fca5a5,#f87171)}
+.rent-pct{font-size:11.5px;font-weight:700;margin-top:4px;text-align:center}
+.rent-pct.bon{color:#10b981}
+.rent-pct.moyen{color:#f0b429}
+.rent-pct.faible{color:#f87171}

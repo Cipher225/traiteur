@@ -32,26 +32,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $activite = mb_substr(trim($_POST['activite'] ?? ''), 0, 255);
     $date_evt = ($_POST['date_evenement'] ?? '') ?: null;
     $nb_jours = max(1, min(60, (int)($_POST['nb_jours'] ?? 1)));
+    /* Une sortie porte une nature de dépense ; elle n'a pas de client. */
+    $categorie = $TYPE === 'sortie' ? mb_substr(trim($_POST['categorie'] ?? 'Divers'), 0, 80) : '';
+    if ($TYPE === 'sortie') $client_id = null;
     $lieu     = mb_substr(trim($_POST['lieu'] ?? ''), 0, 255);
 
     if ($montant <= 0) { flash('Le montant doit être supérieur à 0.', 'error'); header('Location: ' . $RETOUR); exit; }
 
     if ($id) {
-        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, nb_jours=?, lieu=? WHERE id=?')
-            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $id]);
+        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, nb_jours=?, lieu=?, categorie=? WHERE id=?')
+            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie, $id]);
         // L'écriture comptable suit la modification
         $st = $pdo->prepare('SELECT numero FROM recus WHERE id=?');
         $st->execute([$id]);
         $num = (string)$st->fetchColumn();
-        ecriture_pour_recu($pdo, $id, $TYPE, $num, $montant, $mode, $motif, $date, $client_id, $activite);
+        ecriture_pour_recu($pdo, $id, $TYPE, $num, $montant, $mode, $motif, $date, $client_id, $activite, $categorie, $facture_id);
         flash($LIB . ' modifié.');
     } else {
         $numero = next_numero($pdo, 'recus', $PREF);
-        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, nb_jours, lieu, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
-            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu]);
+        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, nb_jours, lieu, categorie, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
+            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie]);
         $nid = (int)$pdo->lastInsertId();
         // Toute entrée ou sortie de caisse alimente la comptabilité
-        ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite);
+        ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite, $categorie, $facture_id);
         flash($LIB . ' ' . $numero . ' créé.');
     }
     header('Location: ' . $RETOUR); exit;
@@ -60,7 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $edit = null;
 if (isset($_GET['edit'])) { $stmt = $pdo->prepare('SELECT * FROM recus WHERE id=?'); $stmt->execute([(int)$_GET['edit']]); $edit = $stmt->fetch(); }
 $clients = $pdo->query('SELECT id, nom FROM clients ORDER BY nom')->fetchAll();
-$facts = $pdo->query("SELECT id, numero FROM factures WHERE type='facture' ORDER BY id DESC LIMIT 100")->fetchAll();
+/* Les activités auxquelles une dépense peut se rattacher : factures et
+   proformas confirmées. Une dépense est souvent engagée avant la facturation. */
+$facts = $pdo->query("SELECT f.id, f.numero, f.activite,
+                             COALESCE(NULLIF(c.entreprise,''), c.nom) AS client_nom
+                      FROM factures f LEFT JOIN clients c ON c.id = f.client_id
+                      WHERE f.statut <> 'annulee'
+                      ORDER BY f.date_emission DESC, f.id DESC LIMIT 120")->fetchAll();
 $st = $pdo->prepare("SELECT r.*, c.nom AS client, f.numero AS facture FROM recus r LEFT JOIN clients c ON c.id=r.client_id LEFT JOIN factures f ON f.id=r.facture_id WHERE r.type=? ORDER BY r.date_paiement DESC, r.id DESC");
 $st->execute([$TYPE]); $recus = $st->fetchAll();
 
@@ -86,16 +95,32 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
   <form method="post" class="form-grid">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="type" value="<?= e($TYPE) ?>">
     <input type="hidden" name="id" value="<?= $edit['id'] ?? '' ?>">
+    <?php if ($TYPE === 'entree'): ?>
     <div class="field"><label>Client</label>
       <select class="input" name="client_id"><option value="">— Client de passage —</option>
         <?php foreach ($clients as $c): ?><option value="<?= $c['id'] ?>" <?= ($edit['client_id'] ?? 0)==$c['id']?'selected':'' ?>><?= e($c['nom']) ?></option><?php endforeach; ?>
       </select>
     </div>
+    <?php else: ?>
+    <?php /* Une sortie d'argent n'a pas de client : elle a une NATURE (loyer,
+             salaires, approvisionnement…) et, éventuellement, une activité à
+             laquelle elle se rattache. C'est ce rattachement qui permettra de
+             connaître le bénéfice réel de chaque prestation. */ ?>
+    <div class="field"><label>Nature de la dépense *</label>
+      <select class="input" name="categorie" required>
+        <?php foreach (categories_depense() as $nom => $ico): ?>
+        <option value="<?= e($nom) ?>" <?= ($edit['categorie'] ?? '') === $nom ? 'selected' : '' ?>>
+          <?= $ico ?> <?= e($nom) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <?php endif; ?>
     <div class="field"><label>Montant (<?= e($devise) ?>) *</label><input class="input" type="number" name="montant" min="0" step="100" required value="<?= e($edit['montant'] ?? '') ?>"></div>
     <div class="field"><label>Mode de paiement</label>
       <select class="input" name="mode_paiement"><?php foreach ($modes as $m): ?><option <?= ($edit['mode_paiement'] ?? '')===$m?'selected':'' ?>><?= $m ?></option><?php endforeach; ?></select>
     </div>
     <div class="field"><label>Date du paiement</label><input class="input" type="date" name="date_paiement" value="<?= e($edit['date_paiement'] ?? date('Y-m-d')) ?>"></div>
+    <?php if ($TYPE === 'entree'): ?>
     <div class="field full"><label>Activité / Description de la prestation</label><input class="input" name="activite" placeholder="ex : Buffet mariage, Cocktail…" value="<?= e($edit['activite'] ?? '') ?>"></div>
     <div class="field"><label>Date de l'événement</label><input class="input" type="date" name="date_evenement" value="<?= e($edit['date_evenement'] ?? '') ?>"></div>
     <div class="field"><label>Nombre de jours</label>
@@ -103,12 +128,27 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
       <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une seule journée.</span>
     </div>
     <div class="field"><label>Lieu de l'événement</label><input class="input" name="lieu" placeholder="ex : Cocody, Salle des fêtes…" value="<?= e($edit['lieu'] ?? '') ?>"></div>
-    <div class="field"><label>Facture liée (facultatif)</label>
-      <select class="input" name="facture_id"><option value="">—</option>
-        <?php foreach ($facts as $fa): ?><option value="<?= $fa['id'] ?>" <?= ($edit['facture_id'] ?? 0)==$fa['id']?'selected':'' ?>><?= e($fa['numero']) ?></option><?php endforeach; ?>
+    <?php endif; ?>
+    <div class="field <?= $TYPE === 'sortie' ? 'full' : '' ?>">
+      <label><?= $TYPE === 'entree' ? 'Facture réglée (facultatif)' : 'Dépense engagée pour…' ?></label>
+      <select class="input" name="facture_id">
+        <option value=""><?= $TYPE === 'entree' ? '—' : '— Charge générale de l\'entreprise —' ?></option>
+        <?php foreach ($facts as $fa): ?>
+        <option value="<?= $fa['id'] ?>" <?= ($edit['facture_id'] ?? 0)==$fa['id']?'selected':'' ?>>
+          <?= e($fa['numero']) ?><?= !empty($fa['client_nom']) ? ' — ' . e($fa['client_nom']) : '' ?><?= !empty($fa['activite']) ? ' (' . e($fa['activite']) . ')' : '' ?>
+        </option>
+        <?php endforeach; ?>
       </select>
+      <?php if ($TYPE === 'sortie'): ?>
+      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">
+        Rattachez la dépense à une prestation pour suivre son bénéfice.
+        Laissez vide pour une charge courante : loyer, salaires, électricité…
+      </span>
+      <?php endif; ?>
     </div>
-    <div class="field"><label>Motif</label><input class="input" name="motif" value="<?= e($edit['motif'] ?? '') ?>" placeholder="ex : Acompte prestation mariage"></div>
+    <div class="field"><label><?= $TYPE === 'entree' ? 'Motif' : 'Détail de la dépense' ?></label>
+      <input class="input" name="motif" value="<?= e($edit['motif'] ?? '') ?>"
+             placeholder="<?= $TYPE === 'entree' ? 'ex : Acompte prestation mariage' : 'ex : Achat de denrées au marché' ?>"></div>
     <div class="field full"><label>Notes</label><input class="input" name="notes" value="<?= e($edit['notes'] ?? '') ?>"></div>
     <div class="full" style="display:flex;gap:10px">
       <button class="btn btn-gold"><?= $edit ? 'Enregistrer' : 'Créer cette ' . e(mb_strtolower($LIB)) ?></button>

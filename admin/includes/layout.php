@@ -29,6 +29,16 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
             $nc = (int)$pdo->query("SELECT COUNT(*) FROM commandes_client WHERE statut='nouvelle'")->fetchColumn();
             if ($nc > 0) { $badges['commandes_client'] = $nc; if (!$notif) { $notif = $nc; $notif_url = 'commandes-client.php'; $notif_label = 'nouvelle(s) commande(s)'; } }
         } catch (Throwable $e) {}
+
+        /* Messages rédigés par un employé et en attente d'approbation :
+           une demande ne doit pas rester invisible. */
+        try {
+            $ma = (int)$pdo->query("SELECT COUNT(*) FROM emails_envoyes WHERE statut='en_attente'")->fetchColumn();
+            if ($ma > 0) {
+                $badges['messages'] = $ma;
+                if (!$notif) { $notif = $ma; $notif_url = 'messages.php'; $notif_label = 'message(s) à approuver'; }
+            }
+        } catch (Throwable $e) {}
     }
     ?>
 <!DOCTYPE html>

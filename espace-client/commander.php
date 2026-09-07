@@ -47,7 +47,7 @@ client_header('Commander', 'commander', $settings, $CLIENT);
 ?>
 <div class="panel glass tone-blue">
   <h2>🛒 Composez votre commande</h2>
-  <p style="color:var(--ink-dim);font-size:14px;margin:0">Choisissez vos formules et indiquez le nombre de personnes pour chacune. Dépliez une formule pour voir ce qu'elle comprend. Envoyez votre commande : notre équipe vous prépare une <strong>proforma personnalisée</strong> que vous retrouverez dans « Mes commandes ».</p>
+  <p class="tb-txt" style="font-size:14px;margin:0">Choisissez vos formules et indiquez le nombre de personnes pour chacune. Dépliez une formule pour voir ce qu'elle comprend. Envoyez votre commande : notre équipe vous prépare une <strong>proforma personnalisée</strong> que vous retrouverez dans « Mes commandes ».</p>
 </div>
 
 <div class="order-layout">

@@ -19,6 +19,11 @@ if (!is_admin()) {
 $devise = $settings['devise'] ?? 'FCFA';
 $annee  = (int)($_GET['annee'] ?? date('Y'));
 
+/* Format court des montants, sans devise : les colonnes restent alignées. */
+if (!function_exists('nf')) {
+    function nf($n) { return number_format((float)$n, 0, ',', ' '); }
+}
+
 $anneesDispo = $pdo->query("SELECT DISTINCT YEAR(date_operation) a FROM transactions ORDER BY a DESC")->fetchAll(PDO::FETCH_COLUMN);
 if (!$anneesDispo) $anneesDispo = [(int)date('Y')];
 
@@ -65,6 +70,44 @@ foreach ($st->fetchAll() as $f) {
 }
 
 /* ---------- Répartition par catégorie ---------- */
+/* ----------------------------------------------------------------------------
+   Rentabilité par activité : ce que chaque prestation a rapporté, ce qu'elle a
+   coûté, et ce qu'il en reste. C'est la vraie mesure de la performance : un
+   gros chiffre d'affaires avec de grosses dépenses peut rapporter moins qu'une
+   petite prestation bien maîtrisée.
+   ---------------------------------------------------------------------------- */
+$activites = [];
+try {
+    $st = $pdo->prepare("SELECT f.id, f.numero, f.activite, f.date_emission, f.statut,
+                                COALESCE(NULLIF(c.entreprise,''), c.nom) AS client
+                         FROM factures f LEFT JOIN clients c ON c.id = f.client_id
+                         WHERE f.type='facture' AND f.statut <> 'annulee'
+                           AND YEAR(f.date_emission) = ?
+                         ORDER BY f.date_emission DESC");
+    $st->execute([$annee]);
+    foreach ($st->fetchAll() as $f) {
+        $r = rentabilite_activite($pdo, (int)$f['id']);
+        if ($r['ca'] <= 0 && $r['depenses'] <= 0) continue;
+        $activites[] = $f + $r;
+    }
+    /* Les prestations les moins rentables en premier : ce sont celles qui
+       demandent votre attention. */
+    usort($activites, fn($a, $b) => $a['taux'] <=> $b['taux']);
+} catch (Throwable $e) { $activites = []; }
+
+$totalCA   = array_sum(array_column($activites, 'ca'));
+$totalDep  = array_sum(array_column($activites, 'depenses'));
+$margeGlob = $totalCA - $totalDep;
+
+/* Charges générales : les dépenses non rattachées à une prestation */
+$chargesGenerales = 0.0;
+try {
+    $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM transactions
+                         WHERE type='depense' AND facture_id IS NULL AND YEAR(date_operation)=?");
+    $st->execute([$annee]);
+    $chargesGenerales = (float)$st->fetchColumn();
+} catch (Throwable $e) {}
+
 $cats = $pdo->prepare("SELECT categorie, SUM(montant) s FROM transactions
                        WHERE type='entree' AND YEAR(date_operation)=?
                        GROUP BY categorie ORDER BY s DESC LIMIT 6");
@@ -177,6 +220,75 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
     </div>
     <div class="full"><button class="btn btn-gold">📥 Télécharger</button></div>
   </form>
+</div>
+
+<!-- ================= RENTABILITÉ PAR ACTIVITÉ ================= -->
+<div class="panel glass" style="margin-top:14px">
+  <h2>🎯 Rentabilité par activité</h2>
+  <p style="color:var(--ink-faint);font-size:13px;margin:-8px 0 14px;line-height:1.55">
+    Ce que chaque prestation a rapporté, ce qu'elle a coûté, et ce qu'il en reste.
+    Les moins rentables apparaissent en premier.
+  </p>
+
+  <?php if ($activites): ?>
+  <div class="rent-resume">
+    <div class="rr-b"><span class="rr-v"><?= money($totalCA, $devise) ?></span><span class="rr-l">Chiffre d'affaires</span></div>
+    <div class="rr-b"><span class="rr-v" style="color:#f87171"><?= money($totalDep, $devise) ?></span><span class="rr-l">Dépenses rattachées</span></div>
+    <div class="rr-b"><span class="rr-v" style="color:<?= $margeGlob >= 0 ? '#10b981' : '#f87171' ?>"><?= money($margeGlob, $devise) ?></span>
+      <span class="rr-l">Marge sur prestations</span></div>
+    <div class="rr-b"><span class="rr-v" style="color:#f0b429"><?= money($chargesGenerales, $devise) ?></span>
+      <span class="rr-l">Charges générales</span></div>
+  </div>
+
+  <div class="tbl-wrap" style="margin-top:12px">
+    <table>
+      <thead><tr>
+        <th class="l">Activité</th><th>Client</th>
+        <th class="r">Facturé</th><th class="r">Encaissé</th>
+        <th class="r">Dépenses</th><th class="r">Marge</th><th style="width:110px">Rentabilité</th>
+      </tr></thead>
+      <tbody>
+      <?php foreach ($activites as $a):
+        $t = (float)$a['taux'];
+        $classe = $t >= 40 ? 'bon' : ($t >= 15 ? 'moyen' : 'faible'); ?>
+        <tr>
+          <td>
+            <span style="font-weight:700;color:var(--ink)"><?= e($a['activite'] ?: $a['numero']) ?></span>
+            <div style="font-size:11px;color:var(--ink-faint)"><?= e($a['numero']) ?> ·
+              <?= !empty($a['date_emission']) ? date('d/m/Y', strtotime($a['date_emission'])) : '' ?></div>
+          </td>
+          <td style="font-size:12.5px"><?= e($a['client'] ?: '—') ?></td>
+          <td class="r"><?= nf($a['ca']) ?></td>
+          <td class="r" style="color:<?= $a['encaisse'] >= $a['ca'] ? '#10b981' : 'var(--ink-faint)' ?>"><?= nf($a['encaisse']) ?></td>
+          <td class="r" style="color:#f87171"><?= nf($a['depenses']) ?></td>
+          <td class="r" style="font-weight:800;color:<?= $a['marge'] >= 0 ? '#10b981' : '#f87171' ?>"><?= nf($a['marge']) ?></td>
+          <td>
+            <div class="rent-jauge <?= $classe ?>">
+              <span style="width:<?= max(3, min(100, (int)$t)) ?>%"></span>
+            </div>
+            <div class="rent-pct <?= $classe ?>"><?= number_format($t, 0) ?> %</div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin:12px 0 0;font-size:12px;color:var(--ink-faint);line-height:1.6">
+    <strong style="color:var(--ink)">Comment lire ce tableau.</strong>
+    « Facturé » est le montant de la facture ; « Encaissé » ce que le client a réellement réglé.
+    Une marge élevée mais un encaissement faible signale une facture à relancer.
+    Les charges générales — loyer, salaires, électricité — ne sont pas réparties par prestation :
+    elles se déduisent de la marge globale.
+  </p>
+
+  <?php else: ?>
+  <p style="color:var(--ink-faint);font-size:13px;margin:0">
+    Aucune activité chiffrée pour <?= (int)$annee ?>. Rattachez vos dépenses à une prestation
+    depuis <a href="recus.php?type=sortie" style="color:var(--gold)">Sorties</a> pour voir apparaître
+    leur rentabilité ici.
+  </p>
+  <?php endif; ?>
 </div>
 
 <?php admin_footer(); ?>

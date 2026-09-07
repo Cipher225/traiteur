@@ -46,8 +46,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
        Deux origines : les documents de l'application, régénérés en PDF au
        moment de l'envoi, et les fichiers choisis sur l'ordinateur ou le
        téléphone. */
-    $pieces = [];
-    $tempo  = [];
+    $pieces   = [];   // tout ce qui sera joint à l'envoi
+    $fichiers = [];   // uniquement les fichiers venant de l'appareil
+    $tempo    = [];
     $dossierPJ = __DIR__ . '/../uploads/tmp';
     if (!is_dir($dossierPJ)) @mkdir($dossierPJ, 0775, true);
 
@@ -87,8 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
             }
             $dest = $dossierPJ . '/pj-' . bin2hex(random_bytes(5)) . '.' . $ext;
             if (move_uploaded_file($_FILES['fichiers']['tmp_name'][$i], $dest)) {
-                $pieces[] = ['chemin' => $dest, 'nom' => preg_replace('/[^\w.\-]/u', '_', $nom)];
-                $tempo[] = $dest;
+                $p = ['chemin' => $dest, 'nom' => preg_replace('/[^\w.\-]/u', '_', $nom)];
+                $pieces[]   = $p;
+                $fichiers[] = $p;
+                $tempo[]    = $dest;
             }
         }
     }
@@ -103,13 +106,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
     $soumission = !is_admin();
 
     if (!$erreurs && $soumission) {
+        /* Les fichiers choisis sur l'appareil sont mis de côté : ils seront
+           joints au moment où l'administrateur approuvera le message. */
+        $attente = __DIR__ . '/../uploads/tmp/attente';
+        if (!is_dir($attente)) @mkdir($attente, 0775, true);
+        $gardes = [];
+        foreach ($fichiers as $p) {
+            if (empty($p['chemin']) || !is_file($p['chemin'])) continue;
+            $dest = $attente . '/' . bin2hex(random_bytes(6)) . '-' . preg_replace('/[^\w.\-]/u', '_', $p['nom']);
+            if (@copy($p['chemin'], $dest)) $gardes[] = ['chemin' => $dest, 'nom' => $p['nom']];
+        }
+        foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }
+        $noms = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
+                 'recu' => 'Recu', 'fiche' => 'Bulletin'];
+        $libelles = [];
+        foreach ((array)($_POST['docs'] ?? []) as $ref) {
+            [$t, $i] = array_pad(explode(':', (string)$ref, 2), 2, '');
+            $libelles[] = ($noms[$t] ?? 'Document') . '-' . (int)$i . '.pdf';
+        }
+        foreach ($gardes as $g) $libelles[] = $g['nom'];
+        $listeNoms = implode(', ', $libelles);
+
         foreach ($liste as $d) {
             $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,
-                           client_id, sujet, corps, piece_jointe, pieces_ref, envoye_par, envoye_par_nom,
+                           client_id, sujet, corps, piece_jointe, pieces_ref, fichiers, envoye_par, envoye_par_nom,
                            statut, envoye_le, authentifie)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([signature_reference($pdo), '', $d['email'], $d['nom'], $d['client_id'],
-                           $sujet, $corps, '', implode(',', (array)($_POST['docs'] ?? [])),
+                           $sujet, $corps, mb_substr($listeNoms, 0, 190),
+                           implode(',', (array)($_POST['docs'] ?? [])),
+                           $gardes ? json_encode($gardes, JSON_UNESCAPED_UNICODE) : null,
                            (int)($_SESSION['admin_id'] ?? 0) ?: null, (string)($_SESSION['admin_nom'] ?? ''),
                            'en_attente', date('Y-m-d H:i:s'), !empty($_POST['authentifier']) ? 1 : 0]);
         }
@@ -215,6 +241,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['decider'])) {
     } elseif ($_POST['decider'] === 'refuser') {
         $pdo->prepare('UPDATE emails_envoyes SET statut="refuse", approuve_par=?, approuve_le=NOW() WHERE id=?')
             ->execute([(int)$_SESSION['admin_id'], $id]);
+        foreach (json_decode((string)$msg['fichiers'], true) ?: [] as $g) {
+            if (!empty($g['chemin']) && is_file($g['chemin'])) @unlink($g['chemin']);
+        }
         journaliser($pdo, 'refus', 'message', $id, 'Message refusé — ' . mb_substr($msg['sujet'], 0, 60));
         flash('Message refusé. Il ne sera pas envoyé.');
     } else {
@@ -248,8 +277,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['decider'])) {
                 : '')
             . '</div>';
 
-        /* Pièces jointes demandées par l'employé : régénérées à l'envoi. */
+        /* Pièces jointes : les documents de l'application sont régénérés, les
+           fichiers déposés par l'employé sont repris tels quels. */
         $pieces = []; $tempo = [];
+        foreach (json_decode((string)$msg['fichiers'], true) ?: [] as $g) {
+            if (!empty($g['chemin']) && is_file($g['chemin'])) {
+                $pieces[] = ['chemin' => $g['chemin'], 'nom' => $g['nom'] ?? basename($g['chemin'])];
+            }
+        }
         foreach (array_filter(explode(',', (string)$msg['pieces_ref'])) as $ref) {
             if (!preg_match('/^(facture|proforma|livraison|recu|fiche):(\d+)$/', trim($ref), $m)) continue;
             $chemin = __DIR__ . '/../uploads/tmp/pj-' . $m[1] . '-' . $m[2] . '-' . bin2hex(random_bytes(3)) . '.pdf';
@@ -277,6 +312,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['decider'])) {
                        mb_substr(implode(', ', array_map(fn($p) => $p['nom'], $pieces)), 0, 190), $id]);
 
         foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }
+        foreach (json_decode((string)$msg['fichiers'], true) ?: [] as $g) {
+            if (!empty($g['chemin']) && is_file($g['chemin'])) @unlink($g['chemin']);
+        }
         if (!$authOk && is_file($fichier)) @unlink($fichier);
 
         journaliser($pdo, 'approbation', 'message', $id, ($ok ? 'Envoyé' : 'Échec') . ' — ' . mb_substr($msg['sujet'], 0, 60));
@@ -341,16 +379,22 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
     <span class="ex-ico">⚠️</span>
     <div class="ex-t">
       <strong>Aucune adresse d'envoi configurée</strong>
-      <div>Vos messages ne peuvent pas partir. Renseignez votre compte dans
+      <div><?php if (is_admin()): ?>Vos messages ne peuvent pas partir. Renseignez votre compte dans
         <a href="parametres.php?section=<?= substr(md5('Emails'), 0, 8) ?>">Paramètres → Emails</a>,
-        puis lancez le test d'envoi.</div>
+        puis lancez le test d'envoi.<?php else: ?>L'envoi n'est pas encore configuré.
+        Signalez-le à votre administrateur.<?php endif; ?></div>
     </div>
   <?php else: ?>
     <span class="ex-ico">📤</span>
     <div class="ex-t">
       <strong>Vos messages partiront de <?= e($expediteur) ?></strong>
+      <?php /* Les réglages du serveur d'envoi ne regardent que l'administrateur. */ ?>
+      <?php if (is_admin()): ?>
       <div>Via <?= e($nomFournisseur) ?><?php if (!empty($settings['smtp_port'])): ?> — port <?= e($settings['smtp_port']) ?><?php endif; ?>.
         <a href="parametres.php?section=<?= substr(md5('Emails'), 0, 8) ?>">Changer de compte ou tester l'envoi</a></div>
+      <?php else: ?>
+      <div>L'adresse d'expédition est réglée par votre administrateur.</div>
+      <?php endif; ?>
     </div>
   <?php endif; ?>
 </div>
@@ -548,10 +592,31 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
           <td><?= e($m['destinataire_nom'] ?: $m['destinataire']) ?>
             <div style="font-size:11px;color:var(--ink-faint)"><?= e($m['destinataire']) ?></div></td>
           <td style="font-size:12.5px"><?= e(mb_substr($m['sujet'], 0, 45)) ?></td>
-          <td style="font-size:11.5px;color:var(--ink-faint);max-width:260px">
-            <?= e(mb_substr(strip_tags($m['corps']), 0, 90)) ?>…
-            <?php if (trim((string)$m['pieces_ref']) !== ''): ?>
-            <div style="color:var(--gold);margin-top:3px">📎 <?= count(array_filter(explode(',', $m['pieces_ref']))) ?> pièce(s)</div>
+          <td style="font-size:11.5px;color:var(--ink-faint);max-width:300px">
+            <?php /* Le message se lit en entier avant décision : on n'approuve pas
+                     un texte qu'on n'a pas lu. */ ?>
+            <details class="lire-msg">
+              <summary>📄 Lire le message</summary>
+              <div class="lm-corps"><?= $m['corps'] ?></div>
+              <?php
+                $nbDocs = count(array_filter(explode(',', (string)$m['pieces_ref'])));
+                $fic = json_decode((string)$m['fichiers'], true) ?: [];
+              ?>
+              <?php if ($nbDocs || $fic): ?>
+              <div class="lm-pj">
+                <strong>Pièces jointes</strong>
+                <?php foreach (array_filter(explode(',', (string)$m['pieces_ref'])) as $r): ?>
+                  <?php [$t, $i] = array_pad(explode(':', trim($r), 2), 2, ''); ?>
+                  <a href="pdf.php?type=<?= e($t) ?>&id=<?= (int)$i ?>" target="_blank">📄 <?= e(ucfirst($t)) ?> n°<?= (int)$i ?></a>
+                <?php endforeach; ?>
+                <?php foreach ($fic as $g): ?>
+                  <span>📎 <?= e($g['nom'] ?? '') ?></span>
+                <?php endforeach; ?>
+              </div>
+              <?php endif; ?>
+            </details>
+            <?php if ($nbDocs || $fic): ?>
+            <div style="color:var(--gold);margin-top:4px">📎 <?= $nbDocs + count($fic) ?> pièce(s)</div>
             <?php endif; ?></td>
           <td style="white-space:nowrap">
             <form method="post" style="display:inline" onsubmit="return confirm('Envoyer ce message ?')">

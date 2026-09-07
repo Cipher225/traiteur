@@ -284,10 +284,13 @@ function groupes_modules(): array {
    ============================================================================ */
 function ecriture_pour_recu(PDO $pdo, int $recuId, string $type, string $numero,
                             float $montant, string $mode, string $motif, string $date,
-                            ?int $clientId, string $activite = ''): void {
+                            ?int $clientId, string $activite = '', string $nature = '',
+                            ?int $factureId = null): void {
     try {
-        $sens     = ($type === 'entree') ? 'entree' : 'depense';
-        $categorie= ($type === 'entree') ? 'Ventes' : 'Achats';
+        $sens = ($type === 'entree') ? 'entree' : 'depense';
+        /* La nature choisie sur le bon devient la catégorie comptable :
+           les états financiers reflètent ainsi la réalité des dépenses. */
+        $categorie = trim($nature) !== '' ? $nature : (($type === 'entree') ? 'Ventes' : 'Divers');
         $libelle  = mb_substr(trim(($type === 'entree' ? 'Entrée ' : 'Sortie ') . $numero
                     . ($motif !== '' ? ' — ' . $motif : '')), 0, 200);
         $notes    = trim($activite !== '' ? 'Activité : ' . $activite : '');
@@ -298,14 +301,77 @@ function ecriture_pour_recu(PDO $pdo, int $recuId, string $type, string $numero,
 
         if ($existe) {
             $pdo->prepare('UPDATE transactions SET type=?, categorie=?, libelle=?, montant=?,
-                           mode_paiement=?, client_id=?, date_operation=?, notes=? WHERE id=?')
-                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes, (int)$existe]);
+                           mode_paiement=?, client_id=?, date_operation=?, notes=?, facture_id=? WHERE id=?')
+                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes,
+                           $factureId, (int)$existe]);
         } else {
             $pdo->prepare('INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement,
-                           client_id, date_operation, notes, recu_id) VALUES (?,?,?,?,?,?,?,?,?)')
-                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes, $recuId]);
+                           client_id, date_operation, notes, recu_id, facture_id)
+                           VALUES (?,?,?,?,?,?,?,?,?,?)')
+                ->execute([$sens, $categorie, $libelle, $montant, $mode, $clientId, $date, $notes,
+                           $recuId, $factureId]);
         }
     } catch (Throwable $e) { /* la caisse ne doit jamais échouer à cause de la comptabilité */ }
+}
+
+/* ----------------------------------------------------------------------------
+   Catégories de dépense. Toute sortie d'argent n'est pas liée à un client :
+   le loyer, les salaires ou le carburant sont des charges de l'entreprise.
+   ---------------------------------------------------------------------------- */
+function categories_depense(): array {
+    return [
+        'Approvisionnement' => '🛒',   // denrées, boissons, consommables
+        'Salaires'          => '👥',
+        'Prestataires'      => '🤝',   // extras, serveurs, cuisiniers ponctuels
+        'Location matériel' => '🎪',
+        'Transport'         => '🚚',
+        'Loyer'             => '🏠',
+        'Électricité & eau' => '💡',
+        'Téléphone & Internet' => '📶',
+        'Entretien'         => '🧽',
+        'Impôts & taxes'    => '🏛️',
+        'Banque & frais'    => '🏦',
+        'Divers'            => '📌',
+    ];
+}
+
+/* Catégories d'encaissement */
+function categories_recette(): array {
+    return ['Ventes' => '💰', 'Acompte' => '🤝', 'Solde' => '✅', 'Autre recette' => '📌'];
+}
+
+/* ----------------------------------------------------------------------------
+   Rentabilité d'une activité : ce qu'elle a rapporté, ce qu'elle a coûté.
+   Le chiffre d'affaires est le montant de la facture ; les dépenses sont
+   toutes les sorties rattachées à cette activité.
+   ---------------------------------------------------------------------------- */
+function rentabilite_activite(PDO $pdo, int $factureId): array {
+    $r = ['ca' => 0.0, 'encaisse' => 0.0, 'depenses' => 0.0, 'marge' => 0.0, 'taux' => 0.0];
+    try {
+        $st = $pdo->prepare("SELECT COALESCE(SUM(quantite * prix_unitaire), 0) FROM facture_lignes WHERE facture_id=?");
+        $st->execute([$factureId]);
+        $base = (float)$st->fetchColumn();
+
+        $st = $pdo->prepare("SELECT remise, tva_taux, tva_applicable FROM factures WHERE id=?");
+        $st->execute([$factureId]);
+        $f = $st->fetch() ?: [];
+        $ht  = $base - ($base * (float)($f['remise'] ?? 0) / 100);
+        $r['ca'] = $ht + (!empty($f['tva_applicable']) ? $ht * (float)($f['tva_taux'] ?? 0) / 100 : 0);
+
+        /* Encaissements réellement reçus pour cette activité */
+        $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM recus WHERE facture_id=? AND type='entree'");
+        $st->execute([$factureId]);
+        $r['encaisse'] = (float)$st->fetchColumn();
+
+        /* Dépenses rattachées */
+        $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM transactions WHERE facture_id=? AND type='depense'");
+        $st->execute([$factureId]);
+        $r['depenses'] = (float)$st->fetchColumn();
+    } catch (Throwable $e) { /* on renvoie des zéros plutôt qu'une erreur */ }
+
+    $r['marge'] = $r['ca'] - $r['depenses'];
+    $r['taux']  = $r['ca'] > 0 ? ($r['marge'] / $r['ca']) * 100 : 0;
+    return $r;
 }
 
 /* Modes de paiement proposes dans toute l'application */

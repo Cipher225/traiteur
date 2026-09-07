@@ -15,6 +15,14 @@ if (!$uid) { echo json_encode(['ok' => false]); exit; }
 
 $rep = ['ok' => true, 'messages' => 0, 'forum' => 0, 'total' => 0, 'badges' => []];
 
+/* Messages en attente d'approbation : visible en direct pour l'administrateur. */
+if (function_exists('is_admin') && is_admin()) {
+    try {
+        $ma = (int)$pdo->query("SELECT COUNT(*) FROM emails_envoyes WHERE statut='en_attente'")->fetchColumn();
+        if ($ma > 0) $rep['badges']['messages'] = $ma;
+    } catch (Throwable $e) {}
+}
+
 try {
     $st = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE destinataire_id=? AND lu=0");
     $st->execute([$uid]);
