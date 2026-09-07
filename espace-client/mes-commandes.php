@@ -7,7 +7,7 @@ $cid = (int)$CLIENT['id'];
 $cmds = $pdo->prepare("SELECT * FROM commandes_client WHERE client_id=? ORDER BY created_at DESC");
 $cmds->execute([$cid]); $cmds = $cmds->fetchAll();
 
-$etapes = ['nouvelle'=>'Reçue','en_traitement'=>'En préparation du devis','devis_envoye'=>'Devis disponible','confirmee'=>'Confirmée','terminee'=>'Terminée'];
+$etapes = ['nouvelle'=>'Reçue','en_traitement'=>'En préparation de la proforma','devis_envoye'=>'Proforma disponible','confirmee'=>'Confirmée','terminee'=>'Terminée'];
 $flow = array_keys($etapes);
 $badge = ['nouvelle'=>'badge-gold','en_traitement'=>'badge-violet','devis_envoye'=>'badge-teal','confirmee'=>'badge-teal','terminee'=>'badge','annulee'=>'badge-danger'];
 
@@ -59,15 +59,15 @@ client_header('Mes commandes', 'commandes', $settings, $CLIENT);
         <?php if ($cmd['proforma_id']): ?>
         <div class="devis-ready glass">
           <div style="font-size:30px">📄</div>
-          <strong>Votre devis est prêt !</strong>
-          <p style="color:var(--ink-dim);font-size:13px;margin:6px 0 12px">Consultez et téléchargez votre devis personnalisé.</p>
-          <a class="btn btn-gold" href="doc-pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>" target="_blank">Voir mon devis</a>
+          <strong>Votre proforma est prêt !</strong>
+          <p style="color:var(--ink-dim);font-size:13px;margin:6px 0 12px">Consultez et téléchargez votre proforma personnalisé.</p>
+          <a class="btn btn-gold" href="doc-pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>" target="_blank">Voir ma proforma</a>
         </div>
         <?php endif; ?>
       <?php elseif ($cmd['statut']==='nouvelle' || $cmd['statut']==='en_traitement'): ?>
         <div class="devis-wait">
           <div style="font-size:28px">⏳</div>
-          <p style="color:var(--ink-dim);font-size:13.5px">Votre devis est en cours de préparation. Vous serez notifié dès qu'il sera disponible ici.</p>
+          <p style="color:var(--ink-dim);font-size:13.5px">Votre proforma est en cours de préparation. Vous serez notifié dès qu'il sera disponible ici.</p>
         </div>
       <?php endif; ?>
     </div>

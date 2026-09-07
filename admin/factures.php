@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash("Ce client n'a pas d'adresse email enregistrée.", 'error');
         } else {
             $s = get_settings($pdo);
-            $typeLbl = $fdoc['type'] === 'proforma' ? 'devis (proforma)' : 'facture';
+            $typeLbl = $fdoc['type'] === 'proforma' ? 'proforma' : 'facture';
             $siteUrl = rtrim($s['site_url'] ?? (defined('SITE_URL') ? SITE_URL : ''), '/');
             $lien = $siteUrl ? $siteUrl . '/admin/pdf.php?type=' . $fdoc['type'] . '&id=' . $fid : '';
             $corps = '<p>Bonjour <strong>' . htmlspecialchars($fdoc['client']) . '</strong>,</p>

@@ -462,7 +462,7 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
 <?php endif; ?>
 
 <div class="panel glass">
-  <h2>📥 Dernières demandes de devis <a href="commandes-client.php?vue=devis" class="btn btn-glass btn-sm" style="margin-left:auto">Tout voir →</a></h2>
+  <h2>📥 Dernières demandes de proforma <a href="commandes-client.php?vue=devis" class="btn btn-glass btn-sm" style="margin-left:auto">Tout voir →</a></h2>
   <div class="tbl-wrap">
     <table>
       <thead><tr><th>Client</th><th>Événement</th><th>Date</th><th>Participants</th><th>Statut</th><th>Reçue le</th></tr></thead>

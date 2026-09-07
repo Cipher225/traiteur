@@ -6,7 +6,7 @@ $devise = $settings['devise'] ?? 'FCFA';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
-    /* Demandes de devis reçues depuis le site vitrine */
+    /* Demandes de proforma reçues depuis le site vitrine */
     if (isset($_POST['devis_statut'], $_POST['devis_id'])) {
         $ok = ['nouveau','en_cours','confirme','termine','annule'];
         if (in_array($_POST['devis_statut'], $ok, true)) {
@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (in_array($s,$ok,true)) { $pdo->prepare('UPDATE commandes_client SET statut=?, vu_client=0 WHERE id=?')->execute([$s,$id]); flash('Statut mis à jour.'); }
         header('Location: commandes-client.php'); exit;
     }
-    // Générer le devis (proforma) à partir de la commande
+    // Générer la proforma (proforma) à partir de la commande
     if (isset($_POST['generer_devis'])) {
         $cmd = $pdo->prepare('SELECT * FROM commandes_client WHERE id=?'); $cmd->execute([$id]); $cmd = $cmd->fetch();
         if ($cmd) {
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins->execute([$fid, $catNom, $catNom, $details]);
             }
             $pdo->prepare("UPDATE commandes_client SET proforma_id=?, statut='en_traitement', vu_client=0 WHERE id=?")->execute([$fid, $id]);
-            flash('Devis créé à partir de la commande. Renseignez les prix, puis passez le statut à « Devis envoyé » pour que le client le voie.');
+            flash('Devis créé à partir de la commande. Renseignez les prix, puis passez le statut à « Proforma envoyé » pour que le client le voie.');
             header('Location: factures.php?doc=proforma&edit='.$fid); exit;
         }
         header('Location: commandes-client.php'); exit;
@@ -103,7 +103,7 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
     📦 Commandes de l'espace client<?php if ($nbNouvelles): ?><span class="vt-n"><?= $nbNouvelles ?></span><?php endif; ?>
   </a>
   <a class="vt <?= $vue === 'devis' ? 'on' : '' ?>" href="commandes-client.php?vue=devis">
-    📮 Demandes de devis du site<?php if ($nbDevis): ?><span class="vt-n"><?= $nbDevis ?></span><?php endif; ?>
+    📮 Demandes de proforma du site<?php if ($nbDevis): ?><span class="vt-n"><?= $nbDevis ?></span><?php endif; ?>
   </a>
 </div>
 <?php if ($vue === 'devis'): ?>
@@ -164,7 +164,7 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
         </a>
         <?php endif; ?>
         <?php if ($c['email']): ?>
-        <a class="btn btn-glass btn-sm" href="mailto:<?= e($c['email']) ?>?subject=<?= rawurlencode('Votre demande de devis — '.($settings['nom_entreprise'] ?? 'Groupe Helisce')) ?>&body=<?= rawurlencode('Bonjour '.$c['nom'].",\n\n") ?>" title="Contacter par email">✉️ Email</a>
+        <a class="btn btn-glass btn-sm" href="mailto:<?= e($c['email']) ?>?subject=<?= rawurlencode('Votre demande de proforma — '.($settings['nom_entreprise'] ?? 'Groupe Helisce')) ?>&body=<?= rawurlencode('Bonjour '.$c['nom'].",\n\n") ?>" title="Contacter par email">✉️ Email</a>
         <?php endif; ?>
       </div>
       <form method="post" data-confirm="Supprimer définitivement cette demande ?">
@@ -221,11 +221,11 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <?php if ($cmd['proforma_id']): ?>
-          <a class="btn btn-glass" href="factures.php?doc=proforma&edit=<?= (int)$cmd['proforma_id'] ?>">✏️ Modifier le devis</a>
-          <a class="btn btn-glass btn-sm" href="pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>&auth=1" target="_blank">📄 Voir le devis</a>
+          <a class="btn btn-glass" href="factures.php?doc=proforma&edit=<?= (int)$cmd['proforma_id'] ?>">✏️ Modifier la proforma</a>
+          <a class="btn btn-glass btn-sm" href="pdf.php?type=proforma&id=<?= (int)$cmd['proforma_id'] ?>&auth=1" target="_blank">📄 Voir la proforma</a>
         <?php else: ?>
           <form method="post"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="id" value="<?= $cmd['id'] ?>">
-            <button class="btn btn-gold" name="generer_devis" value="1" style="width:100%">🧾 Générer le devis</button></form>
+            <button class="btn btn-gold" name="generer_devis" value="1" style="width:100%">🧾 Générer la proforma</button></form>
         <?php endif; ?>
         <form method="post"><input type="hidden" name="csrf" value="<?= csrf_token() ?>"><input type="hidden" name="id" value="<?= $cmd['id'] ?>">
           <select class="input" name="statut" onchange="this.form.submit()" style="width:100%">

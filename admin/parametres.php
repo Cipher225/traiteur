@@ -31,9 +31,9 @@ $groupes = [
         'sec_videos_texte'    => 'Vidéos — texte',
         'sec_avis_eyebrow'    => 'Avis — sur-titre',
         'sec_avis_titre'      => 'Avis — titre',
-        'sec_devis_eyebrow'   => 'Devis — sur-titre',
-        'sec_devis_titre'     => 'Devis — titre',
-        'sec_devis_texte'     => 'Devis — texte',
+        'sec_devis_eyebrow'   => 'Proforma — sur-titre',
+        'sec_devis_titre'     => 'Proforma — titre',
+        'sec_devis_texte'     => 'Proforma — texte',
     ]],
     'Contact & réseaux' => ['📞', [
         'telephone' => 'Téléphone',
@@ -63,6 +63,7 @@ $groupes = [
         'banque_entreprise'     => 'Banque de l\'entreprise',
     ]],
     'Facturation' => ['🧾', [
+        'annee_fondation' => "Année de création de l'entreprise (bas des emails)",
         'devise'          => 'Devise (ex : FCFA)',
         'tva_taux'        => 'Taux de TVA par défaut (%)',
         'mentions_facture'=> 'Mentions par défaut sur les factures',

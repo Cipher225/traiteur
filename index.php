@@ -328,12 +328,12 @@ $f = flash();
   </div>
 </section>
 
-<!-- Devis & contact -->
+<!-- Proforma & contact -->
 <section id="devis">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" style="justify-content:center"><?= e($s['sec_devis_eyebrow'] ?? 'Parlons de votre projet') ?></span>
-      <h2><?= e($s['sec_devis_titre'] ?? 'Demandez votre devis gratuit') ?></h2>
+      <h2><?= e($s['sec_devis_titre'] ?? 'Demandez votre proforma gratuit') ?></h2>
       <p><?= e($s['sec_devis_texte'] ?? 'Réponse sous 24h.') ?></p>
     </div>
     <?php if ($f): ?><div class="flash <?= $f['type'] === 'error' ? 'error' : '' ?>"><?= e($f['msg']) ?></div><?php endif; ?>
@@ -406,7 +406,7 @@ $f = flash();
       <a href="#menu">Menu</a>
       <a href="#galerie">Galerie</a>
       <?php if ($videos): ?><a href="#videos">Vidéos</a><?php endif; ?>
-      <a href="#devis">Devis</a>
+      <a href="#devis">Proforma</a>
     </div>
 
     <div class="foot-col">
@@ -464,7 +464,7 @@ $f = flash();
   <a href="#menu"><span class="tico">🍽️</span>Menu</a>
   <a href="#galerie"><span class="tico">📸</span>Galerie</a>
   <?php if ($videos): ?><a href="#videos"><span class="tico">🎬</span>Vidéos</a><?php endif; ?>
-  <a href="#devis"><span class="tico">📝</span>Devis</a>
+  <a href="#devis"><span class="tico">📝</span>Proforma</a>
 </nav>
 
 <script>window.CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;</script>

@@ -350,3 +350,6 @@ INSERT IGNORE INTO settings (cle, valeur) VALUES ('fournisseur_mail','');
 -- Authentification des messages : activable au cas par cas.
 ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS authentifie TINYINT(1) DEFAULT 1;
 INSERT IGNORE INTO settings (cle, valeur) VALUES ('signature_auth_defaut','1');
+
+-- Année de création de l'entreprise, affichée au bas des emails.
+INSERT IGNORE INTO settings (cle, valeur) VALUES ('annee_fondation','2017');

@@ -15,6 +15,31 @@ require_once __DIR__ . '/../config/docauth.php';
 require_once __DIR__ . '/includes/documents.php';
 require_once __DIR__ . '/../config/wave.php';
 
+/* ----------------------------------------------------------------------------
+   Descriptions du menu : chaque élément détaillé peut porter sa description
+   entre parenthèses, pour que le client sache ce qu'il commande. Chargées une
+   seule fois par document.
+   ---------------------------------------------------------------------------- */
+function pdf_descriptions(PDO $pdo): array {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+    $cache = [];
+    try {
+        foreach ($pdo->query("SELECT nom, description FROM plats WHERE description <> ''")->fetchAll() as $p) {
+            $cle = mb_strtolower(trim((string)$p['nom']));
+            if ($cle !== '') $cache[$cle] = trim((string)$p['description']);
+        }
+    } catch (Throwable $e) { $cache = []; }
+    return $cache;
+}
+
+function pdf_element(string $item, array $descriptions): string {
+    $d = $descriptions[mb_strtolower(trim($item))] ?? '';
+    if ($d === '') return $item;
+    if (mb_strlen($d) > 90) $d = mb_substr($d, 0, 88) . '…';
+    return $item . ' (' . $d . ')';
+}
+
 /* Petites fonctions de mise en forme, partagées avec la version imprimable. */
 if (!function_exists('nf')) {
     function nf($n) { return number_format((float)$n, 0, ',', ' '); }
@@ -401,22 +426,26 @@ function pdf_corps(string $type, array $doc, string $devise): string {
     ?>
     <table class="lignes">
       <thead><tr>
-        <th width="6%">N°</th>
+        <?php /* La désignation reçoit la place laissée par les colonnes de chiffres :
+                 les montants tiennent en peu de largeur, les libellés non. */ ?>
+        <th width="5%">N°</th>
         <th style="text-align:left">Désignation</th>
-        <th width="14%"><?= $estLivraison ? 'Qté livrée' : 'Qté' ?></th>
+        <th width="<?= $estLivraison ? '14%' : '9%' ?>"><?= $estLivraison ? 'Qté livrée' : 'Qté' ?></th>
         <?php if (!$estLivraison): ?>
-        <th width="20%" class="r">Prix unit. (<?= e($devise) ?>)</th>
-        <th width="20%" class="r">Montant (<?= e($devise) ?>)</th>
+        <th width="16%" class="r">Prix unit. (<?= e($devise) ?>)</th>
+        <th width="17%" class="r">Montant (<?= e($devise) ?>)</th>
         <?php endif; ?>
       </tr></thead>
       <tbody>
-      <?php $n = 0; foreach (($doc['lignes'] ?? []) as $l): $n++;
+      <?php
+      $descriptions = $estLivraison ? [] : pdf_descriptions($GLOBALS['pdo']);
+      $n = 0; foreach (($doc['lignes'] ?? []) as $l): $n++;
         $det = $estLivraison ? [] : array_values(array_filter(array_map('trim',
                preg_split('/\r?\n/', (string)($l['details'] ?? ''))))); ?>
         <tr class="<?= $n % 2 === 0 ? 'paire' : '' ?>">
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
-            <?php foreach ($det as $d): ?><br><span class="det">• <?= e($d) ?></span><?php endforeach; ?>
+            <?php foreach ($det as $d): ?><br><span class="det">• <?= e(pdf_element($d, $descriptions)) ?></span><?php endforeach; ?>
           </td>
           <td class="c"><?= qte_fmt($l['quantite']) ?></td>
           <?php if (!$estLivraison): ?>

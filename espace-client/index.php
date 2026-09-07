@@ -46,7 +46,7 @@ client_header('Mon espace', 'accueil', $settings, $CLIENT);
 ?>
 <div class="stats">
   <div class="stat glass violet"><div class="s-ico">🧾</div><div class="s-num"><?= $nb_fac ?></div><div class="s-label">Factures</div></div>
-  <div class="stat glass gold"><div class="s-ico">📋</div><div class="s-num"><?= $nb_pro ?></div><div class="s-label">Devis (proforma)</div></div>
+  <div class="stat glass gold"><div class="s-ico">📋</div><div class="s-num"><?= $nb_pro ?></div><div class="s-label">Proforma (proforma)</div></div>
   <div class="stat glass teal"><div class="s-ico">💳</div><div class="s-num" style="font-size:20px"><?= money($total_recu, $devise) ?></div><div class="s-label">Total réglé</div></div>
   <div class="stat glass rose"><div class="s-ico">📄</div><div class="s-num"><?= count($recus) ?></div><div class="s-label">Sorties</div></div>
 </div>
@@ -96,7 +96,7 @@ $sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($dev
 <div id="documents">
   <?php
   $sectionClient('Mes factures', '🧾', $mesFactures, 'date_emission', 'facture');
-  $sectionClient('Mes devis (proformas)', '📋', $mesProformas, 'date_emission', 'proforma');
+  $sectionClient('Mes proformas', '📋', $mesProformas, 'date_emission', 'proforma');
   $sectionClient('Mes bons de sortie', '📄', $recus, 'date_paiement', 'recu');
   if (!$factures && !$recus): ?>
     <div class="panel glass"><div style="text-align:center;padding:34px;color:var(--ink-faint)">Aucun document pour le moment.</div></div>

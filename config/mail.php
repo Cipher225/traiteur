@@ -21,7 +21,7 @@ if (!function_exists('envoyer_email')) {
 function email_config(PDO $pdo): array {
     static $cache = null;
     if ($cache !== null) return $cache;
-    $cles = ['smtp_hote','smtp_port','smtp_user','smtp_pass','smtp_secure','email','nom_entreprise','emails_actifs'];
+    $cles = ['smtp_hote','smtp_port','smtp_user','smtp_pass','smtp_secure','email','nom_entreprise','emails_actifs','annee_fondation'];
     $in = implode(',', array_fill(0, count($cles), '?'));
     $st = $pdo->prepare("SELECT cle, valeur FROM settings WHERE cle IN ($in)");
     $st->execute($cles);
@@ -59,7 +59,8 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
 
     $avecLogo = false;
     foreach ($images as $img) { if (($img['cid'] ?? '') === 'logo-entreprise') $avecLogo = true; }
-    $corps = email_gabarit($sujet, $corpsHtml, $expediteurNom, (string)($cfg['slogan'] ?? ''), $avecLogo);
+    $corps = email_gabarit($sujet, $corpsHtml, $expediteurNom, (string)($cfg['slogan'] ?? ''),
+                           $avecLogo, (string)($cfg['annee_fondation'] ?? ''));
 
     // --- Mode SMTP si configuré ---
     if (!empty($cfg['smtp_hote']) && !empty($cfg['smtp_user'])) {
@@ -115,12 +116,19 @@ function email_encode(string $t): string {
 
 /* Gabarit HTML navy & or de l'entreprise */
 function email_gabarit(string $sujet, string $contenu, string $entreprise, string $slogan = '',
-                       bool $avecLogo = false): string {
-    $an = date('Y');
+                       bool $avecLogo = false, string $annee = ''): string {
+    /* Année affichée au bas du message : l'année de création de l'entreprise,
+       réglable dans les paramètres. Par défaut, l'année en cours. */
+    $an = trim($annee) !== '' ? $annee : date('Y');
     /* Le logo est une image intégrée au message (cid) : il s'affiche même
        lorsque la messagerie bloque les images provenant d'Internet. */
+    /* Le logo est posé sur une pastille blanche : beaucoup de logos contiennent
+       du bleu foncé et disparaîtraient sur le bandeau marine. */
     $logo = $avecLogo
-        ? '<img src="cid:logo-entreprise" alt="' . htmlspecialchars($entreprise) . '" style="max-height:64px;max-width:200px;display:block;margin:0 auto 12px">'
+        ? '<table align="center" style="margin:0 auto 14px"><tr><td style="background:#ffffff;'
+          . 'border-radius:12px;padding:10px 18px;text-align:center">'
+          . '<img src="cid:logo-entreprise" alt="' . htmlspecialchars($entreprise) . '" '
+          . 'style="max-height:58px;max-width:190px;display:block"></td></tr></table>'
         : '';
     return '<!DOCTYPE html><html><body style="margin:0;background:#f4f6fb;font-family:Arial,sans-serif">
       <div style="max-width:600px;margin:0 auto;background:#fff">

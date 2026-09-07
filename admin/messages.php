@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
         if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
 
         /* L'authentification se décide message par message. Une confirmation de
-           rendez-vous n'en a pas besoin ; un devis ou une facture, si. */
+           rendez-vous n'en a pas besoin ; une proforma ou une facture, si. */
         $authentifier    = !empty($_POST['authentifier']);
         $signaturesTempo = [];
 
@@ -347,7 +347,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
       <p class="mail-note" style="margin-top:9px">
         Vos coordonnées restent présentes : seul le cartouche de vérification disparaît —
         ni référence, ni QR. À réserver aux messages courants comme une confirmation de
-        rendez-vous. Pour un devis ou une facture, laissez l'authentification active.
+        rendez-vous. Pour une proforma ou une facture, laissez l'authentification active.
       </p>
     </div>
   </div>
@@ -359,7 +359,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
 
   <div class="field">
     <label>Objet *</label>
-    <input class="input" name="sujet" required maxlength="255" value="<?= e($_POST['sujet'] ?? '') ?>" placeholder="ex : Votre devis pour le séminaire du 12 septembre">
+    <input class="input" name="sujet" required maxlength="255" value="<?= e($_POST['sujet'] ?? '') ?>" placeholder="ex : Votre proforma pour le séminaire du 12 septembre">
   </div>
 
   <label style="display:block;margin:12px 0 6px;font-size:12.5px;font-weight:600;color:var(--ink-dim)">Contenu</label>
@@ -468,7 +468,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
 
   /* Modèles : un point de départ, jamais un envoi automatique. */
   var modeles = {
-    'Devis à valider': '<p>Bonjour,</p><p>Veuillez trouver ci-joint votre devis. Il reste valable 15 jours.</p><p>Je reste à votre disposition pour tout ajustement.</p><p>Cordialement,</p>',
+    'Devis à valider': '<p>Bonjour,</p><p>Veuillez trouver ci-joint votre proforma. Il reste valable 15 jours.</p><p>Je reste à votre disposition pour tout ajustement.</p><p>Cordialement,</p>',
     'Confirmation de commande': '<p>Bonjour,</p><p>Nous confirmons votre commande. Notre équipe sera sur place comme convenu.</p><p>Cordialement,</p>',
     'Rappel de facture': '<p>Bonjour,</p><p>Sauf erreur de notre part, la facture jointe reste à régler.</p><p>Merci de votre confiance.</p>',
     'Remerciement après événement': '<p>Bonjour,</p><p>Merci de nous avoir fait confiance pour votre événement. Ce fut un plaisir.</p><p>Au plaisir de vous servir à nouveau,</p>'
