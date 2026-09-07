@@ -98,6 +98,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
     if (!$liste)                             $erreurs[] = 'Aucun destinataire valide sélectionné.';
     if (empty($settings['smtp_hote']))       $erreurs[] = "Aucun serveur d'envoi configuré (Paramètres → Emails).";
 
+    /* Un employé rédige et soumet ; seul l'administrateur déclenche l'envoi.
+       Le message est mis en attente, avec la liste des pièces à joindre. */
+    $soumission = !is_admin();
+
+    if (!$erreurs && $soumission) {
+        foreach ($liste as $d) {
+            $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire, destinataire_nom,
+                           client_id, sujet, corps, piece_jointe, pieces_ref, envoye_par, envoye_par_nom,
+                           statut, envoye_le, authentifie)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+                ->execute([signature_reference($pdo), '', $d['email'], $d['nom'], $d['client_id'],
+                           $sujet, $corps, '', implode(',', (array)($_POST['docs'] ?? [])),
+                           (int)($_SESSION['admin_id'] ?? 0) ?: null, (string)($_SESSION['admin_nom'] ?? ''),
+                           'en_attente', date('Y-m-d H:i:s'), !empty($_POST['authentifier']) ? 1 : 0]);
+        }
+        journaliser($pdo, 'soumission', 'message', null,
+                    count($liste) . ' message(s) soumis à validation — ' . mb_substr($sujet, 0, 60));
+        flash(count($liste) . ' message' . (count($liste) > 1 ? 's soumis' : ' soumis')
+              . " à l'approbation de l'administrateur. ⏳");
+        header('Location: messages.php'); exit;
+    }
+
     if (!$erreurs) {
         $dossier = __DIR__ . '/../uploads/signatures';
         if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
@@ -178,6 +200,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['envoyer'])) {
     }
 }
 
+/* ---- Approbation d'un message soumis par un employé ---- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['decider'])) {
+    csrf_check();
+    if (!is_admin()) { flash("Action réservée à l'administrateur.", 'error'); header('Location: messages.php'); exit; }
+
+    $id  = (int)($_POST['message_id'] ?? 0);
+    $st  = $pdo->prepare('SELECT * FROM emails_envoyes WHERE id=? AND statut="en_attente"');
+    $st->execute([$id]);
+    $msg = $st->fetch();
+
+    if (!$msg) {
+        flash('Message introuvable ou déjà traité.', 'error');
+    } elseif ($_POST['decider'] === 'refuser') {
+        $pdo->prepare('UPDATE emails_envoyes SET statut="refuse", approuve_par=?, approuve_le=NOW() WHERE id=?')
+            ->execute([(int)$_SESSION['admin_id'], $id]);
+        journaliser($pdo, 'refus', 'message', $id, 'Message refusé — ' . mb_substr($msg['sujet'], 0, 60));
+        flash('Message refusé. Il ne sera pas envoyé.');
+    } else {
+        /* Approuvé : on l'envoie réellement, avec sa signature et ses pièces. */
+        $dossier = __DIR__ . '/../uploads/signatures';
+        if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
+
+        $date      = date('Y-m-d H:i:s');
+        $authOk    = !empty($msg['authentifie']);
+        $empreinte = signature_empreinte($msg['destinataire'], $msg['sujet'], $msg['corps'], $date);
+        $fichier   = $dossier . '/' . $msg['reference'] . '.png';
+        signature_image($settings, $msg['reference'], $empreinte, $fichier, $authOk);
+
+        $site     = adresse_site($settings);
+        $urlVerif = $site . '/verifier.php?c=' . urlencode($msg['reference']);
+
+        $images = [['cid' => 'signature-entreprise', 'chemin' => $fichier]];
+        $cheminLogo = __DIR__ . '/../uploads/' . (string)($settings['logo'] ?? '');
+        if (!empty($settings['logo']) && is_file($cheminLogo)) {
+            $images[] = ['cid' => 'logo-entreprise', 'chemin' => $cheminLogo];
+        }
+
+        $message = $msg['corps']
+            . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
+            . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '') . '" style="max-width:100%;height:auto;display:block">'
+            . ($authOk
+                ? '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
+                  . 'Référence de ce message : <strong style="color:#0a1f44">' . e($msg['reference']) . '</strong>'
+                  . ($site !== '' ? ' — <a href="' . e($urlVerif) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
+                  . '</p>'
+                : '')
+            . '</div>';
+
+        /* Pièces jointes demandées par l'employé : régénérées à l'envoi. */
+        $pieces = []; $tempo = [];
+        foreach (array_filter(explode(',', (string)$msg['pieces_ref'])) as $ref) {
+            if (!preg_match('/^(facture|proforma|livraison|recu|fiche):(\d+)$/', trim($ref), $m)) continue;
+            $chemin = __DIR__ . '/../uploads/tmp/pj-' . $m[1] . '-' . $m[2] . '-' . bin2hex(random_bytes(3)) . '.pdf';
+            $_GET['type'] = $m[1]; $_GET['id'] = $m[2];
+            ob_start(); try { include __DIR__ . '/pdf-piece.php'; } catch (Throwable $e) {} $pdf = ob_get_clean();
+            if ($pdf !== '' && strncmp($pdf, '%PDF', 4) === 0) {
+                file_put_contents($chemin, $pdf);
+                $noms = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
+                         'recu' => 'Recu', 'fiche' => 'Bulletin'];
+                $pieces[] = ['chemin' => $chemin, 'nom' => ($noms[$m[1]] ?? 'Document') . '-' . $m[2] . '.pdf',
+                             'type' => 'application/pdf'];
+                $tempo[] = $chemin;
+            }
+        }
+
+        $motif = null;
+        $ok = envoyer_email($pdo, $msg['destinataire'], $msg['sujet'], $message,
+                            (string)($settings['email'] ?? ''), $pieces, $motif, $images);
+
+        $pdo->prepare('UPDATE emails_envoyes SET statut=?, empreinte=?, erreur=?, envoye_le=?,
+                       approuve_par=?, approuve_le=NOW(),
+                       piece_jointe=? WHERE id=?')
+            ->execute([$ok ? 'envoye' : 'echoue', $empreinte, mb_substr((string)$motif, 0, 250), $date,
+                       (int)$_SESSION['admin_id'],
+                       mb_substr(implode(', ', array_map(fn($p) => $p['nom'], $pieces)), 0, 190), $id]);
+
+        foreach ($tempo as $t) { if (is_file($t)) @unlink($t); }
+        if (!$authOk && is_file($fichier)) @unlink($fichier);
+
+        journaliser($pdo, 'approbation', 'message', $id, ($ok ? 'Envoyé' : 'Échec') . ' — ' . mb_substr($msg['sujet'], 0, 60));
+        flash($ok ? 'Message approuvé et envoyé. ✉️' : 'Échec de l\'envoi : ' . e($motif ?: 'cause inconnue.'),
+              $ok ? 'success' : 'error');
+    }
+    header('Location: messages.php'); exit;
+}
+
 /* ---- Historique : l'administrateur peut le purger ---- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger_historique'])) {
     csrf_check();
@@ -201,7 +309,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger_historique']))
 
 $clients = $pdo->query("SELECT id, nom, entreprise, email, type_client FROM clients
                         WHERE email <> '' ORDER BY COALESCE(NULLIF(entreprise,''), nom)")->fetchAll();
-$historique = $pdo->query("SELECT * FROM emails_envoyes ORDER BY envoye_le DESC LIMIT 30")->fetchAll();
+/* Un employé ne voit que ses propres messages ; l'administrateur voit tout. */
+if (is_admin()) {
+    $enAttente  = $pdo->query("SELECT * FROM emails_envoyes WHERE statut='en_attente' ORDER BY envoye_le")->fetchAll();
+    $historique = $pdo->query("SELECT * FROM emails_envoyes WHERE statut<>'en_attente'
+                               ORDER BY envoye_le DESC LIMIT 30")->fetchAll();
+} else {
+    $uid = (int)($_SESSION['admin_id'] ?? 0);
+    $st = $pdo->prepare("SELECT * FROM emails_envoyes WHERE envoye_par=? ORDER BY envoye_le DESC LIMIT 30");
+    $st->execute([$uid]);
+    $historique = $st->fetchAll();
+    $enAttente  = [];
+}
 
 admin_header('E-mail', 'messages', $pdo, $settings);
 ?>
@@ -235,6 +354,17 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
     </div>
   <?php endif; ?>
 </div>
+
+<?php if (!is_admin()): ?>
+<div class="panel glass expediteur" style="border-left:4px solid var(--gold)">
+  <span class="ex-ico">⏳</span>
+  <div class="ex-t">
+    <strong>Vos messages passent par une validation</strong>
+    <div>Rédigez votre message : il sera soumis à l'administrateur, qui l'enverra après vérification.
+      Vous suivrez son état ci-dessous.</div>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php if ($erreurs): ?>
 <div class="panel glass" style="margin-bottom:14px;border-left:4px solid #f87171">
@@ -396,15 +526,56 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
   <textarea name="corps" id="corps" hidden></textarea>
 
   <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px;align-items:center">
-    <button class="btn btn-gold" name="envoyer" value="1" id="btn-envoi">✉️ Envoyer le message</button>
+    <button class="btn btn-gold" name="envoyer" value="1" id="btn-envoi">
+      <?= is_admin() ? '✉️ Envoyer le message' : "⏳ Soumettre à l'approbation" ?></button>
     <span class="mail-note" id="resume-envoi"></span>
   </div>
 </div>
 </form>
 
+<?php if (is_admin() && $enAttente): ?>
+<div class="panel glass" style="margin-top:14px;border-left:4px solid #f0b429">
+  <h2>⏳ Messages en attente de votre accord <span class="cnt"><?= count($enAttente) ?></span></h2>
+  <p class="mail-aide">Rédigés par vos employés. Rien ne part sans votre validation.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Rédigé par</th><th>Destinataire</th><th>Objet</th><th>Message</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($enAttente as $m): ?>
+        <tr>
+          <td style="font-size:12.5px"><?= e($m['envoye_par_nom']) ?>
+            <div style="font-size:11px;color:var(--ink-faint)"><?= date('d/m/Y H:i', strtotime($m['envoye_le'])) ?></div></td>
+          <td><?= e($m['destinataire_nom'] ?: $m['destinataire']) ?>
+            <div style="font-size:11px;color:var(--ink-faint)"><?= e($m['destinataire']) ?></div></td>
+          <td style="font-size:12.5px"><?= e(mb_substr($m['sujet'], 0, 45)) ?></td>
+          <td style="font-size:11.5px;color:var(--ink-faint);max-width:260px">
+            <?= e(mb_substr(strip_tags($m['corps']), 0, 90)) ?>…
+            <?php if (trim((string)$m['pieces_ref']) !== ''): ?>
+            <div style="color:var(--gold);margin-top:3px">📎 <?= count(array_filter(explode(',', $m['pieces_ref']))) ?> pièce(s)</div>
+            <?php endif; ?></td>
+          <td style="white-space:nowrap">
+            <form method="post" style="display:inline" onsubmit="return confirm('Envoyer ce message ?')">
+              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+              <input type="hidden" name="message_id" value="<?= (int)$m['id'] ?>">
+              <button class="btn btn-gold btn-sm" name="decider" value="approuver">✓ Approuver</button>
+            </form>
+            <form method="post" style="display:inline" onsubmit="return confirm('Refuser ce message ?')">
+              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+              <input type="hidden" name="message_id" value="<?= (int)$m['id'] ?>">
+              <button class="btn btn-danger btn-sm" name="decider" value="refuser">✕</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
+
 <?php if ($historique): ?>
 <div class="panel glass" style="margin-top:14px">
-  <h2>📜 Messages envoyés</h2>
+  <h2><?= is_admin() ? '📜 Messages envoyés' : '📜 Mes messages' ?></h2>
   <?php if (is_admin()): ?>
   <form method="post" style="margin:-40px 0 12px;display:flex;justify-content:flex-end"
         onsubmit="return confirm('Effacer tout l\'historique des messages envoyés ? Cette action est définitive.')">
@@ -426,8 +597,8 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
             <?= trim((string)$h['piece_jointe']) !== '' ? '📎 ' . e(mb_substr($h['piece_jointe'], 0, 40)) : '—' ?></td>
           <td style="font-family:monospace;font-size:11.5px">
             <?= empty($h['authentifie']) ? '<span style="font-family:inherit;color:var(--ink-faint)">non authentifié</span>' : e($h['reference']) ?></td>
-          <td><span class="etat-pay <?= $h['statut'] === 'envoye' ? 'ep-paye' : 'ep-echoue' ?>">
-            <?= $h['statut'] === 'envoye' ? 'Envoyé' : 'Échec' ?></span></td>
+          <td><span class="etat-pay <?= $h['statut'] === 'envoye' ? 'ep-paye' : ($h['statut'] === 'en_attente' ? 'ep-attente' : 'ep-echoue') ?>">
+            <?= ['envoye'=>'Envoyé','echoue'=>'Échec','en_attente'=>'En attente','refuse'=>'Refusé'][$h['statut']] ?? $h['statut'] ?></span></td>
           <td><?php if (is_admin()): ?>
             <form method="post" style="display:inline" onsubmit="return confirm('Retirer ce message de l\'historique ?')">
               <input type="hidden" name="csrf" value="<?= csrf_token() ?>">

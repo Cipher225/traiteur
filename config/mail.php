@@ -88,10 +88,30 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
     $headers .= 'From: ' . email_encode($expediteurNom) . ' <' . $expediteurMail . ">\r\n";
     if ($repondreA) $headers .= 'Reply-To: ' . $repondreA . "\r\n";
 
+    /* Bloc du corps : le HTML, accompagné des images intégrées. Identique à la
+       version SMTP, pour que le rendu soit le même par les deux chemins. */
+    $blocCorps = function () use ($corps, $images) {
+        if (!$images) {
+            return "Content-Type: text/html; charset=UTF-8\r\n\r\n" . $corps . "\r\n";
+        }
+        $lim = '=_rel_' . bin2hex(random_bytes(8));
+        $o  = 'Content-Type: multipart/related; boundary="' . $lim . '"' . "\r\n\r\n";
+        $o .= "--$lim\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" . $corps . "\r\n";
+        foreach ($images as $img) {
+            if (empty($img['chemin']) || !is_file($img['chemin'])) continue;
+            $o .= "--$lim\r\nContent-Type: image/png\r\n";
+            $o .= "Content-Transfer-Encoding: base64\r\n";
+            $o .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
+            $o .= "Content-Disposition: inline\r\n\r\n";
+            $o .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
+        }
+        return $o . "--$lim--\r\n";
+    };
+
     if ($pieces) {
         $limite = '=_' . bin2hex(random_bytes(12));
         $headers .= 'Content-Type: multipart/mixed; boundary="' . $limite . '"' . "\r\n";
-        $contenu  = "--$limite\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" . $corps . "\r\n";
+        $contenu  = "--$limite\r\n" . $blocCorps();
         foreach ($pieces as $p) {
             if (empty($p['chemin']) || !is_file($p['chemin'])) continue;
             $nom = $p['nom'] ?? basename($p['chemin']);
@@ -100,6 +120,19 @@ function envoyer_email(PDO $pdo, string $dest, string $sujet, string $corpsHtml,
             $contenu .= "Content-Transfer-Encoding: base64\r\n";
             $contenu .= 'Content-Disposition: attachment; filename="' . $nom . '"' . "\r\n\r\n";
             $contenu .= chunk_split(base64_encode(file_get_contents($p['chemin']))) . "\r\n";
+        }
+        $contenu .= "--$limite--";
+    } elseif ($images) {
+        $limite = '=_rel_' . bin2hex(random_bytes(8));
+        $headers .= 'Content-Type: multipart/related; boundary="' . $limite . '"' . "\r\n";
+        $contenu  = "--$limite\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" . $corps . "\r\n";
+        foreach ($images as $img) {
+            if (empty($img['chemin']) || !is_file($img['chemin'])) continue;
+            $contenu .= "--$limite\r\nContent-Type: image/png\r\n";
+            $contenu .= "Content-Transfer-Encoding: base64\r\n";
+            $contenu .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
+            $contenu .= "Content-Disposition: inline\r\n\r\n";
+            $contenu .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
         }
         $contenu .= "--$limite--";
     } else {
@@ -242,7 +275,7 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
             $o .= 'Content-Type: ' . $type . "\r\n";
             $o .= "Content-Transfer-Encoding: base64\r\n";
             $o .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
-            $o .= 'Content-Disposition: inline; filename="' . $img['cid'] . '.png"' . "\r\n\r\n";
+            $o .= "Content-Disposition: inline\r\n\r\n";
             $o .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
         }
         return $o . "--$lim--\r\n";
@@ -277,7 +310,7 @@ function smtp_envoyer(string $hote, int $port, string $secure, string $user, str
             $contenu .= "Content-Type: image/png\r\n";
             $contenu .= "Content-Transfer-Encoding: base64\r\n";
             $contenu .= 'Content-ID: <' . $img['cid'] . '>' . "\r\n";
-            $contenu .= 'Content-Disposition: inline; filename="' . $img['cid'] . '.png"' . "\r\n\r\n";
+            $contenu .= "Content-Disposition: inline\r\n\r\n";
             $contenu .= chunk_split(base64_encode(file_get_contents($img['chemin']))) . "\r\n";
         }
         $contenu .= "--$limite--";

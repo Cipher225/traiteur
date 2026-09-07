@@ -353,3 +353,10 @@ INSERT IGNORE INTO settings (cle, valeur) VALUES ('signature_auth_defaut','1');
 
 -- Année de création de l'entreprise, affichée au bas des emails.
 INSERT IGNORE INTO settings (cle, valeur) VALUES ('annee_fondation','2017');
+
+-- Un message rédigé par un employé attend l'accord de l'administrateur.
+ALTER TABLE emails_envoyes
+  MODIFY COLUMN statut ENUM('envoye','echoue','en_attente','refuse') DEFAULT 'envoye';
+ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS approuve_par INT DEFAULT NULL;
+ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS approuve_le DATETIME DEFAULT NULL;
+ALTER TABLE emails_envoyes ADD COLUMN IF NOT EXISTS pieces_ref TEXT;
