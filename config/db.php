@@ -335,6 +335,24 @@ function categories_depense(): array {
     ];
 }
 
+/* ----------------------------------------------------------------------------
+   Charges qui ne se rattachent JAMAIS à une prestation.
+   Le loyer court, que vous ayez un mariage ce mois-ci ou aucun. L'imputer à
+   une activité fausserait sa rentabilité et laisserait croire qu'une
+   prestation coûte plus cher qu'en réalité.
+
+   À l'inverse, l'approvisionnement, les extras ou la location de matériel
+   sont engagés POUR une prestation précise : ceux-là restent rattachables.
+   ---------------------------------------------------------------------------- */
+function charges_structurelles(): array {
+    return ['Salaires', 'Loyer', 'Électricité & eau', 'Téléphone & Internet',
+            'Impôts & taxes', 'Banque & frais'];
+}
+
+function charge_rattachable(string $categorie): bool {
+    return !in_array(trim($categorie), charges_structurelles(), true);
+}
+
 /* Catégories d'encaissement */
 function categories_recette(): array {
     return ['Ventes' => '💰', 'Acompte' => '🤝', 'Solde' => '✅', 'Autre recette' => '📌'];

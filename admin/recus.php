@@ -43,7 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nb_jours = max(1, min(60, (int)($_POST['nb_jours'] ?? 1)));
     /* Une sortie porte une nature de dépense ; elle n'a pas de client. */
     $categorie = $TYPE === 'sortie' ? mb_substr(trim($_POST['categorie'] ?? 'Divers'), 0, 80) : '';
-    if ($TYPE === 'sortie') $client_id = null;
+    if ($TYPE === 'sortie') {
+        $client_id = null;
+        /* Une charge de structure ne s'impute pas à une prestation : le loyer
+           court même sans événement. Le navigateur désactive déjà le champ,
+           mais on le vérifie ici — c'est la seule barrière fiable. */
+        if (!charge_rattachable($categorie)) $facture_id = null;
+    }
     $lieu     = mb_substr(trim($_POST['lieu'] ?? ''), 0, 255);
 
     if ($montant <= 0) { flash('Le montant doit être supérieur à 0.', 'error'); header('Location: ' . $RETOUR); exit; }
@@ -118,7 +124,8 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
              laquelle elle se rattache. C'est ce rattachement qui permettra de
              connaître le bénéfice réel de chaque prestation. */ ?>
     <div class="field"><label>Nature de la dépense *</label>
-      <select class="input" name="categorie" required>
+      <select class="input" name="categorie" id="cat-depense" required
+              data-generales="<?= e(implode('|', charges_structurelles())) ?>">
         <?php foreach (categories_depense() as $nom => $ico): ?>
         <option value="<?= e($nom) ?>" <?= ($edit['categorie'] ?? '') === $nom ? 'selected' : '' ?>>
           <?= $ico ?> <?= e($nom) ?></option>
@@ -142,7 +149,7 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
     <?php endif; ?>
     <div class="field <?= $TYPE === 'sortie' ? 'full' : '' ?>">
       <label><?= $TYPE === 'entree' ? 'Facture réglée (facultatif)' : 'Dépense engagée pour…' ?></label>
-      <select class="input" name="facture_id">
+      <select class="input" name="facture_id" id="sel-activite">
         <option value=""><?= $TYPE === 'entree' ? '—' : '— Charge générale de l\'entreprise —' ?></option>
         <?php foreach ($facts as $fa): ?>
         <option value="<?= $fa['id'] ?>" <?= ($edit['facture_id'] ?? 0)==$fa['id']?'selected':'' ?>>
@@ -151,9 +158,8 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
         <?php endforeach; ?>
       </select>
       <?php if ($TYPE === 'sortie'): ?>
-      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">
+      <span id="aide-activite" style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">
         Rattachez la dépense à une prestation pour suivre son bénéfice.
-        Laissez vide pour une charge courante : loyer, salaires, électricité…
       </span>
       <?php endif; ?>
     </div>
@@ -247,4 +253,36 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
   <?php endif; ?>
 </div>
 <?php include __DIR__ . '/includes/envoyer_modal.php'; ?>
+<script>
+(function () {
+  /* Une charge de structure — loyer, salaires, électricité — ne se rattache
+     pas à une prestation : le champ se ferme de lui-même et explique pourquoi.
+     Cela évite une imputation qui fausserait la rentabilité d'une activité. */
+  var cat = document.getElementById('cat-depense');
+  var sel = document.getElementById('sel-activite');
+  var aide = document.getElementById('aide-activite');
+  if (!cat || !sel) return;
+
+  var generales = (cat.dataset.generales || '').split('|').filter(Boolean);
+
+  function majRattachement() {
+    var estGenerale = generales.indexOf(cat.value) >= 0;
+    sel.disabled = estGenerale;
+    if (estGenerale) {
+      sel.value = '';
+      sel.classList.add('champ-inactif');
+      if (aide) aide.textContent = "« " + cat.value + " » est une charge de l'entreprise : "
+        + "elle court indépendamment des prestations, on ne l'impute donc à aucune activité.";
+    } else {
+      sel.classList.remove('champ-inactif');
+      if (aide) aide.textContent = "Rattachez la dépense à une prestation pour suivre son bénéfice. "
+        + "Laissez vide si elle ne concerne aucune activité précise.";
+    }
+  }
+
+  cat.addEventListener('change', majRattachement);
+  majRattachement();
+})();
+</script>
+
 <?php admin_footer(); ?>
