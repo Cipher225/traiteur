@@ -341,6 +341,128 @@ function categories_recette(): array {
 }
 
 /* ----------------------------------------------------------------------------
+   Montant TTC d'une facture. Calculé en UN SEUL endroit : la remise est un
+   pourcentage, et l'appliquer comme un montant fixe ailleurs fausserait les
+   comptes sans que rien ne le signale.
+   ---------------------------------------------------------------------------- */
+function facture_ttc(PDO $pdo, int $factureId): float {
+    try {
+        $st = $pdo->prepare("SELECT f.remise, f.tva_taux, f.tva_applicable,
+                    (SELECT COALESCE(SUM(quantite * prix_unitaire), 0)
+                       FROM facture_lignes WHERE facture_id = f.id) AS ht
+                 FROM factures f WHERE f.id = ?");
+        $st->execute([$factureId]);
+        $f = $st->fetch();
+        if (!$f) return 0.0;
+        $ht = (float)$f['ht'];
+        $ht -= $ht * (float)$f['remise'] / 100;
+        if ($ht < 0) $ht = 0;
+        return $f['tva_applicable'] ? $ht * (1 + (float)$f['tva_taux'] / 100) : $ht;
+    } catch (Throwable $e) { return 0.0; }
+}
+
+/* Ce que le client a déjà réglé pour cette facture : acomptes encaissés par
+   bon d'entrée, et paiements en ligne. */
+function facture_deja_encaisse(PDO $pdo, int $factureId, ?int $saufTransaction = null): float {
+    $total = 0.0;
+    try {
+        $st = $pdo->prepare("SELECT COALESCE(SUM(montant), 0) FROM recus
+                             WHERE facture_id = ? AND type = 'entree'");
+        $st->execute([$factureId]);
+        $total = (float)$st->fetchColumn();
+    } catch (Throwable $e) {}
+    return $total;
+}
+
+/* ----------------------------------------------------------------------------
+   Encaissement automatique d'une facture passée à « payée ».
+   On n'enregistre QUE le solde restant : si le client a déjà versé un acompte
+   par bon d'entrée, le compter une seconde fois gonflerait le chiffre
+   d'affaires. C'est l'erreur la plus fréquente en comptabilité de caisse.
+   ---------------------------------------------------------------------------- */
+function encaissement_auto_facture(PDO $pdo, int $factureId, string $statut): array {
+    $repere = null;
+    try {
+        $st = $pdo->prepare('SELECT numero, client_id FROM factures WHERE id = ?');
+        $st->execute([$factureId]);
+        $f = $st->fetch();
+        if (!$f) return ['ok' => false, 'montant' => 0, 'message' => ''];
+
+        $repere = 'Solde facture ' . $f['numero'];
+
+        /* On efface l'écriture automatique précédente : le statut peut changer
+           plusieurs fois, et seule la dernière situation compte. */
+        $pdo->prepare("DELETE FROM transactions WHERE type='entree' AND libelle IN (?, ?)")
+            ->execute([$repere, 'Encaissement facture ' . $f['numero']]);
+
+        if ($statut !== 'payee') return ['ok' => true, 'montant' => 0, 'message' => 'Statut mis à jour.'];
+
+        $ttc   = facture_ttc($pdo, $factureId);
+        $recu  = facture_deja_encaisse($pdo, $factureId);
+        $reste = round($ttc - $recu);
+
+        if ($reste <= 0) {
+            return ['ok' => true, 'montant' => 0,
+                    'message' => 'Facture marquée payée. Les encaissements étaient déjà enregistrés '
+                               . '(' . number_format($recu, 0, ',', ' ') . ') : rien n\'a été ajouté.'];
+        }
+
+        $pdo->prepare("INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement,
+                       client_id, date_operation, notes, facture_id)
+                       VALUES ('entree', 'Solde', ?, ?, 'Facture', ?, CURDATE(), ?, ?)")
+            ->execute([$repere, $reste, $f['client_id'],
+                       $recu > 0
+                         ? 'Solde après acomptes déjà encaissés (' . number_format($recu, 0, ',', ' ') . ').'
+                         : 'Enregistré automatiquement au passage en « payée ».',
+                       $factureId]);
+
+        return ['ok' => true, 'montant' => $reste,
+                'message' => 'Facture payée. Solde de ' . number_format($reste, 0, ',', ' ')
+                           . ' enregistré en comptabilité.'];
+    } catch (Throwable $e) {
+        return ['ok' => false, 'montant' => 0, 'message' => 'Statut mis à jour.'];
+    }
+}
+
+/* ----------------------------------------------------------------------------
+   Charges récurrentes : celles qui ne sont pas encore enregistrées ce mois-ci.
+   On compare sur le libellé et le mois, pour ne jamais proposer deux fois la
+   même charge.
+   ---------------------------------------------------------------------------- */
+function charges_du_mois(PDO $pdo, string $mois): array {
+    $liste = [];
+    try {
+        foreach ($pdo->query("SELECT * FROM charges_recurrentes WHERE actif=1 ORDER BY jour_du_mois, libelle")->fetchAll() as $ch) {
+            $st = $pdo->prepare("SELECT id FROM transactions
+                                 WHERE libelle = ? AND DATE_FORMAT(date_operation,'%Y-%m') = ? LIMIT 1");
+            $st->execute([$ch['libelle'], $mois]);
+            $ch['deja'] = (int)($st->fetchColumn() ?: 0);
+            $liste[] = $ch;
+        }
+    } catch (Throwable $e) {}
+    return $liste;
+}
+
+/* ----------------------------------------------------------------------------
+   Détection d'un doublon comptable.
+   Deux opérations de même sens, de même montant et à quelques jours d'écart
+   sont presque toujours la même chose saisie deux fois : une fois par le bon
+   de caisse, une fois à la main. On alerte plutôt que de laisser fausser les
+   comptes — sans bloquer, car un cas légitime existe (deux achats identiques).
+   ---------------------------------------------------------------------------- */
+function ecriture_doublon(PDO $pdo, string $type, float $montant, string $date, int $jours = 3): ?array {
+    try {
+        $st = $pdo->prepare("SELECT id, libelle, montant, date_operation, recu_id
+                             FROM transactions
+                             WHERE type = ? AND ABS(montant - ?) < 1
+                               AND ABS(DATEDIFF(date_operation, ?)) <= ?
+                             ORDER BY ABS(DATEDIFF(date_operation, ?)) LIMIT 1");
+        $st->execute([$type, $montant, $date, $jours, $date]);
+        return $st->fetch() ?: null;
+    } catch (Throwable $e) { return null; }
+}
+
+/* ----------------------------------------------------------------------------
    Rentabilité d'une activité : ce qu'elle a rapporté, ce qu'elle a coûté.
    Le chiffre d'affaires est le montant de la facture ; les dépenses sont
    toutes les sorties rattachées à cette activité.

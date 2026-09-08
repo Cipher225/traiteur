@@ -80,6 +80,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nouveau = $_POST['statut'];
             $pdo->prepare('UPDATE factures SET statut=? WHERE id=?')->execute([$nouveau, $fid]);
 
+            /* La comptabilité suit automatiquement : seul le SOLDE restant est
+               enregistré, les acomptes déjà encaissés ne sont pas recomptés. */
+            $sync = encaissement_auto_facture($pdo, $fid, $nouveau);
+            flash($sync['message'] ?: 'Statut mis à jour.');
+        }
+        header('Location: factures.php'.$ctx); exit;
+    }
+    if (isset($_POST['convertir'])) {
+        // Proforma -> Facture : on change le type et on attribue un numéro de facture
+        $fid = (int)$_POST['convertir'];
+        $numero = next_numero($pdo, 'factures', $settings['prefixe_facture'] ?? 'FAC');
+        $pdo->prepare("UPDATE factures SET type='facture', numero=?, statut='brouillon' WHERE id=? AND type='proforma'")
+            ->execute([$numero, $fid]);
+        flash('Proforma convertie en facture ' . $numero . '.');
+        header('Location: factures.php'); exit;
+    }
+    if (isset($_POST['envoyer_mail'])) {
+        require_once __DIR__ . '/../config/mail.php';
+        $fid = (int)$_POST['envoyer_mail'];
+        $q = $pdo->prepare("SELECT f.numero, f.type, c.nom AS client, c.email
+            FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.id=?");
+        $q->execute([$fid]); $fdoc = $q->fetch();
+        if (!$fdoc || empty($fdoc['email'])) {
+            flash("Ce client n'a pas d'adresse email enregistrée.", 'error');
+        } else {
+            $s = get_settings($pdo);
+            $typeLbl = $fdoc['type'] === 'proforma' ? 'proforma' : 'facture';
+            $siteUrl = rtrim($s['site_url'] ?? (defined('SITE_URL') ? SITE_URL : ''), '/');
+            $lien = $siteUrl ? $siteUrl . '/admin/pdf.php?type=' . $fdoc['type'] . '&id=' . $fid : '';
+            $corps = '<p>Bonjour <strong>' . htmlspecialchars($fdoc['client']) . '</strong>,</p>
+                <p>Veuillez trouver votre ' . $typeLbl . ' <strong>' . htmlspecialchars($fdoc['numero']) . '</strong>.</p>'
+                . ($lien ? '<p style="text-align:center;margin:24px 0"><a href="' . $lien . '" style="background:#d4a526;color:#0a1020;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Consulter le document</a></p>' : '')
+                . '<p>Pour toute question, n\'hésitez pas à nous contacter.</p>
+                <p>Cordialement,<br><strong>' . htmlspecialchars($s['nom_entreprise'] ?? 'Groupe Helisce') . '</strong></p>';
+            if (@envoyer_email($pdo, $fdoc['email'], 'Votre ' . $typeLbl . ' ' . $fdoc['numero'], $corps)) {
+                flash('Document envoyé par email à ' . $fdoc['email'] . '.');
+            } else {
+                flash("L'email n'a pas pu être envoyé. Vérifiez les réglages SMTP dans Paramètres.", 'error');
+            }
+        }
+        header('Location: factures.php'.$ctx); exit;
+    }
+
+    if (isset($_POST['statut'], $_POST['id_statut'])) {
+        $ok = ['brouillon','envoyee','payee','annulee'];
+        if (in_array($_POST['statut'], $ok)) {
+            $fid = (int)$_POST['id_statut'];
+            $nouveau = $_POST['statut'];
+            $pdo->prepare('UPDATE factures SET statut=? WHERE id=?')->execute([$nouveau, $fid]);
+
             // Synchronisation avec la comptabilité (table transactions)
             // Repère : libelle "Encaissement facture <numero>" pour éviter les doublons.
             $fInfo = $pdo->prepare('SELECT f.numero, f.client_id, f.tva_taux, f.tva_applicable, f.remise,

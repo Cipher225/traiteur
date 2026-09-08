@@ -981,3 +981,22 @@ UPDATE transactions t
   JOIN recus r ON r.id = t.recu_id
    SET t.facture_id = r.facture_id
  WHERE t.facture_id IS NULL AND r.facture_id IS NOT NULL;
+
+-- =====================================================================
+--  CHARGES RÉCURRENTES
+--  Le loyer, les salaires ou l'abonnement Internet reviennent chaque
+--  mois pour le même montant. Les saisir douze fois par an est une
+--  perte de temps et une source d'oubli : on les décrit une fois, et
+--  l'application propose de les enregistrer d'un clic.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS charges_recurrentes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  libelle VARCHAR(160) NOT NULL,
+  categorie VARCHAR(80) NOT NULL DEFAULT 'Divers',
+  montant DECIMAL(14,2) NOT NULL DEFAULT 0,
+  mode_paiement VARCHAR(40) DEFAULT 'Espèces',
+  jour_du_mois TINYINT DEFAULT 1,
+  actif TINYINT(1) DEFAULT 1,
+  notes VARCHAR(255) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
