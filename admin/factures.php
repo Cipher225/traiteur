@@ -134,41 +134,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: factures.php'.$ctx); exit;
     }
 
-    if (isset($_POST['statut'], $_POST['id_statut'])) {
-        $ok = ['brouillon','envoyee','payee','annulee'];
-        if (in_array($_POST['statut'], $ok)) {
-            $fid = (int)$_POST['id_statut'];
-            $nouveau = $_POST['statut'];
-            $pdo->prepare('UPDATE factures SET statut=? WHERE id=?')->execute([$nouveau, $fid]);
-
-            // Synchronisation avec la comptabilité (table transactions)
-            // Repère : libelle "Encaissement facture <numero>" pour éviter les doublons.
-            $fInfo = $pdo->prepare('SELECT f.numero, f.client_id, f.tva_taux, f.tva_applicable, f.remise,
-                (SELECT COALESCE(SUM(quantite*prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
-                FROM factures f WHERE f.id=?');
-            $fInfo->execute([$fid]); $fInfo = $fInfo->fetch();
-            if ($fInfo) {
-                $repere = 'Encaissement facture ' . $fInfo['numero'];
-                // Nettoyer une éventuelle entrée précédente pour cette facture
-                $pdo->prepare("DELETE FROM transactions WHERE type='entree' AND libelle=?")->execute([$repere]);
-                if ($nouveau === 'payee') {
-                    // Montant TTC = (HT - remise) * (1 + TVA si applicable)
-                    $ht = (float)$fInfo['ht'] - (float)$fInfo['remise'];
-                    if ($ht < 0) $ht = 0;
-                    $ttc = $fInfo['tva_applicable'] ? $ht * (1 + (float)$fInfo['tva_taux']/100) : $ht;
-                    $pdo->prepare("INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement, client_id, date_operation, notes)
-                                   VALUES ('entree', 'Ventes', ?, ?, ?, ?, CURDATE(), 'Généré automatiquement depuis la facture.')")
-                        ->execute([$repere, round($ttc), 'Facture', $fInfo['client_id']]);
-                    flash('Facture marquée payée et enregistrée en comptabilité (entrée).');
-                } else {
-                    flash('Statut mis à jour.');
-                }
-            } else {
-                flash('Statut mis à jour.');
-            }
-        }
-        header('Location: factures.php'.$ctx); exit;
-    }
 
     // Création / modification
     $type = ($_POST['doc_type'] ?? 'facture') === 'proforma' ? 'proforma' : 'facture';
@@ -218,6 +183,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $ins = $pdo->prepare('INSERT INTO facture_lignes (facture_id, designation, quantite, prix_unitaire, categorie, details) VALUES (?,?,?,?,?,?)');
     foreach ($lignes as $l) $ins->execute([$id, $l[0], $l[1], $l[2], $l[3] ?: null, $l[4]]);
+
+    /* Si la facture était déjà réglée, son montant vient peut-être de changer :
+       la comptabilité doit refléter le nouveau total, sinon elle garderait la
+       trace d'un encaissement qui ne correspond plus à rien. */
+    recalculer_solde_facture($pdo, (int)$id);
+
     header('Location: factures.php'.$retour); exit;
 }
 
