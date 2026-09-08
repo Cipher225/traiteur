@@ -277,6 +277,45 @@ try {
     $moyens = array_map(fn($r) => ['nom' => $r['m'] ?: 'Non précisé', 'val' => (float)$r['s']], $st->fetchAll());
 } catch (Throwable $e) {}
 
+/* ---- Marge mensuelle : la différence entre ce qui entre et ce qui sort ---- */
+$pouls['marge'] = [];
+foreach ($pouls['entrees'] as $i => $v) {
+    $pouls['marge'][] = $v - ($pouls['depenses'][$i] ?? 0);
+}
+
+/* ---- Les trois prestations les plus rentables des 12 derniers mois ---- */
+$poulsTop = [];
+try {
+    $st = $pdo->prepare("SELECT f.id, f.numero, f.activite,
+                                COALESCE(NULLIF(c.entreprise,''), c.nom) AS client
+                         FROM factures f LEFT JOIN clients c ON c.id = f.client_id
+                         WHERE f.type='facture' AND f.statut <> 'annulee' AND f.date_emission >= ?
+                         ORDER BY f.date_emission DESC LIMIT 40");
+    $st->execute([$depuis]);
+    foreach ($st->fetchAll() as $f2) {
+        $r = rentabilite_activite($pdo, (int)$f2['id']);
+        if ($r['ca'] <= 0) continue;
+        $poulsTop[] = $f2 + $r;
+    }
+    usort($poulsTop, fn($a, $b) => $b['marge'] <=> $a['marge']);
+    $poulsTop = array_slice($poulsTop, 0, 3);
+} catch (Throwable $e) { $poulsTop = []; }
+
+/* ---- Comparaison avec la période précédente : progresse-t-on ? ---- */
+$sem1 = array_sum(array_slice($pouls['entrees'], 0, 6));    // mois 1 à 6
+$sem2 = array_sum(array_slice($pouls['entrees'], 6, 6));    // mois 7 à 12
+$poulsEvolution = $sem1 > 0 ? (($sem2 - $sem1) / $sem1) * 100 : ($sem2 > 0 ? 100 : 0);
+
+/* ---- Où part l'argent : les cinq premiers postes de dépense ---- */
+$poulsPostes = [];
+try {
+    $st = $pdo->prepare("SELECT categorie, SUM(montant) s FROM transactions
+                         WHERE type='depense' AND date_operation >= ?
+                         GROUP BY categorie ORDER BY s DESC LIMIT 5");
+    $st->execute([$depuis]);
+    $poulsPostes = array_map(fn($r) => ['nom' => $r['categorie'] ?: 'Divers', 'val' => (float)$r['s']], $st->fetchAll());
+} catch (Throwable $e) {}
+
 /* Quelques repères, animés à l'affichage */
 $poulsCA      = array_sum($pouls['entrees']);
 $poulsDep     = array_sum($pouls['depenses']);
@@ -284,6 +323,9 @@ $poulsDocs    = array_sum($pouls['docs']);
 $poulsEvts    = array_sum($pouls['evts']);
 $poulsMoyen   = $poulsDocs > 0 ? $poulsCA / $poulsDocs : 0;
 $moisPlein    = $pouls['entrees'] ? array_search(max($pouls['entrees']), $pouls['entrees']) : 0;
+$poulsMarge   = $poulsCA - $poulsDep;
+$poulsTaux    = $poulsCA > 0 ? ($poulsMarge / $poulsCA) * 100 : 0;
+$poulsMoisAct = count(array_filter($pouls['entrees'], fn($v) => $v > 0));
 
 /* Encaissements des 6 derniers mois, pour la tendance */
 $tendance = [];
@@ -547,263 +589,386 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
 <?php if (can('comptabilite')): ?>
 <!-- ============================================================================
      POULS DE L'ACTIVITÉ
-     Tout se dessine en SVG au chargement : les courbes se tracent, les aires se
-     remplissent, les chiffres défilent. Aucune bibliothèque : rien à télécharger,
-     donc un affichage instantané, même sur une connexion faible.
+     Tout est dessiné en SVG au chargement : les aires se remplissent, les
+     courbes se tracent, les chiffres défilent. Aucune bibliothèque externe —
+     rien à télécharger, donc un affichage instantané même sur une connexion
+     faible, ce qui compte en Côte d'Ivoire.
      ============================================================================ -->
-<div class="pouls panel glass">
+<div class="pouls panel glass" id="pouls">
+
   <div class="pouls-tete">
-    <div>
-      <h2 style="margin:0">💓 Pouls de l'activité</h2>
-      <p class="pouls-sous">Douze derniers mois — encaissements, dépenses, documents et événements</p>
-    </div>
-    <div class="pouls-legende">
-      <button type="button" class="pl-item actif" data-serie="entrees"><i style="background:#10b981"></i>Encaissements</button>
-      <button type="button" class="pl-item actif" data-serie="depenses"><i style="background:#f87171"></i>Dépenses</button>
-      <button type="button" class="pl-item" data-serie="docs"><i style="background:#d4a526"></i>Factures</button>
-      <button type="button" class="pl-item" data-serie="evts"><i style="background:#60a5fa"></i>Événements</button>
-    </div>
-  </div>
-
-  <div class="pouls-corps">
-    <div class="pouls-graphe">
-      <svg id="pouls-svg" viewBox="0 0 820 260" preserveAspectRatio="none" role="img"
-           aria-label="Évolution de l'activité sur douze mois"></svg>
-      <div class="pouls-bulle" id="pouls-bulle" hidden></div>
-    </div>
-
-    <div class="pouls-cote">
-      <div class="pouls-donut">
-        <svg viewBox="0 0 120 120" id="pouls-donut" aria-label="Répartition par moyen de paiement"></svg>
-        <div class="pd-centre">
-          <span class="pd-val" data-compte="<?= (int)$poulsCA ?>">0</span>
-          <span class="pd-lbl"><?= e($devise) ?> encaissés</span>
-        </div>
+    <div class="pt-titre">
+      <span class="pt-coeur">💓</span>
+      <div>
+        <h2>Pouls de l'activité</h2>
+        <p>Douze derniers mois — <?= (int)$poulsMoisAct ?> mois d'activité enregistrés</p>
       </div>
-      <div class="pouls-moyens" id="pouls-moyens"></div>
+    </div>
+    <?php if (abs($poulsEvolution) > 0.5): ?>
+    <div class="pt-evol <?= $poulsEvolution >= 0 ? 'hausse' : 'baisse' ?>">
+      <span class="pe-fleche"><?= $poulsEvolution >= 0 ? '▲' : '▼' ?></span>
+      <div>
+        <strong><?= ($poulsEvolution >= 0 ? '+' : '') . number_format($poulsEvolution, 0) ?> %</strong>
+        <span>sur les 6 derniers mois</span>
+      </div>
+    </div>
+    <?php endif; ?>
+  </div>
+
+  <!-- ---------- Les quatre chiffres qui comptent ---------- -->
+  <div class="pouls-cles">
+    <div class="pc" data-teinte="or">
+      <div class="pc-h"><span class="pc-i">💰</span><span class="pc-l">Encaissé</span></div>
+      <div class="pc-v" data-val="<?= (int)$poulsCA ?>">0</div>
+      <div class="pc-u"><?= e($devise) ?></div>
+    </div>
+    <div class="pc" data-teinte="rouge">
+      <div class="pc-h"><span class="pc-i">📤</span><span class="pc-l">Dépensé</span></div>
+      <div class="pc-v" data-val="<?= (int)$poulsDep ?>">0</div>
+      <div class="pc-u"><?= e($devise) ?></div>
+    </div>
+    <div class="pc" data-teinte="<?= $poulsMarge >= 0 ? 'vert' : 'rouge' ?>">
+      <div class="pc-h"><span class="pc-i"><?= $poulsMarge >= 0 ? '📈' : '📉' ?></span><span class="pc-l">Marge</span></div>
+      <div class="pc-v" data-val="<?= (int)$poulsMarge ?>">0</div>
+      <div class="pc-u"><?= number_format($poulsTaux, 0) ?> % du chiffre d'affaires</div>
+    </div>
+    <div class="pc" data-teinte="bleu">
+      <div class="pc-h"><span class="pc-i">🧾</span><span class="pc-l">Panier moyen</span></div>
+      <div class="pc-v" data-val="<?= (int)$poulsMoyen ?>">0</div>
+      <div class="pc-u">sur <?= (int)$poulsDocs ?> document<?= $poulsDocs > 1 ? 's' : '' ?></div>
     </div>
   </div>
 
-  <div class="pouls-reperes">
-    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsDocs ?>">0</span><span class="pr-lbl">factures émises</span></div>
-    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsEvts ?>">0</span><span class="pr-lbl">événements</span></div>
-    <div class="pr-item"><span class="pr-val" data-compte="<?= (int)$poulsMoyen ?>">0</span><span class="pr-lbl">panier moyen</span></div>
-    <div class="pr-item"><span class="pr-val pr-txt"><?= e($pouls['mois'][$moisPlein] ?? '—') ?></span><span class="pr-lbl">meilleur mois</span></div>
+  <!-- ---------- Le graphique ---------- -->
+  <div class="pouls-graphe">
+    <div class="pg-barre">
+      <div class="pg-series">
+        <button type="button" class="pgs actif" data-serie="entrees">
+          <i style="background:linear-gradient(135deg,#e9c15c,#d4a526)"></i>Encaissements</button>
+        <button type="button" class="pgs actif" data-serie="depenses">
+          <i style="background:linear-gradient(135deg,#fca5a5,#f87171)"></i>Dépenses</button>
+        <button type="button" class="pgs" data-serie="marge">
+          <i style="background:linear-gradient(135deg,#6ee7b7,#10b981)"></i>Marge</button>
+      </div>
+      <div class="pg-mode">
+        <button type="button" class="pgm actif" data-mode="aire">Aires</button>
+        <button type="button" class="pgm" data-mode="barres">Barres</button>
+      </div>
+    </div>
+    <div class="pg-zone">
+      <svg id="pg-svg" viewBox="0 0 900 320" preserveAspectRatio="none" aria-label="Évolution sur douze mois"></svg>
+      <div id="pg-bulle" class="pg-bulle" hidden></div>
+    </div>
+  </div>
+
+  <!-- ---------- Trois lectures complémentaires ---------- -->
+  <div class="pouls-bas">
+
+    <div class="pb-bloc">
+      <div class="pb-t">💳 D'où vient l'argent</div>
+      <?php if ($moyens): $totM = array_sum(array_column($moyens, 'val')) ?: 1; ?>
+      <div class="pb-liste">
+        <?php foreach ($moyens as $i => $m): $part = $m['val'] / $totM * 100; ?>
+        <div class="pl">
+          <div class="pl-h"><span><?= e($m['nom']) ?></span><b><?= number_format($part, 0) ?> %</b></div>
+          <div class="pl-j"><span class="pl-f" data-largeur="<?= round($part, 1) ?>"
+                style="background:linear-gradient(90deg,<?= ['#e9c15c','#7dd3fc','#a78bfa','#6ee7b7','#fbbf24','#f472b6'][$i % 6] ?>,<?= ['#d4a526','#38bdf8','#8b5cf6','#10b981','#f0b429','#ec4899'][$i % 6] ?>)"></span></div>
+          <div class="pl-m"><?= money($m['val'], $devise) ?></div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?><p class="pb-vide">Aucun encaissement sur la période.</p><?php endif; ?>
+    </div>
+
+    <div class="pb-bloc">
+      <div class="pb-t">📤 Où part l'argent</div>
+      <?php if ($poulsPostes): $totP = array_sum(array_column($poulsPostes, 'val')) ?: 1; ?>
+      <div class="pb-liste">
+        <?php foreach ($poulsPostes as $i => $p): $part = $p['val'] / $totP * 100; ?>
+        <div class="pl">
+          <div class="pl-h"><span><?= e($p['nom']) ?></span><b><?= number_format($part, 0) ?> %</b></div>
+          <div class="pl-j"><span class="pl-f" data-largeur="<?= round($part, 1) ?>"
+                style="background:linear-gradient(90deg,#fca5a5,#f87171)"></span></div>
+          <div class="pl-m"><?= money($p['val'], $devise) ?></div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?><p class="pb-vide">Aucune dépense sur la période.</p><?php endif; ?>
+    </div>
+
+    <div class="pb-bloc">
+      <div class="pb-t">🏆 Vos prestations les plus rentables</div>
+      <?php if ($poulsTop): ?>
+      <div class="pb-podium">
+        <?php foreach ($poulsTop as $rang => $a): ?>
+        <a class="pp" href="finances.php">
+          <span class="pp-r"><?= ['🥇','🥈','🥉'][$rang] ?></span>
+          <div class="pp-t">
+            <strong><?= e($a['activite'] ?: $a['numero']) ?></strong>
+            <span><?= e($a['client'] ?: 'Client de passage') ?></span>
+          </div>
+          <div class="pp-m">
+            <b><?= money($a['marge'], $devise) ?></b>
+            <span><?= number_format($a['taux'], 0) ?> %</span>
+          </div>
+        </a>
+        <?php endforeach; ?>
+      </div>
+      <?php else: ?>
+      <p class="pb-vide">Rattachez vos dépenses à une prestation pour voir apparaître
+        ses bénéfices ici.</p>
+      <?php endif; ?>
+    </div>
+
   </div>
 </div>
 
 <script>
-(function(){
-  var D = <?= json_encode([
-      'mois' => $pouls['mois'],
-      'series' => [
-        'entrees'  => array_map('floatval', $pouls['entrees']),
-        'depenses' => array_map('floatval', $pouls['depenses']),
-        'docs'     => array_map('intval',   $pouls['docs']),
-        'evts'     => array_map('intval',   $pouls['evts']),
-      ],
-      'moyens' => $moyens,
-      'devise' => $devise,
-  ], JSON_UNESCAPED_UNICODE) ?>;
-
-  var svg = document.getElementById('pouls-svg');
+(function () {
+  var svg   = document.getElementById('pg-svg');
+  var bulle = document.getElementById('pg-bulle');
   if (!svg) return;
-  var NS = 'http://www.w3.org/2000/svg';
-  var W = 820, H = 260, ML = 8, MR = 8, MT = 18, MB = 30;
-  var douce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  var couleurs = { entrees:'#10b981', depenses:'#f87171', docs:'#d4a526', evts:'#60a5fa' };
-  var actives  = { entrees:true, depenses:true, docs:false, evts:false };
+  var MOIS = <?= json_encode($pouls['mois'], JSON_UNESCAPED_UNICODE) ?>;
+  var DATA = {
+    entrees:  <?= json_encode(array_map('round', $pouls['entrees'])) ?>,
+    depenses: <?= json_encode(array_map('round', $pouls['depenses'])) ?>,
+    marge:    <?= json_encode(array_map('round', $pouls['marge'])) ?>
+  };
+  var COULEURS = {
+    entrees:  ['#e9c15c', '#d4a526'],
+    depenses: ['#fca5a5', '#f87171'],
+    marge:    ['#6ee7b7', '#10b981']
+  };
+  var NOMS = { entrees: 'Encaissements', depenses: 'Dépenses', marge: 'Marge' };
 
-  function fmt(n){ return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
-  function el(t, a){ var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  var actives = ['entrees', 'depenses'];
+  var mode = 'aire';
+  var anime = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var dejaVu = false;
 
-  /* Courbe lissée : des segments droits feraient « graphique de tableur »,
-     une courbe douce se lit mieux et fait vivante. */
-  function chemin(pts){
-    if (!pts.length) return '';
-    var d = 'M' + pts[0][0] + ',' + pts[0][1];
-    for (var i = 0; i < pts.length - 1; i++) {
-      var x0 = pts[i][0], y0 = pts[i][1], x1 = pts[i+1][0], y1 = pts[i+1][1];
-      var cx = (x0 + x1) / 2;
-      d += ' C' + cx + ',' + y0 + ' ' + cx + ',' + y1 + ' ' + x1 + ',' + y1;
+  var L = 900, H = 320, MG = 58, MD = 18, MH = 22, MB = 40;
+  var lg = L - MG - MD, ht = H - MH - MB;
+
+  function fmt(v) {
+    var a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1).replace('.0', '') + ' Md';
+    if (a >= 1e6) return (v / 1e6).toFixed(1).replace('.0', '') + ' M';
+    if (a >= 1e3) return Math.round(v / 1e3) + ' k';
+    return String(Math.round(v));
+  }
+  function fmtLong(v) {
+    return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  /* Échelle : on tient compte des valeurs négatives (une marge peut l'être). */
+  function bornes() {
+    var vals = [];
+    actives.forEach(function (s) { vals = vals.concat(DATA[s]); });
+    if (!vals.length) vals = [0];
+    var mx = Math.max.apply(null, vals.concat([0]));
+    var mn = Math.min.apply(null, vals.concat([0]));
+    if (mx === mn) mx = mn + 1;
+    return { mx: mx * 1.08, mn: mn < 0 ? mn * 1.12 : 0 };
+  }
+
+  function y(v, b) { return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht; }
+  function x(i) { return MG + (MOIS.length > 1 ? i * (lg / (MOIS.length - 1)) : lg / 2); }
+
+  /* Courbe adoucie : des segments droits feraient « graphique de tableur ». */
+  function chemin(vals, b) {
+    var d = '';
+    for (var i = 0; i < vals.length; i++) {
+      var px = x(i), py = y(vals[i], b);
+      if (i === 0) { d += 'M' + px + ',' + py; continue; }
+      var pxp = x(i - 1), pyp = y(vals[i - 1], b), mx = (pxp + px) / 2;
+      d += 'C' + mx + ',' + pyp + ' ' + mx + ',' + py + ' ' + px + ',' + py;
     }
     return d;
   }
 
-  function dessiner(){
-    svg.innerHTML = '';
-    var n = D.mois.length;
-    var largeur = W - ML - MR, hauteur = H - MT - MB;
-    var pas = largeur / Math.max(1, n - 1);
+  function dessiner() {
+    var b = bornes();
+    var el = '';
 
-    // Échelle : chaque famille garde sa propre lecture (argent vs nombre)
-    var maxArgent = 1, maxNb = 1;
-    ['entrees','depenses'].forEach(function(s){ if(actives[s]) D.series[s].forEach(function(v){ if(v>maxArgent) maxArgent=v; }); });
-    ['docs','evts'].forEach(function(s){ if(actives[s]) D.series[s].forEach(function(v){ if(v>maxNb) maxNb=v; }); });
+    /* Dégradés et filtres */
+    el += '<defs>';
+    Object.keys(COULEURS).forEach(function (s) {
+      el += '<linearGradient id="g-' + s + '" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0%" stop-color="' + COULEURS[s][0] + '" stop-opacity=".42"/>'
+          + '<stop offset="100%" stop-color="' + COULEURS[s][1] + '" stop-opacity="0"/></linearGradient>';
+      el += '<linearGradient id="b-' + s + '" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0%" stop-color="' + COULEURS[s][0] + '"/>'
+          + '<stop offset="100%" stop-color="' + COULEURS[s][1] + '"/></linearGradient>';
+    });
+    el += '<filter id="lueur"><feGaussianBlur stdDeviation="3.5" result="f"/>'
+        + '<feMerge><feMergeNode in="f"/><feMergeNode in="SourceGraphic"/></feMerge></filter>';
+    el += '</defs>';
 
-    // Lignes de repère
-    var defs = el('defs', {});
-    for (var g = 0; g <= 4; g++) {
-      var y = MT + hauteur * g / 4;
-      svg.appendChild(el('line', {x1:ML, y1:y, x2:W-MR, y2:y,
-        stroke:'currentColor', 'stroke-opacity':.07, 'stroke-width':1}));
+    /* Repères horizontaux et échelle */
+    for (var k = 0; k <= 4; k++) {
+      var v = b.mn + (b.mx - b.mn) * (k / 4), py = y(v, b);
+      el += '<line x1="' + MG + '" y1="' + py + '" x2="' + (L - MD) + '" y2="' + py
+          + '" stroke="rgba(255,255,255,.07)" stroke-width="1"/>';
+      el += '<text x="' + (MG - 10) + '" y="' + (py + 4) + '" text-anchor="end" '
+          + 'fill="rgba(255,255,255,.36)" font-size="11">' + fmt(v) + '</text>';
+    }
+    /* La ligne du zéro, plus marquée : elle sépare le gain de la perte. */
+    if (b.mn < 0) {
+      el += '<line x1="' + MG + '" y1="' + y(0, b) + '" x2="' + (L - MD) + '" y2="' + y(0, b)
+          + '" stroke="rgba(255,255,255,.22)" stroke-width="1.5" stroke-dasharray="4 4"/>';
     }
 
-    ['entrees','depenses','docs','evts'].forEach(function(nom, idx){
-      if (!actives[nom]) return;
-      var vals = D.series[nom];
-      var mx = (nom === 'docs' || nom === 'evts') ? maxNb : maxArgent;
-      var pts = vals.map(function(v, i){
-        return [ML + i * pas, MT + hauteur - (v / mx) * hauteur * 0.92];
-      });
-      var d = chemin(pts);
-
-      // Aire dégradée sous la courbe
-      var grad = el('linearGradient', {id:'g-'+nom, x1:'0', y1:'0', x2:'0', y2:'1'});
-      var s1 = el('stop', {offset:'0%'});  s1.setAttribute('stop-color', couleurs[nom]); s1.setAttribute('stop-opacity','.30');
-      var s2 = el('stop', {offset:'100%'});s2.setAttribute('stop-color', couleurs[nom]); s2.setAttribute('stop-opacity','0');
-      grad.appendChild(s1); grad.appendChild(s2); defs.appendChild(grad);
-
-      var aire = el('path', {d: d + ' L' + (ML + (n-1)*pas) + ',' + (MT+hauteur) + ' L' + ML + ',' + (MT+hauteur) + ' Z',
-                             fill:'url(#g-'+nom+')', opacity:'0'});
-      svg.appendChild(aire);
-
-      var ligne = el('path', {d:d, fill:'none', stroke:couleurs[nom], 'stroke-width':'2.4',
-                              'stroke-linecap':'round', 'stroke-linejoin':'round'});
-      svg.appendChild(ligne);
-
-      // Tracé progressif de la courbe, puis remplissage de l'aire
-      if (!douce) {
-        var L = ligne.getTotalLength();
-        ligne.style.strokeDasharray = L; ligne.style.strokeDashoffset = L;
-        ligne.style.transition = 'stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1) ' + (idx*.12) + 's';
-        aire.style.transition = 'opacity .8s ease ' + (0.7 + idx*.12) + 's';
-        requestAnimationFrame(function(){ ligne.style.strokeDashoffset = '0'; aire.style.opacity = '1'; });
-      } else { aire.style.opacity = '1'; }
-
-      // Points, révélés après le tracé
-      pts.forEach(function(p, i){
-        var c = el('circle', {cx:p[0], cy:p[1], r:'3.2', fill:couleurs[nom],
-                              stroke:'rgba(10,16,32,.9)', 'stroke-width':'1.6', opacity: douce ? '1':'0'});
-        if (!douce) {
-          c.style.transition = 'opacity .3s ease ' + (0.9 + i*.03) + 's';
-          requestAnimationFrame(function(){ c.style.opacity = '1'; });
-        }
-        svg.appendChild(c);
-      });
+    /* Mois */
+    MOIS.forEach(function (m, i) {
+      el += '<text x="' + x(i) + '" y="' + (H - 14) + '" text-anchor="middle" '
+          + 'fill="rgba(255,255,255,.42)" font-size="11.5">' + m + '</text>';
     });
 
-    svg.appendChild(defs);
+    if (mode === 'barres') {
+      var largeur = Math.max(6, (lg / MOIS.length) / (actives.length + 1));
+      actives.forEach(function (s, si) {
+        DATA[s].forEach(function (v, i) {
+          var hb = Math.abs(y(v, b) - y(0, b));
+          var py = v >= 0 ? y(v, b) : y(0, b);
+          var px = x(i) - (largeur * actives.length) / 2 + si * largeur;
+          el += '<rect class="pg-bar" x="' + px + '" y="' + py + '" width="' + (largeur - 2)
+              + '" height="' + hb + '" rx="3" fill="url(#b-' + s + ')" '
+              + 'style="transform-origin:' + px + 'px ' + y(0, b) + 'px"/>';
+        });
+      });
+    } else {
+      actives.forEach(function (s) {
+        var d = chemin(DATA[s], b);
+        var base = y(Math.max(0, b.mn), b);
+        el += '<path d="' + d + ' L' + x(MOIS.length - 1) + ',' + base + ' L' + x(0) + ',' + base
+            + ' Z" fill="url(#g-' + s + ')" class="pg-aire"/>';
+        el += '<path d="' + d + '" fill="none" stroke="url(#b-' + s + ')" stroke-width="2.6" '
+            + 'stroke-linecap="round" filter="url(#lueur)" class="pg-ligne"/>';
+        DATA[s].forEach(function (v, i) {
+          el += '<circle class="pg-pt" cx="' + x(i) + '" cy="' + y(v, b) + '" r="3.4" '
+              + 'fill="' + COULEURS[s][1] + '" stroke="#0a1020" stroke-width="1.6"/>';
+        });
+      });
+    }
 
-    // Mois
-    D.mois.forEach(function(m, i){
-      var t = el('text', {x: ML + i*pas, y: H - 8, 'text-anchor':'middle',
-                          fill:'currentColor', 'fill-opacity':'.45', 'font-size':'11'});
-      t.textContent = m; svg.appendChild(t);
+    /* Zones de survol : une par mois, invisibles */
+    MOIS.forEach(function (m, i) {
+      var larg = lg / MOIS.length;
+      el += '<rect class="pg-hit" data-i="' + i + '" x="' + (x(i) - larg / 2) + '" y="' + MH
+          + '" width="' + larg + '" height="' + ht + '" fill="transparent"/>';
     });
+    el += '<line id="pg-guide" x1="0" y1="' + MH + '" x2="0" y2="' + (MH + ht)
+        + '" stroke="rgba(240,193,75,.5)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>';
 
-    // Zone sensible au survol : un repère vertical suit le curseur
-    var trait = el('line', {y1:MT, y2:MT+hauteur, stroke:'currentColor', 'stroke-opacity':'.25',
-                            'stroke-width':1, 'stroke-dasharray':'3 3', opacity:'0'});
-    svg.appendChild(trait);
+    svg.innerHTML = el;
+    brancherSurvol(b);
 
-    var bulle = document.getElementById('pouls-bulle');
-    var zone = svg.parentNode;
-    zone.onmousemove = function(e){
-      var r = svg.getBoundingClientRect();
-      var x = (e.clientX - r.left) / r.width * W;
-      var i = Math.max(0, Math.min(n-1, Math.round((x - ML) / pas)));
-      trait.setAttribute('x1', ML + i*pas); trait.setAttribute('x2', ML + i*pas);
-      trait.setAttribute('opacity', '1');
-      var h = '<strong>' + D.mois[i] + '</strong>';
-      if (actives.entrees)  h += '<span><i style="background:#10b981"></i>Encaissé <b>' + fmt(D.series.entrees[i]) + '</b></span>';
-      if (actives.depenses) h += '<span><i style="background:#f87171"></i>Dépensé <b>' + fmt(D.series.depenses[i]) + '</b></span>';
-      if (actives.docs)     h += '<span><i style="background:#d4a526"></i>Factures <b>' + D.series.docs[i] + '</b></span>';
-      if (actives.evts)     h += '<span><i style="background:#60a5fa"></i>Événements <b>' + D.series.evts[i] + '</b></span>';
-      bulle.innerHTML = h; bulle.hidden = false;
-      var px = (ML + i*pas) / W * r.width;
-      bulle.style.left = Math.min(Math.max(px, 70), r.width - 70) + 'px';
-    };
-    zone.onmouseleave = function(){ trait.setAttribute('opacity','0'); bulle.hidden = true; };
+    if (anime) {
+      svg.querySelectorAll('.pg-ligne').forEach(function (p, n) {
+        var lgr = p.getTotalLength();
+        p.style.strokeDasharray = lgr; p.style.strokeDashoffset = lgr;
+        p.style.transition = 'stroke-dashoffset 1.5s cubic-bezier(.4,0,.2,1) ' + (n * .18) + 's';
+        requestAnimationFrame(function () { p.style.strokeDashoffset = 0; });
+      });
+      svg.querySelectorAll('.pg-aire').forEach(function (a, n) {
+        a.style.opacity = 0; a.style.transition = 'opacity .9s ease ' + (.35 + n * .18) + 's';
+        requestAnimationFrame(function () { a.style.opacity = 1; });
+      });
+      svg.querySelectorAll('.pg-pt').forEach(function (c, n) {
+        c.style.opacity = 0; c.style.transition = 'opacity .4s ease ' + (.7 + n * .022) + 's';
+        requestAnimationFrame(function () { c.style.opacity = 1; });
+      });
+      svg.querySelectorAll('.pg-bar').forEach(function (r, n) {
+        r.style.transform = 'scaleY(0)';
+        r.style.transition = 'transform .8s cubic-bezier(.2,.9,.3,1.2) ' + (n * .025) + 's';
+        requestAnimationFrame(function () { r.style.transform = 'scaleY(1)'; });
+      });
+    }
   }
 
-  /* Anneau des moyens de paiement */
-  function donut(){
-    var s = document.getElementById('pouls-donut');
-    var liste = document.getElementById('pouls-moyens');
-    if (!s || !D.moyens.length) { if (liste) liste.innerHTML = '<div class="pm-vide">Aucun encaissement enregistré</div>'; return; }
-    s.innerHTML = '';
-    var total = D.moyens.reduce(function(a,b){ return a + b.val; }, 0) || 1;
-    var teintes = ['#d4a526','#10b981','#60a5fa','#a78bfa','#f0b429','#94a3b8'];
-    var R = 46, C = 2 * Math.PI * R, debut = 0, html = '';
-
-    D.moyens.forEach(function(m, i){
-      var part = m.val / total;
-      var arc = el('circle', {cx:60, cy:60, r:R, fill:'none', stroke:teintes[i % 6],
-        'stroke-width':'13', 'stroke-linecap':'butt',
-        'stroke-dasharray': (C*part - 1.5) + ' ' + (C - C*part + 1.5),
-        'stroke-dashoffset': -C*debut, transform:'rotate(-90 60 60)'});
-      if (!douce) {
-        arc.style.opacity = '0';
-        arc.style.transition = 'opacity .5s ease ' + (0.4 + i*.12) + 's';
-        requestAnimationFrame(function(){ arc.style.opacity = '1'; });
-      }
-      s.appendChild(arc);
-      html += '<div class="pm-ligne"><i style="background:' + teintes[i % 6] + '"></i>' +
-              '<span class="pm-nom">' + m.nom + '</span>' +
-              '<span class="pm-pct">' + Math.round(part*100) + '%</span></div>';
-      debut += part;
+  function brancherSurvol(b) {
+    var guide = svg.querySelector('#pg-guide');
+    svg.querySelectorAll('.pg-hit').forEach(function (z) {
+      z.addEventListener('mouseenter', function () {
+        var i = +this.dataset.i;
+        if (guide) { guide.setAttribute('x1', x(i)); guide.setAttribute('x2', x(i)); guide.setAttribute('opacity', 1); }
+        var h = '<div class="pb-mois">' + MOIS[i] + '</div>';
+        actives.forEach(function (s) {
+          h += '<div class="pb-l"><i style="background:' + COULEURS[s][1] + '"></i>'
+             + '<span>' + NOMS[s] + '</span><b>' + fmtLong(DATA[s][i]) + '</b></div>';
+        });
+        bulle.innerHTML = h;
+        bulle.hidden = false;
+        var r = svg.getBoundingClientRect();
+        var px = (x(i) / L) * r.width;
+        bulle.style.left = Math.min(Math.max(px, 90), r.width - 90) + 'px';
+      });
     });
-    liste.innerHTML = html;
+    svg.addEventListener('mouseleave', function () {
+      bulle.hidden = true;
+      if (guide) guide.setAttribute('opacity', 0);
+    });
   }
 
-  /* Les chiffres défilent jusqu'à leur valeur : le mouvement attire l'œil
-     sur les repères, sans être tapageur. */
-  function compter(){
-    document.querySelectorAll('[data-compte]').forEach(function(e){
-      var cible = parseInt(e.dataset.compte, 10) || 0;
-      if (douce || cible === 0) { e.textContent = fmt(cible); return; }
-      var t0 = null, duree = 1300;
-      function pas(t){
+  /* Compteurs : les chiffres montent, ce qui attire l'œil sur l'essentiel. */
+  function compter() {
+    document.querySelectorAll('#pouls .pc-v').forEach(function (el) {
+      var cible = parseFloat(el.dataset.val) || 0;
+      if (!anime) { el.textContent = fmtLong(cible); return; }
+      var t0 = null, duree = 1400;
+      function pas(t) {
         if (!t0) t0 = t;
-        var p = Math.min(1, (t - t0) / duree);
-        var e2 = 1 - Math.pow(1 - p, 3);          // ralentit en fin de course
-        e.textContent = fmt(cible * e2);
+        var p = Math.min((t - t0) / duree, 1);
+        var e = 1 - Math.pow(1 - p, 3);
+        el.textContent = fmtLong(cible * e);
         if (p < 1) requestAnimationFrame(pas);
       }
       requestAnimationFrame(pas);
     });
+    document.querySelectorAll('#pouls .pl-f').forEach(function (f, n) {
+      var l = f.dataset.largeur + '%';
+      if (!anime) { f.style.width = l; return; }
+      f.style.width = '0';
+      f.style.transition = 'width 1.1s cubic-bezier(.3,.9,.3,1) ' + (n * .07) + 's';
+      requestAnimationFrame(function () { f.style.width = l; });
+    });
   }
 
-  document.querySelectorAll('.pl-item').forEach(function(b){
-    b.addEventListener('click', function(){
-      var s = this.dataset.serie;
-      actives[s] = !actives[s];
-      this.classList.toggle('actif', actives[s]);
-      if (!Object.keys(actives).some(function(k){ return actives[k]; })) {
-        actives[s] = true; this.classList.add('actif');   // au moins une série visible
-      }
+  /* Séries et mode d'affichage */
+  document.querySelectorAll('#pouls .pgs').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var s = this.dataset.serie, i = actives.indexOf(s);
+      if (i >= 0) { if (actives.length === 1) return; actives.splice(i, 1); this.classList.remove('actif'); }
+      else { actives.push(s); this.classList.add('actif'); }
+      dessiner();
+    });
+  });
+  document.querySelectorAll('#pouls .pgm').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#pouls .pgm').forEach(function (b2) { b2.classList.remove('actif'); });
+      this.classList.add('actif');
+      mode = this.dataset.mode;
       dessiner();
     });
   });
 
-  /* On ne lance l'animation que lorsque le bloc entre à l'écran */
-  var lance = false;
-  function demarrer(){
-    if (lance) return; lance = true;
-    dessiner(); donut(); compter();
-  }
+  /* On n'anime qu'au moment où la section entre à l'écran. */
+  function lancer() { if (dejaVu) return; dejaVu = true; dessiner(); compter(); }
   if ('IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function(ents){
-      ents.forEach(function(en){ if (en.isIntersecting) { demarrer(); io.disconnect(); } });
-    }, {threshold:.2});
-    io.observe(document.querySelector('.pouls'));
-  } else { demarrer(); }
+    new IntersectionObserver(function (ents, obs) {
+      ents.forEach(function (en) { if (en.isIntersecting) { lancer(); obs.disconnect(); } });
+    }, { threshold: .18 }).observe(document.getElementById('pouls'));
+  } else { lancer(); }
 
-  window.addEventListener('resize', function(){ if (lance) dessiner(); });
+  var minuteur;
+  window.addEventListener('resize', function () {
+    clearTimeout(minuteur);
+    minuteur = setTimeout(function () { if (dejaVu) { anime = false; dessiner(); } }, 200);
+  });
 })();
 </script>
+
 <?php endif; ?>
 
 <?php admin_footer(); ?>
