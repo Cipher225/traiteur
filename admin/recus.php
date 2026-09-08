@@ -16,8 +16,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     if (isset($_POST['supprimer'])) {
         $sid = (int)$_POST['supprimer'];
+        /* On note l'activité concernée AVANT de supprimer : si sa facture est
+           déjà payée, le solde automatique doit être recalculé, sinon le
+           chiffre d'affaires resterait figé sur une situation périmée. */
+        $st = $pdo->prepare('SELECT facture_id FROM recus WHERE id=?');
+        $st->execute([$sid]);
+        $factTouchee = (int)($st->fetchColumn() ?: 0);
+
         $pdo->prepare('DELETE FROM transactions WHERE recu_id=?')->execute([$sid]);   // et son écriture comptable
         $pdo->prepare('DELETE FROM recus WHERE id=?')->execute([$sid]);
+        recalculer_solde_facture($pdo, $factTouchee);
+
         flash($LIB . ' supprimé.');
         header('Location: ' . $RETOUR); exit;
     }
@@ -47,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $st->execute([$id]);
         $num = (string)$st->fetchColumn();
         ecriture_pour_recu($pdo, $id, $TYPE, $num, $montant, $mode, $motif, $date, $client_id, $activite, $categorie, $facture_id);
+        recalculer_solde_facture($pdo, (int)$facture_id);
         flash($LIB . ' modifié.');
     } else {
         $numero = next_numero($pdo, 'recus', $PREF);
@@ -55,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nid = (int)$pdo->lastInsertId();
         // Toute entrée ou sortie de caisse alimente la comptabilité
         ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite, $categorie, $facture_id);
+        recalculer_solde_facture($pdo, (int)$facture_id);
         flash($LIB . ' ' . $numero . ' créé.');
     }
     header('Location: ' . $RETOUR); exit;

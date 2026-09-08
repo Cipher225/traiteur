@@ -33,7 +33,11 @@ function get_facture(PDO $pdo, int $id): ?array {
     foreach ($f['lignes'] as $l) $ht += (float)$l['quantite'] * (float)$l['prix_unitaire'];
     $f['montant_ht'] = $ht;
     $f['base'] = max(0, $ht - (float)$f['remise']);
-    $f['montant_tva'] = $f['base'] * (float)$f['tva_taux'] / 100;
+    /* Quand la TVA n'est pas applicable, elle ne doit pas être calculée :
+       sinon le document affiche une taxe que le client n'a pas à payer. */
+    $f['montant_tva'] = !empty($f['tva_applicable'])
+        ? $f['base'] * (float)$f['tva_taux'] / 100
+        : 0.0;
     $f['montant_ttc'] = $f['base'] + $f['montant_tva'];
     return $f;
 }

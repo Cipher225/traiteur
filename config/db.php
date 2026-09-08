@@ -354,10 +354,10 @@ function facture_ttc(PDO $pdo, int $factureId): float {
         $st->execute([$factureId]);
         $f = $st->fetch();
         if (!$f) return 0.0;
-        $ht = (float)$f['ht'];
-        $ht -= $ht * (float)$f['remise'] / 100;
-        if ($ht < 0) $ht = 0;
-        return $f['tva_applicable'] ? $ht * (1 + (float)$f['tva_taux'] / 100) : $ht;
+        /* La remise est un MONTANT retranché du total, pas un pourcentage :
+           c'est ce que fait le formulaire de facturation. */
+        $base = max(0, (float)$f['ht'] - (float)$f['remise']);
+        return $f['tva_applicable'] ? $base * (1 + (float)$f['tva_taux'] / 100) : $base;
     } catch (Throwable $e) { return 0.0; }
 }
 
@@ -444,6 +444,62 @@ function charges_du_mois(PDO $pdo, string $mois): array {
 }
 
 /* ----------------------------------------------------------------------------
+   Dépense automatique d'un bulletin de paie réglé.
+   Un salaire versé est une sortie d'argent : sans cette écriture, la
+   trésorerie et le bénéfice seraient surévalués du montant des salaires.
+   ---------------------------------------------------------------------------- */
+function depense_auto_bulletin(PDO $pdo, int $bulletinId, string $statut): string {
+    try {
+        $st = $pdo->prepare("SELECT fp.numero, fp.periode, fp.net_a_payer, fp.mode_paiement,
+                                    fp.date_paiement, e.nom AS employe
+                             FROM fiches_paie fp LEFT JOIN employes e ON e.id = fp.employe_id
+                             WHERE fp.id = ?");
+        $st->execute([$bulletinId]);
+        $b = $st->fetch();
+        if (!$b) return 'Statut mis à jour.';
+
+        $repere = 'Salaire ' . $b['numero'];
+
+        /* On efface l'écriture précédente : le statut peut changer plusieurs
+           fois, seule la situation actuelle compte. */
+        $pdo->prepare("DELETE FROM transactions WHERE type='depense' AND libelle=?")->execute([$repere]);
+
+        if ($statut !== 'payee') return 'Statut mis à jour.';
+
+        $montant = round((float)$b['net_a_payer']);
+        if ($montant <= 0) return 'Statut mis à jour.';
+
+        $pdo->prepare("INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement,
+                       date_operation, notes)
+                       VALUES ('depense','Salaires',?,?,?,?,?)")
+            ->execute([$repere, $montant,
+                       $b['mode_paiement'] ?: 'Virement',
+                       $b['date_paiement'] ?: date('Y-m-d'),
+                       'Bulletin de ' . ($b['employe'] ?? '') . ' — période ' . $b['periode'] . '.']);
+
+        return 'Bulletin marqué payé. Salaire de ' . number_format($montant, 0, ',', ' ')
+             . ' enregistré en dépense.';
+    } catch (Throwable $e) { return 'Statut mis à jour.'; }
+}
+
+/* ----------------------------------------------------------------------------
+   Recalcule le solde automatique d'une facture déjà payée.
+   Quand un acompte est ajouté, modifié ou supprimé, le solde enregistré au
+   passage en « payée » n'est plus juste : on le refait, sinon les comptes
+   gardent une trace d'une situation qui n'existe plus.
+   ---------------------------------------------------------------------------- */
+function recalculer_solde_facture(PDO $pdo, int $factureId): void {
+    if ($factureId <= 0) return;
+    try {
+        $st = $pdo->prepare('SELECT statut FROM factures WHERE id=?');
+        $st->execute([$factureId]);
+        $statut = (string)$st->fetchColumn();
+        if ($statut === '') return;
+        encaissement_auto_facture($pdo, $factureId, $statut);
+    } catch (Throwable $e) { /* un recalcul raté ne doit pas bloquer la saisie */ }
+}
+
+/* ----------------------------------------------------------------------------
    Détection d'un doublon comptable.
    Deux opérations de même sens, de même montant et à quelques jours d'écart
    sont presque toujours la même chose saisie deux fois : une fois par le bon
@@ -470,15 +526,9 @@ function ecriture_doublon(PDO $pdo, string $type, float $montant, string $date, 
 function rentabilite_activite(PDO $pdo, int $factureId): array {
     $r = ['ca' => 0.0, 'encaisse' => 0.0, 'depenses' => 0.0, 'marge' => 0.0, 'taux' => 0.0];
     try {
-        $st = $pdo->prepare("SELECT COALESCE(SUM(quantite * prix_unitaire), 0) FROM facture_lignes WHERE facture_id=?");
-        $st->execute([$factureId]);
-        $base = (float)$st->fetchColumn();
-
-        $st = $pdo->prepare("SELECT remise, tva_taux, tva_applicable FROM factures WHERE id=?");
-        $st->execute([$factureId]);
-        $f = $st->fetch() ?: [];
-        $ht  = $base - ($base * (float)($f['remise'] ?? 0) / 100);
-        $r['ca'] = $ht + (!empty($f['tva_applicable']) ? $ht * (float)($f['tva_taux'] ?? 0) / 100 : 0);
+        /* Un seul calcul du TTC dans toute l'application : deux formules
+           divergentes donneraient deux chiffres d'affaires différents. */
+        $r['ca'] = facture_ttc($pdo, $factureId);
 
         /* Encaissements réellement reçus pour cette activité */
         $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM recus WHERE facture_id=? AND type='entree'");

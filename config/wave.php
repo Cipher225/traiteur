@@ -147,12 +147,16 @@ function paiement_finaliser(PDO $pdo, string $reference, array $settings, array 
                        . (!empty($infoWave['transaction_id']) ? ' — transaction Wave : ' . $infoWave['transaction_id'] : '')]);
         $recuId = (int)$pdo->lastInsertId();
 
-        // Comptabilité
-        $pdo->prepare("INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement, client_id, date_operation, notes)
-                       VALUES ('entree','Ventes',?,?,?,?,?,?)")
+        /* Comptabilité : l'écriture est RATTACHÉE au reçu et à l'activité.
+           Sans ce lien, supprimer le reçu laisserait une écriture orpheline,
+           et le chiffre d'affaires resterait faussé. */
+        $pdo->prepare("INSERT INTO transactions (type, categorie, libelle, montant, mode_paiement,
+                       client_id, date_operation, notes, recu_id, facture_id)
+                       VALUES ('entree','Ventes',?,?,?,?,?,?,?,?)")
             ->execute(['Paiement en ligne — reçu ' . $numero, $p['montant'], 'Wave', $p['client_id'], date('Y-m-d'),
                        'Règlement Wave, référence ' . $p['reference']
-                       . (!empty($p['facture_id']) ? ' — facture n° ' . (int)$p['facture_id'] : '')]);
+                       . (!empty($p['facture_id']) ? ' — facture n° ' . (int)$p['facture_id'] : ''),
+                       $recuId, $p['facture_id'] ?: null]);
 
         // La facture est marquée réglée si le solde est couvert
         if (!empty($p['facture_id'])) {

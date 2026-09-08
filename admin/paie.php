@@ -6,14 +6,26 @@ $devise = $settings['devise'] ?? 'FCFA';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     if (isset($_POST['supprimer'])) {
-        $pdo->prepare('DELETE FROM fiches_paie WHERE id=?')->execute([(int)$_POST['supprimer']]);
+        /* La dépense de salaire disparaît avec le bulletin, sinon elle resterait
+           dans les comptes sans document justificatif. */
+        $bid = (int)$_POST['supprimer'];
+        $st = $pdo->prepare('SELECT numero FROM fiches_paie WHERE id=?');
+        $st->execute([$bid]);
+        if ($num = $st->fetchColumn()) {
+            $pdo->prepare("DELETE FROM transactions WHERE type='depense' AND libelle=?")
+                ->execute(['Salaire ' . $num]);
+        }
+        $pdo->prepare('DELETE FROM fiches_paie WHERE id=?')->execute([$bid]);
         flash('Bulletin de paie supprimé.'); header('Location: paie.php'); exit;
     }
     if (isset($_POST['statut'], $_POST['id_statut'])) {
         $st = $_POST['statut'] === 'payee' ? 'payee' : 'brouillon';
+        $bid = (int)$_POST['id_statut'];
         $pdo->prepare('UPDATE fiches_paie SET statut=?, date_paiement=? WHERE id=?')
-            ->execute([$st, $st==='payee'?date('Y-m-d'):null, (int)$_POST['id_statut']]);
-        flash('Statut mis à jour.'); header('Location: paie.php'); exit;
+            ->execute([$st, $st==='payee'?date('Y-m-d'):null, $bid]);
+        /* Le salaire versé devient une dépense : la trésorerie doit en tenir compte. */
+        flash(depense_auto_bulletin($pdo, $bid, $st));
+        header('Location: paie.php'); exit;
     }
     $id = (int)($_POST['id'] ?? 0);
     $emp = ($_POST['employe_id'] ?? '') ?: null;
