@@ -93,7 +93,11 @@ try {
     /* Les prestations les moins rentables en premier : ce sont celles qui
        demandent votre attention. */
     usort($activites, fn($a, $b) => $a['taux'] <=> $b['taux']);
-} catch (Throwable $e) { $activites = []; }
+    /* Sur une année chargée, la liste devient interminable. On montre les plus
+       urgentes — les moins rentables — et le reste se déplie à la demande. */
+    $activitesTotal = count($activites);
+    $activitesVisibles = 8;
+} catch (Throwable $e) { $activites = []; $activitesTotal = 0; $activitesVisibles = 8; }
 
 $totalCA   = array_sum(array_column($activites, 'ca'));
 $totalDep  = array_sum(array_column($activites, 'depenses'));
@@ -218,6 +222,15 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
         <option value="clients">Clients et encours</option>
       </select>
     </div>
+    <div class="field"><label>Format</label>
+      <select class="input" name="f">
+        <option value="tableau">Tableau mis en forme (Excel)</option>
+        <option value="csv">Fichier CSV (logiciel comptable)</option>
+      </select>
+      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">
+        Le tableau porte l'en-tête de l'entreprise et les totaux. Le CSV se relit par n'importe quel logiciel.
+      </span>
+    </div>
     <div class="full"><button class="btn btn-gold">📥 Télécharger</button></div>
   </form>
 </div>
@@ -248,10 +261,11 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
         <th class="r">Dépenses</th><th class="r">Marge</th><th style="width:110px">Rentabilité</th>
       </tr></thead>
       <tbody>
-      <?php foreach ($activites as $a):
+      <?php foreach ($activites as $iAct => $a):
         $t = (float)$a['taux'];
         $classe = $t >= 40 ? 'bon' : ($t >= 15 ? 'moyen' : 'faible'); ?>
-        <tr>
+        <tr class="<?= $iAct >= $activitesVisibles ? 'act-cachee' : '' ?>"
+            <?= $iAct >= $activitesVisibles ? 'hidden' : '' ?>>
           <td>
             <span style="font-weight:700;color:var(--ink)"><?= e($a['activite'] ?: $a['numero']) ?></span>
             <div style="font-size:11px;color:var(--ink-faint)"><?= e($a['numero']) ?> ·
@@ -274,6 +288,11 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
     </table>
   </div>
 
+  <?php if ($activitesTotal > $activitesVisibles): ?>
+  <button type="button" class="btn btn-glass btn-sm" id="voir-activites" style="margin-top:12px">
+    ▾ Voir les <?= $activitesTotal - $activitesVisibles ?> autres activités</button>
+  <?php endif; ?>
+
   <p style="margin:12px 0 0;font-size:12px;color:var(--ink-faint);line-height:1.6">
     <strong style="color:var(--ink)">Comment lire ce tableau.</strong>
     « Facturé » est le montant de la facture ; « Encaissé » ce que le client a réellement réglé.
@@ -290,5 +309,23 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
   </p>
   <?php endif; ?>
 </div>
+
+<script>
+(function () {
+  /* Le reste des activités apparaît à la demande, en cascade. */
+  var b = document.getElementById('voir-activites');
+  if (!b) return;
+  b.addEventListener('click', function () {
+    var lignes = document.querySelectorAll('tr.act-cachee');
+    lignes.forEach(function (l, i) {
+      l.hidden = false;
+      l.style.opacity = 0;
+      l.style.transition = 'opacity .4s ease ' + (i * .04) + 's';
+      requestAnimationFrame(function () { l.style.opacity = 1; });
+    });
+    this.remove();
+  });
+})();
+</script>
 
 <?php admin_footer(); ?>

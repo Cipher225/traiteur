@@ -143,7 +143,20 @@ $where = "WHERE DATE_FORMAT(date_operation,'%Y-%m') = ?";
 $params = [$mois];
 if (in_array($ftype, ['entree','depense'])) { $where .= " AND type = ?"; $params[] = $ftype; }
 
-$stmt = $pdo->prepare("SELECT t.*, c.nom AS client FROM transactions t LEFT JOIN clients c ON c.id=t.client_id $where ORDER BY date_operation DESC, t.id DESC");
+/* ----------------------------------------------------------------------------
+   Le journal se lit par pages. Afficher mille écritures d'un coup rend la page
+   lourde à charger et impossible à parcourir : on en montre 40 à la fois, avec
+   les totaux calculés sur la période ENTIÈRE, pas seulement sur la page.
+   ---------------------------------------------------------------------------- */
+$parPage = 40;
+$stTot = $pdo->prepare("SELECT COUNT(*) FROM transactions t LEFT JOIN clients c ON c.id=t.client_id $where");
+$stTot->execute($params);
+$nbOps  = (int)$stTot->fetchColumn();
+$nbPages = max(1, (int)ceil($nbOps / $parPage));
+$page   = max(1, min($nbPages, (int)($_GET['p'] ?? 1)));
+$depart = ($page - 1) * $parPage;
+
+$stmt = $pdo->prepare("SELECT t.*, c.nom AS client FROM transactions t LEFT JOIN clients c ON c.id=t.client_id $where ORDER BY date_operation DESC, t.id DESC LIMIT $parPage OFFSET $depart");
 $stmt->execute($params);
 $ops = $stmt->fetchAll();
 
@@ -167,7 +180,15 @@ admin_header('Comptabilité', 'comptabilite', $pdo, $settings);
 /* Combien d'écritures viennent des bons ? L'information rassure : la
    comptabilité se remplit toute seule, on ne saisit rien deux fois. */
 $nbAuto = 0; $nbMain = 0;
-foreach ($ops as $o) { if (!empty($o['recu_id'])) $nbAuto++; else $nbMain++; }
+/* Ces compteurs portent sur TOUTE la période, pas sur la page affichée :
+   un décompte partiel n'aurait aucun sens. */
+try {
+    $st = $pdo->prepare("SELECT SUM(t.recu_id IS NOT NULL) a, SUM(t.recu_id IS NULL) m
+                         FROM transactions t $where");
+    $st->execute($params);
+    $r = $st->fetch();
+    $nbAuto = (int)($r['a'] ?? 0); $nbMain = (int)($r['m'] ?? 0);
+} catch (Throwable $e) {}
 ?>
 <div class="panel glass compta-guide">
   <span class="cg-ico">🧭</span>
@@ -303,6 +324,33 @@ foreach ($ops as $o) { if (!empty($o['recu_id'])) $nbAuto++; else $nbMain++; }
       </tbody>
     </table>
   </div>
+
+  <?php if ($nbPages > 1): ?>
+  <?php
+    /* On n'affiche pas cinquante numéros : les pages proches, plus la première
+       et la dernière. C'est ce dont on a besoin pour se repérer. */
+    $lien = function ($p) use ($mois, $ftype) {
+        return 'comptabilite.php?mois=' . urlencode($mois)
+             . ($ftype ? '&type=' . urlencode($ftype) : '') . '&p=' . (int)$p;
+    };
+    $pages = array_unique(array_filter([1, $page - 2, $page - 1, $page, $page + 1, $page + 2, $nbPages],
+             fn($p) => $p >= 1 && $p <= $nbPages));
+    sort($pages);
+  ?>
+  <div class="pagin">
+    <span class="pg-info"><?= number_format($nbOps, 0, ',', ' ') ?> opération<?= $nbOps > 1 ? 's' : '' ?>
+      · page <?= $page ?> sur <?= $nbPages ?></span>
+    <div class="pg-liens">
+      <?php if ($page > 1): ?><a class="pg" href="<?= e($lien($page - 1)) ?>">‹</a><?php endif; ?>
+      <?php $prec = 0; foreach ($pages as $p): ?>
+        <?php if ($prec && $p > $prec + 1): ?><span class="pg-pts">…</span><?php endif; ?>
+        <a class="pg <?= $p === $page ? 'actif' : '' ?>" href="<?= e($lien($p)) ?>"><?= $p ?></a>
+        <?php $prec = $p; endforeach; ?>
+      <?php if ($page < $nbPages): ?><a class="pg" href="<?= e($lien($page + 1)) ?>">›</a><?php endif; ?>
+    </div>
+  </div>
+  <?php endif; ?>
+
 </div>
 
 <script>
@@ -373,6 +421,8 @@ majCats();
       </tbody>
     </table>
   </div>
+
+
   <?php endif; ?>
 
   <form method="post" class="form-grid" style="margin-top:14px">

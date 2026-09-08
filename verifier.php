@@ -42,7 +42,7 @@ if ($auth) {
     $t = $auth['type']; $did = (int)$auth['doc_id']; $devise = $settings['devise'] ?? 'FCFA';
     try {
         if ($t==='facture' || $t==='proforma' || $t==='livraison') {
-            $st=$pdo->prepare("SELECT f.numero,f.date_emission,f.statut,f.tva_taux,f.remise,c.nom clientnom,
+            $st=$pdo->prepare("SELECT f.numero,f.date_emission,f.statut,f.tva_taux,f.remise,COALESCE(NULLIF(c.entreprise,''), c.nom) clientnom,
                 (SELECT COALESCE(SUM(quantite*prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
                 FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.id=?");
             $st->execute([$did]);
@@ -52,7 +52,7 @@ if ($auth) {
                 $details=['Numéro'=>$d['numero'],'Date'=>date('d/m/Y',strtotime($d['date_emission'])),'Client'=>$d['clientnom']?:'—','Montant'=>money($ttc,$devise)];
             }
         } elseif ($t==='recu') {
-            $st=$pdo->prepare("SELECT r.numero,r.date_paiement,r.montant,c.nom clientnom FROM recus r LEFT JOIN clients c ON c.id=r.client_id WHERE r.id=?");
+            $st=$pdo->prepare("SELECT r.numero,r.date_paiement,r.montant,COALESCE(NULLIF(c.entreprise,''), c.nom) clientnom FROM recus r LEFT JOIN clients c ON c.id=r.client_id WHERE r.id=?");
             $st->execute([$did]); if($d=$st->fetch()){ $details=['Numéro'=>$d['numero'],'Date'=>date('d/m/Y',strtotime($d['date_paiement'])),'Client'=>$d['clientnom']?:'—','Montant'=>money($d['montant'],$devise)]; }
         } elseif ($t==='fiche') {
             $st=$pdo->prepare("SELECT fp.numero,fp.periode,e.nom empnom FROM fiches_paie fp LEFT JOIN employes e ON e.id=fp.employe_id WHERE fp.id=?");

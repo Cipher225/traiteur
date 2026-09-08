@@ -2200,17 +2200,20 @@ a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
 
 /* Podium des prestations */
 .pb-podium{display:flex;flex-direction:column;gap:8px}
-.pp{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:12px;
+/* Podium : le nom d'une prestation peut être long. Il occupe donc sa propre
+   ligne, et le montant passe dessous — plutôt que d'être tronqué à trois mots. */
+.pp{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;border-radius:12px;
   text-decoration:none;background:rgba(0,0,0,.18);border:1px solid transparent;transition:all .18s}
 .pp:hover{border-color:rgba(212,165,38,.35);transform:translateX(2px)}
-.pp-r{font-size:19px;flex-shrink:0}
+.pp-r{font-size:19px;flex-shrink:0;line-height:1.2}
 .pp-t{flex:1;min-width:0}
-.pp-t strong{display:block;font-size:12.5px;color:var(--ink);font-weight:600;
+.pp-t strong{display:block;font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.35}
+.pp-t span{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pp-t span{font-size:11px;color:var(--ink-faint)}
-.pp-m{text-align:right;flex-shrink:0}
-.pp-m b{display:block;font-size:12.5px;color:#10b981;font-weight:800}
-.pp-m span{font-size:10.5px;color:var(--ink-faint)}
+.pp-m{display:flex;align-items:baseline;gap:7px;margin-top:5px}
+.pp-m b{font-size:13px;color:#10b981;font-weight:800;white-space:nowrap}
+.pp-m span{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;flex-shrink:0;
+  color:#10b981;background:rgba(16,185,129,.13);white-space:nowrap}
 
 @media (max-width:760px){
   .pouls-cles{grid-template-columns:repeat(2,1fr)}
@@ -2813,3 +2816,15 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
   .cfm-carte,.env-carte{transition:none;transform:none}
   .cfm-carte.danger .cfm-ico{animation:none}
 }
+
+/* Navigation entre pages du journal */
+.pagin{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  margin-top:14px;padding-top:13px;border-top:1px solid var(--glass-border)}
+.pg-info{font-size:12px;color:var(--ink-faint)}
+.pg-liens{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.pg{min-width:32px;height:32px;padding:0 9px;border-radius:10px;display:grid;place-items:center;
+  font-size:12.5px;font-weight:600;text-decoration:none;color:var(--ink-dim);
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);transition:all .16s}
+.pg:hover{color:var(--ink);border-color:rgba(212,165,38,.4)}
+.pg.actif{color:#0a1020;background:linear-gradient(135deg,#e9c15c,#d4a526);border-color:transparent}
+.pg-pts{color:var(--ink-faint);padding:0 3px}

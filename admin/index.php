@@ -801,15 +801,15 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
       <?php if ($poulsTop): ?>
       <div class="pb-podium">
         <?php foreach ($poulsTop as $rang => $a): ?>
-        <a class="pp" href="finances.php">
+        <a class="pp" href="finances.php" title="<?= e($a['activite'] ?: $a['numero']) ?>">
           <span class="pp-r"><?= ['🥇','🥈','🥉'][$rang] ?></span>
           <div class="pp-t">
             <strong><?= e($a['activite'] ?: $a['numero']) ?></strong>
             <span><?= e($a['client'] ?: 'Client de passage') ?></span>
-          </div>
-          <div class="pp-m">
-            <b><?= money($a['marge'], $devise) ?></b>
-            <span><?= number_format($a['taux'], 0) ?> %</span>
+            <div class="pp-m">
+              <b><?= money($a['marge'], $devise) ?></b>
+              <span><?= number_format($a['taux'], 0) ?> %</span>
+            </div>
           </div>
         </a>
         <?php endforeach; ?>

@@ -106,34 +106,120 @@ switch ($type) {
 
 /* ---------- Écriture du fichier ---------- */
 $nom = $titre . '-' . $debut . '_' . $fin . '.csv';
-header('Content-Type: text/csv; charset=UTF-8');
-header('Content-Disposition: attachment; filename="' . $nom . '"');
-header('Cache-Control: no-store');
-
-$sortie = fopen('php://output', 'w');
-fwrite($sortie, "\xEF\xBB\xBF");                     // marqueur reconnu par Excel
-
-fputcsv($sortie, [mb_strtoupper($titre) . ' — ' . ($settings['nom_entreprise'] ?? '')], ';');
-fputcsv($sortie, ['Période du ' . date('d/m/Y', strtotime($debut)) . ' au ' . date('d/m/Y', strtotime($fin))
-                  . ' — montants en ' . $devise], ';');
-fputcsv($sortie, [], ';');
-fputcsv($sortie, $entetes, ';');
-
+/* ----------------------------------------------------------------------------
+   Deux formats. Le CSV se relit par n'importe quel logiciel comptable. Le
+   tableau mis en forme s'ouvre directement dans Excel, avec l'en-tête de
+   l'entreprise, des couleurs et les totaux : c'est celui qu'on transmet à un
+   comptable ou qu'on archive.
+   ---------------------------------------------------------------------------- */
 $totaux = [];
 foreach ($lignes as $l) {
-    fputcsv($sortie, $l, ';');
     foreach ($l as $i => $v) if (is_int($v)) $totaux[$i] = ($totaux[$i] ?? 0) + $v;
 }
 
-if ($lignes && $totaux) {
-    $ligneTotal = array_fill(0, count($entetes), '');
-    $ligneTotal[0] = 'TOTAL (' . count($lignes) . ' ligne' . (count($lignes) > 1 ? 's' : '') . ')';
-    foreach ($totaux as $i => $v) $ligneTotal[$i] = $v;
-    fputcsv($sortie, [], ';');
-    fputcsv($sortie, $ligneTotal, ';');
-}
+if (($_GET['f'] ?? '') === 'tableau') {
 
-fclose($sortie);
+    header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . preg_replace('/\.csv$/', '.xls', $nom) . '"');
+    header('Cache-Control: no-store');
+    echo "\xEF\xBB\xBF";
+
+    $ent   = $settings['nom_entreprise'] ?? '';
+    $nbCol = max(1, count($entetes));
+    $ident = array_filter([
+        trim((string)($settings['adresse'] ?? '')),
+        trim((string)($settings['telephone'] ?? '')),
+        trim((string)($settings['email'] ?? '')),
+        !empty($settings['rccm']) ? 'RCCM : ' . $settings['rccm'] : '',
+        !empty($settings['ncc']) ? 'N° CC : ' . $settings['ncc'] : '',
+    ]);
+    ?>
+<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style>
+  table { border-collapse: collapse; font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+  .marque   { background:#0A1F44; color:#FFFFFF; font-size:16pt; font-weight:bold;
+              height:34pt; vertical-align:middle; padding:8px 12px; }
+  .slogan   { background:#0A1F44; color:#E9C15C; font-size:9pt; padding:0 12px 8px; }
+  .ident    { background:#F6F8FB; color:#4A5568; font-size:8.5pt; padding:6px 12px; }
+  .periode  { background:#D4A526; color:#0A1020; font-weight:bold; font-size:10.5pt; padding:7px 12px; }
+  th        { background:#0A1F44; color:#FFFFFF; font-size:9.5pt; font-weight:bold;
+              border:1px solid #0A1F44; padding:7px 9px; text-align:left; }
+  td        { border:1px solid #DDE3EC; padding:5px 9px; vertical-align:top; }
+  .paire td { background:#F7F9FC; }
+  .num      { text-align:right; mso-number-format:"\#\,\#\#0"; }
+  .total td { background:#E9C15C; color:#0A1020; font-weight:bold; border-color:#D4A526; }
+  .pied     { color:#8A9AB5; font-size:8pt; padding-top:10px; }
+</style></head><body>
+<table>
+  <tr><td class="marque" colspan="<?= $nbCol ?>"><?= e(mb_strtoupper($ent)) ?></td></tr>
+  <?php if (!empty($settings['slogan'])): ?>
+  <tr><td class="slogan" colspan="<?= $nbCol ?>"><?= e($settings['slogan']) ?></td></tr>
+  <?php endif; ?>
+  <?php if ($ident): ?>
+  <tr><td class="ident" colspan="<?= $nbCol ?>"><?= e(implode('  ·  ', $ident)) ?></td></tr>
+  <?php endif; ?>
+  <tr><td class="periode" colspan="<?= $nbCol ?>">
+    <?= e(mb_strtoupper(str_replace('-', ' ', $titre))) ?> —
+    du <?= date('d/m/Y', strtotime($debut)) ?> au <?= date('d/m/Y', strtotime($fin)) ?>
+    · montants en <?= e($devise) ?></td></tr>
+  <tr><td colspan="<?= $nbCol ?>" style="height:6pt"></td></tr>
+
+  <tr><?php foreach ($entetes as $h): ?><th><?= e($h) ?></th><?php endforeach; ?></tr>
+
+  <?php foreach ($lignes as $n => $l): ?>
+  <tr class="<?= $n % 2 ? 'paire' : '' ?>">
+    <?php foreach ($l as $v): ?>
+    <td class="<?= is_int($v) ? 'num' : '' ?>"><?= is_int($v) ? $v : e((string)$v) ?></td>
+    <?php endforeach; ?>
+  </tr>
+  <?php endforeach; ?>
+
+  <?php if ($lignes && $totaux): ?>
+  <tr class="total">
+    <?php for ($i = 0; $i < $nbCol; $i++): ?>
+    <td class="<?= isset($totaux[$i]) ? 'num' : '' ?>">
+      <?= $i === 0 ? 'TOTAL (' . count($lignes) . ' ligne' . (count($lignes) > 1 ? 's' : '') . ')'
+                   : (isset($totaux[$i]) ? $totaux[$i] : '') ?></td>
+    <?php endfor; ?>
+  </tr>
+  <?php endif; ?>
+
+  <tr><td class="pied" colspan="<?= $nbCol ?>">
+    Document généré le <?= date('d/m/Y à H:i') ?> depuis l'application de gestion
+    <?= e($ent) ?>. Les montants sont exprimés en <?= e($devise) ?>.
+  </td></tr>
+</table>
+</body></html>
+    <?php
+
+} else {
+
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $nom . '"');
+    header('Cache-Control: no-store');
+
+    $sortie = fopen('php://output', 'w');
+    fwrite($sortie, "\xEF\xBB\xBF");                     // marqueur reconnu par Excel
+
+    fputcsv($sortie, [mb_strtoupper($titre) . ' — ' . ($settings['nom_entreprise'] ?? '')], ';');
+    fputcsv($sortie, ['Période du ' . date('d/m/Y', strtotime($debut)) . ' au ' . date('d/m/Y', strtotime($fin))
+                      . ' — montants en ' . $devise], ';');
+    fputcsv($sortie, [], ';');
+    fputcsv($sortie, $entetes, ';');
+
+    foreach ($lignes as $l) fputcsv($sortie, $l, ';');
+
+    if ($lignes && $totaux) {
+        $ligneTotal = array_fill(0, count($entetes), '');
+        $ligneTotal[0] = 'TOTAL (' . count($lignes) . ' ligne' . (count($lignes) > 1 ? 's' : '') . ')';
+        foreach ($totaux as $i => $v) $ligneTotal[$i] = $v;
+        fputcsv($sortie, [], ';');
+        fputcsv($sortie, $ligneTotal, ';');
+    }
+
+    fclose($sortie);
+}
 
 if (function_exists('journaliser')) {
     journaliser($pdo, 'export', $titre, null, 'Export du ' . $debut . ' au ' . $fin . ' (' . count($lignes) . ' lignes)');
