@@ -630,3 +630,68 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 @media (prefers-reduced-motion: reduce){
   .vp-onde{animation:none;opacity:0}
 }
+
+/* ============================================================
+   FENÊTRE DE CONFIRMATION
+   Remplace celle du navigateur : traduisible, lisible, et elle
+   laisse la place d'expliquer les conséquences d'une action.
+   ============================================================ */
+.cfm{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;
+  padding:22px;background:rgba(4,9,20,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  opacity:0;transition:opacity .2s ease}
+.cfm.ouvert{opacity:1}
+.cfm-carte{width:100%;max-width:410px;padding:28px 26px 22px;border-radius:24px;text-align:center;
+  background:linear-gradient(160deg,rgba(18,28,52,.99),rgba(10,17,34,.99));
+  border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 80px rgba(0,0,0,.6);
+  transform:translateY(18px) scale(.94);opacity:0;
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.3), opacity .22s ease}
+.cfm.ouvert .cfm-carte{transform:none;opacity:1}
+.cfm-carte.danger{border-color:rgba(248,113,113,.32)}
+.cfm-ico{width:62px;height:62px;margin:0 auto 16px;border-radius:20px;display:grid;place-items:center;
+  font-size:27px;background:rgba(240,193,75,.13);border:1px solid rgba(240,193,75,.28)}
+.cfm-carte.danger .cfm-ico{background:rgba(248,113,113,.13);border-color:rgba(248,113,113,.3);
+  animation:cfmPulse 2s ease-in-out infinite}
+@keyframes cfmPulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.34)}
+  50%{box-shadow:0 0 0 12px rgba(248,113,113,0)}}
+.cfm-carte h3{margin:0 0 8px;font-size:18.5px;color:#eaf0fb;line-height:1.35}
+.cfm-carte p{margin:0 0 22px;font-size:13.5px;color:#9fb0cc;line-height:1.6}
+.cfm-btns{display:flex;gap:10px}
+.cfm-btns button{flex:1;padding:12px 18px;border-radius:14px;cursor:pointer;font-size:14px;
+  font-weight:700;border:none;transition:transform .16s, filter .16s}
+.cfm-btns button:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.cfm-non{color:#c3cee2;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12) !important}
+.cfm-oui{color:#0a1020;background:linear-gradient(135deg,#e9c15c,#d4a526)}
+.cfm-oui.danger{color:#fff;background:linear-gradient(135deg,#f87171,#dc2626)}
+
+/* ============================================================
+   PROGRESSION D'UN ENVOI
+   Sans retour visuel, l'utilisateur croit la page figée et
+   clique une seconde fois.
+   ============================================================ */
+.envoi{position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;
+  padding:22px;background:rgba(4,9,20,.78);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  opacity:0;transition:opacity .22s ease}
+.envoi.ouvert{opacity:1}
+.env-carte{width:100%;max-width:340px;padding:30px 26px 24px;border-radius:26px;text-align:center;
+  background:linear-gradient(160deg,rgba(18,28,52,.99),rgba(10,17,34,.99));
+  border:1px solid rgba(240,193,75,.22);box-shadow:0 30px 80px rgba(0,0,0,.6);
+  transform:scale(.94);transition:transform .28s cubic-bezier(.2,.9,.3,1.3)}
+.envoi.ouvert .env-carte{transform:none}
+.env-ico{position:relative;width:112px;height:112px;margin:0 auto 18px}
+.env-anneau{width:100%;height:100%;transform:rotate(-90deg)}
+.ea-fond{fill:none;stroke:rgba(255,255,255,.08);stroke-width:8}
+.ea-arc{fill:none;stroke:url(#env-grad);stroke-width:8;stroke-linecap:round;
+  stroke:#f0c14b;transition:stroke-dashoffset .25s ease}
+.env-pc{position:absolute;inset:0;display:grid;place-items:center;
+  font-family:var(--font-display,inherit);font-size:26px;font-weight:800;color:#eaf0fb;letter-spacing:-.03em}
+.env-pc i{font-style:normal;font-size:13px;color:#9fb0cc;margin-left:1px}
+.env-carte strong{display:block;font-size:15px;color:#eaf0fb}
+.env-carte > span{display:block;font-size:12.5px;color:#9fb0cc;margin-top:5px}
+.env-jauge{height:5px;border-radius:4px;margin-top:16px;overflow:hidden;background:rgba(0,0,0,.3)}
+.env-jauge span{display:block;height:100%;width:0;border-radius:4px;
+  background:linear-gradient(90deg,#e9c15c,#d4a526);transition:width .25s ease}
+
+@media (prefers-reduced-motion: reduce){
+  .cfm-carte,.env-carte{transition:none;transform:none}
+  .cfm-carte.danger .cfm-ico{animation:none}
+}

@@ -582,6 +582,7 @@ function all_modules(): array {
         'annuaire'     => ['Annuaire', '📇', 'annuaire.php', 'commercial', false, false],
         'clients'      => ['Clients',        '👥', 'clients.php',      'commercial', false, false],
         'paiements'    => ['Paiements en ligne', '💳', 'paiements.php', 'finances', false, false],
+        'audit'        => ['Audit financier', '🛡️', 'audit.php', 'finances', true, false],
         'finances'     => ['Bilan financier', '📊', 'finances.php', 'finances', true, false],
         'relances'     => ['Impayés', '✉️', 'relances.php', 'finances', false, false],
         'comptabilite' => ['Comptabilité',   '💰', 'comptabilite.php', 'finances', false, false],

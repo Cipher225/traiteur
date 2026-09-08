@@ -684,5 +684,6 @@ $f = flash();
   });
 })();
 </script>
+<script src="<?= asset('assets/js/ui.js') ?>"></script>
 </body>
 </html>

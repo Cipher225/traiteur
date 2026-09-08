@@ -147,9 +147,8 @@ function admin_footer(): void { ?>
   // Fermer après avoir cliqué un lien de navigation (confort mobile)
   side.querySelectorAll('.side-nav a').forEach(a => a.addEventListener('click', function(){ if(window.innerWidth<=880) close(); }));
 })();
-// Confirmation avant suppression
-document.querySelectorAll('form[data-confirm]').forEach(fo =>
-  fo.addEventListener('submit', e => { if (!confirm(fo.dataset.confirm)) e.preventDefault(); }));
+// Les confirmations sont prises en charge par assets/js/ui.js, qui affiche
+// une fenêtre soignée à la place de celle du navigateur.
 // Bouton retour (style iPhone) : revient à la page précédente, ou au tableau de bord
 function retourArriere(){
   if (document.referrer && document.referrer.indexOf(location.host) !== -1 && history.length > 1) {
