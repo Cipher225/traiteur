@@ -2589,3 +2589,72 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 
 /* Champ neutralisé : visible mais inutilisable, avec la raison affichée dessous */
 .champ-inactif{opacity:.45;cursor:not-allowed}
+
+/* ============================================================
+   GALERIE — albums, dépôt de photos, sélection multiple
+   ============================================================ */
+.gal-aide{color:var(--ink-faint);font-size:12.5px;margin:-8px 0 13px;line-height:1.55}
+.gal-note{font-size:11.5px;color:var(--ink-faint);display:block;margin-top:4px}
+.gal-albums{display:flex;gap:9px;flex-wrap:wrap}
+.ga{display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:14px;text-decoration:none;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);transition:all .18s}
+.ga:hover{border-color:rgba(212,165,38,.4);transform:translateY(-1px)}
+.ga.actif{background:rgba(212,165,38,.13);border-color:rgba(212,165,38,.45)}
+.ga-i{font-size:16px}
+.ga-n{font-size:13px;font-weight:600;color:var(--ink)}
+.ga.actif .ga-n{color:var(--gold)}
+.ga-c{font-size:11px;font-weight:700;padding:1px 7px;border-radius:20px;
+  color:var(--ink-faint);background:rgba(0,0,0,.25)}
+.gal-pliable{margin-top:12px}
+.gal-plus{cursor:pointer;font-size:12.5px;color:var(--gold);list-style:none;padding:4px 0}
+.gal-plus::-webkit-details-marker{display:none}
+
+/* Zone de dépôt */
+.depot{border-radius:16px;padding:18px;cursor:pointer;min-height:130px;
+  background:rgba(0,0,0,.16);border:2px dashed var(--glass-border);transition:all .2s}
+.depot:hover,.depot.survol{border-color:rgba(212,165,38,.55);background:rgba(212,165,38,.06)}
+.dp-vide{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:5px;padding:16px 0;text-align:center}
+.dp-i{font-size:32px;opacity:.75}
+.dp-vide strong{font-size:14px;color:var(--ink)}
+.dp-vide span{font-size:12px;color:var(--ink-faint)}
+.dp-apercus{display:flex;flex-wrap:wrap;gap:9px}
+.dp-a{width:78px;height:78px;border-radius:11px;overflow:hidden;flex-shrink:0;
+  border:1px solid var(--glass-border);opacity:0;transform:scale(.85);
+  transition:opacity .35s var(--ease-ios), transform .35s var(--ease-ios)}
+.dp-a.vu{opacity:1;transform:scale(1)}
+.dp-a img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* Grille des photos */
+.gal-tete{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:13px}
+.gal-outils{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-left:auto}
+.go-n{font-size:12px;color:var(--gold);font-weight:600}
+.input-sm{padding:5px 10px;font-size:12px;width:auto;min-width:130px}
+.gal-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:11px}
+.gp{position:relative;border-radius:14px;overflow:hidden;cursor:pointer;aspect-ratio:4/3;
+  border:2px solid transparent;transition:transform .2s var(--ease-ios), border-color .18s}
+.gp:hover{transform:translateY(-3px)}
+.gp.choisie{border-color:var(--gold)}
+.gp.masquee img{filter:grayscale(1) brightness(.55)}
+.gp img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .5s var(--ease-ios)}
+.gp:hover img{transform:scale(1.07)}
+.gp-coche{position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;font-size:12px;font-weight:800;color:transparent;
+  background:rgba(0,0,0,.45);border:2px solid rgba(255,255,255,.5);transition:all .18s}
+.gp.choisie .gp-coche{color:#0a1020;background:var(--gold);border-color:var(--gold)}
+.gp-info{position:absolute;left:0;right:0;bottom:0;padding:22px 11px 9px;
+  background:linear-gradient(to top,rgba(4,10,22,.94),transparent);
+  opacity:0;transform:translateY(8px);transition:all .25s var(--ease-ios)}
+.gp:hover .gp-info{opacity:1;transform:translateY(0)}
+.gp-info strong{display:block;font-size:12px;color:#fff;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.gp-info em{display:block;font-style:normal;font-size:10.5px;color:#c3cee2;margin-top:2px}
+.gp-masque{position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:16px;
+  font-size:10px;font-weight:700;color:#0a1020;background:#f0b429}
+@media (max-width:600px){ .gal-grille{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))} }
+
+/* Origine d'une demande et délai avant l'événement */
+.orig-src{font-size:10.5px;color:var(--ink-faint);margin-top:2px}
+.ev-delai{font-size:11px;font-weight:600;margin-top:2px;color:var(--ink-faint)}
+.ev-delai.semaine{color:#f0b429}
+.ev-delai.proche{color:#f87171}

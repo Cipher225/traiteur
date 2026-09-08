@@ -382,14 +382,14 @@ function facture_ttc(PDO $pdo, int $factureId): float {
 /* Ce que le client a déjà réglé pour cette facture : acomptes encaissés par
    bon d'entrée, et paiements en ligne. */
 function facture_deja_encaisse(PDO $pdo, int $factureId, ?int $saufTransaction = null): float {
-    $total = 0.0;
+    /* Les paiements en ligne créent aussi un bon d'entrée : les compter une
+       seule fois suffit, et c'est le bon qui fait foi côté caisse. */
     try {
         $st = $pdo->prepare("SELECT COALESCE(SUM(montant), 0) FROM recus
                              WHERE facture_id = ? AND type = 'entree'");
         $st->execute([$factureId]);
-        $total = (float)$st->fetchColumn();
-    } catch (Throwable $e) {}
-    return $total;
+        return (float)$st->fetchColumn();
+    } catch (Throwable $e) { return 0.0; }
 }
 
 /* ----------------------------------------------------------------------------

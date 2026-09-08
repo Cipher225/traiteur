@@ -107,10 +107,35 @@ function wave_creer_paiement(PDO $pdo, array $facture, array $client, array $set
 }
 
 /* Somme déjà encaissée sur une facture (paiements en ligne confirmés). */
+/* Tout ce que le client a réglé pour cette facture, quel que soit le canal :
+   paiement en ligne OU acompte encaissé au comptoir. Ne compter que le premier
+   ferait apparaître comme impayé un montant déjà reçu. */
 function paiements_deja_regles(PDO $pdo, int $factureId): float {
-    $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM paiements WHERE facture_id=? AND statut='paye'");
-    $st->execute([$factureId]);
-    return (float)$st->fetchColumn();
+    $total = 0.0;
+
+    /* Paiements en ligne réussis */
+    try {
+        $st = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM paiements
+                             WHERE facture_id=? AND statut='paye'");
+        $st->execute([$factureId]);
+        $total += (float)$st->fetchColumn();
+    } catch (Throwable $e) {}
+
+    /* Acomptes encaissés au comptoir. On écarte les bons issus d'un paiement
+       en ligne — déjà comptés ci-dessus — en s'appuyant sur le lien enregistré
+       entre le paiement et son reçu, et non sur un libellé : un employé
+       pourrait écrire « Paiement en ligne » dans un motif, et son encaissement
+       disparaîtrait alors des comptes. */
+    try {
+        $st = $pdo->prepare("SELECT COALESCE(SUM(r.montant),0) FROM recus r
+                             WHERE r.facture_id = ? AND r.type = 'entree'
+                               AND r.id NOT IN (SELECT COALESCE(p.recu_id, 0) FROM paiements p
+                                                WHERE p.statut = 'paye' AND p.recu_id IS NOT NULL)");
+        $st->execute([$factureId]);
+        $total += (float)$st->fetchColumn();
+    } catch (Throwable $e) {}
+
+    return $total;
 }
 
 /* ---------- Vérification auprès de Wave ---------- */
@@ -158,19 +183,6 @@ function paiement_finaliser(PDO $pdo, string $reference, array $settings, array 
                        . (!empty($p['facture_id']) ? ' — facture n° ' . (int)$p['facture_id'] : ''),
                        $recuId, $p['facture_id'] ?: null]);
 
-        // La facture est marquée réglée si le solde est couvert
-        if (!empty($p['facture_id'])) {
-            $f = $pdo->prepare('SELECT * FROM factures WHERE id=?');
-            $f->execute([(int)$p['facture_id']]);
-            if ($fac = $f->fetch()) {
-                $regle = paiements_deja_regles($pdo, (int)$p['facture_id']) + (float)$p['montant'];
-                $doc   = get_facture($pdo, (int)$p['facture_id']);
-                if ($doc && $regle >= (float)$doc['montant_ttc'] - 1) {
-                    $pdo->prepare("UPDATE factures SET statut='payee' WHERE id=?")->execute([(int)$p['facture_id']]);
-                }
-            }
-        }
-
         // Le reçu est authentifiable immédiatement : son empreinte est calculée dès l'émission.
         // C'est ce qui le fait aussi apparaître dans le coffre à documents.
         try {
@@ -181,6 +193,20 @@ function paiement_finaliser(PDO $pdo, string $reference, array $settings, array 
         $pdo->prepare("UPDATE paiements SET statut='paye', paye_le=NOW(), recu_id=?, transaction_id=?, detail=? WHERE id=?")
             ->execute([$recuId, mb_substr((string)($infoWave['transaction_id'] ?? ''), 0, 120),
                        json_encode($infoWave), (int)$p['id']]);
+
+        /* La facture ne passe en « payée » que si le solde est RÉELLEMENT
+           couvert. Ce contrôle vient après l'enregistrement du lien entre le
+           paiement et son reçu : sans ce lien, l'encaissement serait compté
+           deux fois — une fois comme paiement, une fois comme bon de caisse —
+           et un règlement partiel solderait la facture à tort. */
+        if (!empty($p['facture_id'])) {
+            $fid   = (int)$p['facture_id'];
+            $regle = paiements_deja_regles($pdo, $fid);
+            $doc   = get_facture($pdo, $fid);
+            if ($doc && $regle >= (float)$doc['montant_ttc'] - 1) {
+                $pdo->prepare("UPDATE factures SET statut='payee' WHERE id=?")->execute([$fid]);
+            }
+        }
 
         $pdo->commit();
     } catch (Throwable $e) {

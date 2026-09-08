@@ -513,3 +513,120 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   color:#0f1b30;
 }
 [data-space="app"] .chat-attach.has{ border-color:var(--gold); color:var(--gold); }
+
+/* ============================================================
+   GALERIE — mosaïque filtrable et visionneuse
+   ============================================================ */
+.gal-filtres{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-bottom:26px}
+.gf{display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:26px;
+  cursor:pointer;font-size:13.5px;font-weight:600;color:rgba(255,255,255,.72);
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  transition:all .24s cubic-bezier(.4,0,.2,1)}
+.gf:hover{color:#fff;border-color:rgba(212,165,38,.45);transform:translateY(-2px)}
+.gf.actif{color:#0a1020;background:linear-gradient(135deg,#e9c15c,#d4a526);
+  border-color:transparent;box-shadow:0 8px 24px rgba(212,165,38,.32)}
+.gf span{font-size:11px;font-weight:700;padding:1px 8px;border-radius:20px;
+  background:rgba(0,0,0,.22)}
+.gf.actif span{background:rgba(10,16,32,.2)}
+
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  grid-auto-rows:190px;gap:14px}
+.gal-item{position:relative;margin:0;border-radius:20px;overflow:hidden;cursor:zoom-in;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
+.gal-item.haute{grid-row:span 2}
+.gal-item.large{grid-column:span 2}
+.gal-item img{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .7s cubic-bezier(.2,.8,.3,1), filter .4s}
+.gal-item:hover img{transform:scale(1.09)}
+.gal-item::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to top,rgba(4,10,22,.88) 0%,rgba(4,10,22,.15) 45%,transparent 70%);
+  opacity:0;transition:opacity .35s}
+.gal-item:hover::after{opacity:1}
+.gal-item figcaption{position:absolute;left:0;right:0;bottom:0;padding:20px 18px;z-index:2;
+  opacity:0;transform:translateY(14px);transition:all .4s cubic-bezier(.2,.8,.3,1)}
+.gal-item:hover figcaption{opacity:1;transform:translateY(0)}
+.gal-item figcaption em{display:block;font-style:normal;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:#f0c14b;margin-bottom:5px}
+.gal-item figcaption strong{display:block;font-size:16px;color:#fff;line-height:1.3}
+.gal-item figcaption span{display:block;font-size:12.5px;color:rgba(255,255,255,.72);margin-top:4px}
+.gal-loupe{position:absolute;top:14px;right:14px;z-index:2;width:38px;height:38px;
+  border-radius:50%;display:grid;place-items:center;font-size:15px;color:#0a1020;
+  background:rgba(240,193,75,.94);opacity:0;transform:scale(.6) rotate(-45deg);
+  transition:all .35s cubic-bezier(.2,.9,.3,1.4)}
+.gal-item:hover .gal-loupe{opacity:1;transform:scale(1) rotate(0)}
+@keyframes galEntre{from{opacity:0;transform:translateY(22px) scale(.94)}
+  to{opacity:1;transform:translateY(0) scale(1)}}
+
+/* Visionneuse */
+/* L'attribut « hidden » doit l'emporter sur l'affichage en flex, sinon la
+   visionneuse resterait ouverte en permanence. */
+.visio[hidden]{display:none !important}
+.visio{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+  padding:26px;background:rgba(3,7,16,.96);backdrop-filter:blur(14px);
+  animation:visioEntre .3s ease}
+@keyframes visioEntre{from{opacity:0}to{opacity:1}}
+.vi-scene{margin:0;max-width:min(1180px,92vw);max-height:88vh;display:flex;
+  flex-direction:column;align-items:center;gap:16px}
+.vi-scene img{max-width:100%;max-height:74vh;border-radius:18px;display:block;
+  box-shadow:0 30px 90px rgba(0,0,0,.7);transition:opacity .3s}
+.vi-scene figcaption{text-align:center}
+.vi-scene figcaption strong{display:block;font-size:18px;color:#fff}
+.vi-scene figcaption span{display:block;font-size:13.5px;color:rgba(255,255,255,.66);margin-top:5px}
+.vi-scene figcaption em{display:block;font-style:normal;font-size:11.5px;letter-spacing:.14em;
+  color:#f0c14b;margin-top:9px}
+.vi-fermer,.vi-prec,.vi-suiv{position:absolute;z-index:2;cursor:pointer;color:#fff;
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);
+  border-radius:50%;display:grid;place-items:center;transition:all .2s}
+.vi-fermer{top:22px;right:22px;width:44px;height:44px;font-size:17px}
+.vi-prec,.vi-suiv{top:50%;transform:translateY(-50%);width:52px;height:52px;font-size:28px;line-height:1}
+.vi-prec{left:22px} .vi-suiv{right:22px}
+.vi-fermer:hover,.vi-prec:hover,.vi-suiv:hover{background:rgba(240,193,75,.9);color:#0a1020;
+  border-color:transparent}
+.vi-prec:hover,.vi-suiv:hover{transform:translateY(-50%) scale(1.08)}
+
+/* ============================================================
+   VIDÉOS — cadre lumineux, lecture au clic
+   ============================================================ */
+.video-item{position:relative;margin:0;border-radius:22px;overflow:hidden;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);
+  transition:transform .3s cubic-bezier(.2,.8,.3,1), box-shadow .3s}
+.video-item:hover{transform:translateY(-4px);box-shadow:0 22px 55px rgba(0,0,0,.42)}
+.video-frame{position:relative;aspect-ratio:16/9;overflow:hidden;background:#050b16}
+.vf-cadre{position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:22px 22px 0 0;
+  box-shadow:inset 0 0 0 1px rgba(240,193,75,.22), inset 0 0 34px rgba(240,193,75,.08)}
+.vf-poster{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .8s cubic-bezier(.2,.8,.3,1), filter .4s}
+.video-item:hover .vf-poster{transform:scale(1.06);filter:brightness(.72)}
+.vf-defaut{display:grid;place-items:center;font-size:46px;
+  background:linear-gradient(135deg,#0a1f44,#143264)}
+.vf-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;
+  width:78px;height:78px;border-radius:50%;cursor:pointer;border:none;
+  display:grid;place-items:center;background:transparent}
+.vp-tri{position:relative;z-index:2;width:62px;height:62px;border-radius:50%;
+  display:grid;place-items:center;font-size:21px;color:#0a1020;padding-left:4px;
+  background:linear-gradient(135deg,#f0c14b,#d4a526);
+  box-shadow:0 10px 30px rgba(212,165,38,.5);
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.5)}
+.vf-play:hover .vp-tri{transform:scale(1.12)}
+.vp-onde{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(240,193,75,.55);
+  animation:onde 2.6s cubic-bezier(.3,.6,.4,1) infinite}
+.vp-onde.d2{animation-delay:1.3s}
+@keyframes onde{0%{transform:scale(.72);opacity:.85}100%{transform:scale(1.55);opacity:0}}
+.vf-lecteur{position:absolute;inset:0;z-index:5}
+.video-item.joue .vf-poster,
+.video-item.joue .vf-play{opacity:0;pointer-events:none;transition:opacity .3s}
+.video-item figcaption{padding:17px 20px 20px}
+.video-item figcaption h3{margin:0;font-size:16.5px;color:#fff}
+.video-item figcaption p{margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.62);line-height:1.6}
+
+@media (max-width:700px){
+  .gal-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));grid-auto-rows:140px;gap:10px}
+  .gal-item.large{grid-column:span 1}
+  .vi-prec,.vi-suiv{width:42px;height:42px;font-size:22px}
+  .vi-prec{left:8px} .vi-suiv{right:8px}
+  .vf-play{width:60px;height:60px}
+  .vp-tri{width:52px;height:52px;font-size:18px}
+}
+@media (prefers-reduced-motion: reduce){
+  .vp-onde{animation:none;opacity:0}
+}

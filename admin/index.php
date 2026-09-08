@@ -115,8 +115,14 @@ if (!is_admin()) {
 }
 
 $stats = [
-    'nouveaux'  => (int)$pdo->query("SELECT COUNT(*) FROM commandes WHERE statut='nouveau'")->fetchColumn(),
-    'en_cours'  => (int)$pdo->query("SELECT COUNT(*) FROM commandes WHERE statut IN('en_cours','confirme')")->fetchColumn(),
+    /* Deux origines pour une même réalité : le formulaire du site public
+       (table commandes) et l'espace client (table commandes_client). Ne
+       compter que la première laisserait invisibles les commandes de vos
+       clients connectés. */
+    'nouveaux'  => (int)$pdo->query("SELECT COUNT(*) FROM commandes WHERE statut='nouveau'")->fetchColumn()
+                 + (int)$pdo->query("SELECT COUNT(*) FROM commandes_client WHERE statut='nouvelle'")->fetchColumn(),
+    'en_cours'  => (int)$pdo->query("SELECT COUNT(*) FROM commandes WHERE statut IN('en_cours','confirme')")->fetchColumn()
+                 + (int)$pdo->query("SELECT COUNT(*) FROM commandes_client WHERE statut IN('en_traitement','devis_envoye','confirmee')")->fetchColumn(),
     'plats'     => (int)$pdo->query("SELECT COUNT(*) FROM plats WHERE actif=1")->fetchColumn(),
     'total'     => (int)$pdo->query("SELECT COUNT(*) FROM commandes")->fetchColumn(),
 ];
@@ -128,17 +134,51 @@ $m_entrees = $m_depenses = 0;
 foreach ($fin as $r) { if ($r['type']==='entree') $m_entrees=(float)$r['s']; else $m_depenses=(float)$r['s']; }
 $treso = (float)$pdo->query("SELECT COALESCE(SUM(CASE WHEN type='entree' THEN montant ELSE -montant END),0) FROM transactions")->fetchColumn();
 $nb_clients = (int)$pdo->query("SELECT COUNT(*) FROM clients")->fetchColumn();
-$fact_impayees = (float)$pdo->query("SELECT COALESCE(SUM(
-        GREATEST((SELECT COALESCE(SUM(quantite*prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) - COALESCE(f.remise,0), 0)
-        * (1 + IF(f.tva_applicable=1, f.tva_taux/100, 0))
-    ),0)
-    FROM factures f
-    WHERE f.type='facture' AND f.statut IN('envoyee','brouillon')")->fetchColumn();
-$dernieres = $pdo->query("SELECT * FROM commandes ORDER BY created_at DESC LIMIT 6")->fetchAll();
-$prochains = $pdo->query("SELECT * FROM commandes WHERE date_evenement >= CURDATE() AND statut IN('en_cours','confirme') ORDER BY date_evenement ASC LIMIT 5")->fetchAll();
+/* Reste à encaisser : le montant des factures ouvertes MOINS ce que les clients
+   ont déjà versé. Afficher le total brut ferait croire à un manque à gagner
+   plus lourd qu'il ne l'est, alors qu'un acompte est peut-être déjà en caisse. */
+$fact_impayees = 0.0;
+try {
+    $st = $pdo->query("SELECT id FROM factures WHERE type='facture' AND statut IN('envoyee','brouillon')");
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $fid) {
+        $reste = facture_ttc($pdo, (int)$fid) - facture_deja_encaisse($pdo, (int)$fid);
+        if ($reste > 0) $fact_impayees += $reste;
+    }
+} catch (Throwable $e) { $fact_impayees = 0.0; }
+/* Les deux origines, présentées ensemble et triées par date. On garde
+   l'origine pour que le lien mène à la bonne page. */
+$dernieres = $pdo->query("
+    SELECT id, nom, telephone, email, type_evenement, date_evenement, nb_invites,
+           statut, created_at, 'site' AS origine, NULL AS numero
+      FROM commandes
+    UNION ALL
+    SELECT cc.id, COALESCE(NULLIF(c.entreprise,''), c.nom) AS nom, c.telephone, c.email,
+           COALESCE(NULLIF(cc.lieu,''), 'Commande espace client') AS type_evenement,
+           cc.date_evenement, cc.nb_invites, cc.statut, cc.created_at, 'client' AS origine, cc.numero
+      FROM commandes_client cc LEFT JOIN clients c ON c.id = cc.client_id
+    ORDER BY created_at DESC LIMIT 6")->fetchAll();
 
-$badges = ['nouveau'=>'badge-gold','en_cours'=>'badge-violet','confirme'=>'badge-teal','termine'=>'badge','annule'=>'badge-danger'];
-$labels = ['nouveau'=>'Nouveau','en_cours'=>'En cours','confirme'=>'Confirmé','termine'=>'Terminé','annule'=>'Annulé'];
+$prochains = $pdo->query("
+    SELECT id, nom, type_evenement, date_evenement, nb_invites, statut, 'site' AS origine
+      FROM commandes
+     WHERE date_evenement >= CURDATE() AND statut IN('en_cours','confirme')
+    UNION ALL
+    SELECT cc.id, COALESCE(NULLIF(c.entreprise,''), c.nom) AS nom,
+           COALESCE(NULLIF(cc.lieu,''), 'Espace client') AS type_evenement,
+           cc.date_evenement, cc.nb_invites, cc.statut, 'client' AS origine
+      FROM commandes_client cc LEFT JOIN clients c ON c.id = cc.client_id
+     WHERE cc.date_evenement >= CURDATE() AND cc.statut IN('en_traitement','devis_envoye','confirmee')
+    ORDER BY date_evenement ASC LIMIT 6")->fetchAll();
+
+$badges = ['nouveau'=>'badge-gold','en_cours'=>'badge-violet','confirme'=>'badge-teal',
+           'termine'=>'badge','annule'=>'badge-danger',
+           /* statuts propres aux commandes de l'espace client */
+           'nouvelle'=>'badge-gold','en_traitement'=>'badge-violet','devis_envoye'=>'badge-teal',
+           'confirmee'=>'badge-teal','terminee'=>'badge','annulee'=>'badge-danger'];
+$labels = ['nouveau'=>'Nouveau','en_cours'=>'En cours','confirme'=>'Confirmé',
+           'termine'=>'Terminé','annule'=>'Annulé',
+           'nouvelle'=>'Nouvelle','en_traitement'=>'En traitement','devis_envoye'=>'Proforma envoyée',
+           'confirmee'=>'Confirmée','terminee'=>'Terminée','annulee'=>'Annulée'];
 
 admin_header('Tableau de bord', 'dashboard', $pdo, $settings);
 
@@ -221,6 +261,45 @@ if (is_admin()) {
         if ($nbPay > 0) {
             $alertes[] = ['info', '💳', $nbPay . ' paiement' . ($nbPay > 1 ? 's' : '') . ' à vérifier',
                           'En attente depuis plus de 30 minutes', 'paiements.php', 'Contrôler'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Messages rédigés par un employé, en attente d'approbation
+if (is_admin()) {
+    try {
+        $nbMail = (int)$pdo->query("SELECT COUNT(*) FROM emails_envoyes WHERE statut='en_attente'")->fetchColumn();
+        if ($nbMail > 0) {
+            $alertes[] = ['attention', '✉️', $nbMail . ' message' . ($nbMail > 1 ? 's' : '') . ' à approuver',
+                          'Rédigé' . ($nbMail > 1 ? 's' : '') . ' par un employé, en attente de votre accord',
+                          'messages.php', 'Relire'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Charges récurrentes du mois pas encore enregistrées
+if (is_admin() && can('comptabilite')) {
+    try {
+        $dues = array_filter(charges_du_mois($pdo, date('Y-m')), fn($ch) => !$ch['deja']);
+        if ($dues) {
+            $totalDues = array_sum(array_column($dues, 'montant'));
+            $alertes[] = ['info', '🔁', count($dues) . ' charge' . (count($dues) > 1 ? 's' : '') . ' du mois à enregistrer',
+                          money($totalDues, $settings['devise'] ?? 'FCFA') . ' — loyer, salaires, abonnements',
+                          'comptabilite.php#charges', 'Enregistrer'];
+        }
+    } catch (Throwable $e) {}
+}
+
+// Proformas restées sans suite : une affaire qui dort est une affaire perdue
+if (can('factures')) {
+    try {
+        $nbPro = (int)$pdo->query("SELECT COUNT(*) FROM factures
+                                   WHERE type='proforma' AND statut='envoyee'
+                                     AND date_emission < DATE_SUB(CURDATE(), INTERVAL 15 DAY)")->fetchColumn();
+        if ($nbPro > 0) {
+            $alertes[] = ['info', '📋', $nbPro . ' proforma' . ($nbPro > 1 ? 's' : '') . ' sans réponse',
+                          'Envoyée' . ($nbPro > 1 ? 's' : '') . ' il y a plus de 15 jours — un rappel s\'impose peut-être',
+                          'factures.php?doc=proforma', 'Relancer'];
         }
     } catch (Throwable $e) {}
 }
@@ -510,16 +589,25 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
       <thead><tr><th>Client</th><th>Événement</th><th>Date</th><th>Participants</th><th>Statut</th><th>Reçue le</th></tr></thead>
       <tbody>
         <?php foreach ($dernieres as $c): ?>
-        <tr>
-          <td><strong><?= e($c['nom']) ?></strong><br><small><?= e($c['telephone']) ?></small></td>
-          <td><?= e($c['type_evenement']) ?></td>
+        <?php
+          /* Une demande du site public et une commande de l'espace client
+             n'ouvrent pas la même page : on garde le bon chemin. */
+          $lien = $c['origine'] === 'client'
+                ? 'commandes-client.php'
+                : 'commandes.php';
+        ?>
+        <tr onclick="location.href='<?= $lien ?>'" style="cursor:pointer">
+          <td><strong><?= e($c['nom']) ?></strong>
+            <br><small><?= e($c['telephone'] ?: $c['email']) ?></small></td>
+          <td><?= e($c['type_evenement']) ?>
+            <div class="orig-src"><?= $c['origine'] === 'client' ? '👤 Espace client' : '🌐 Site public' ?><?= !empty($c['numero']) ? ' · ' . e($c['numero']) : '' ?></div></td>
           <td><?= $c['date_evenement'] ? date('d/m/Y', strtotime($c['date_evenement'])) : '—' ?></td>
           <td><?= $c['nb_invites'] ?: '—' ?></td>
-          <td><span class="badge <?= $badges[$c['statut']] ?>"><?= $labels[$c['statut']] ?></span></td>
+          <td><span class="badge <?= $badges[$c['statut']] ?? 'badge' ?>"><?= $labels[$c['statut']] ?? e($c['statut']) ?></span></td>
           <td><?= date('d/m à H:i', strtotime($c['created_at'])) ?></td>
         </tr>
         <?php endforeach; ?>
-        <?php if (!$dernieres): ?><tr><td colspan="6" style="text-align:center;padding:28px">Aucune demande pour le moment. Elles apparaîtront ici dès qu'un client remplira le formulaire du site.</td></tr><?php endif; ?>
+        <?php if (!$dernieres): ?><tr><td colspan="6" style="text-align:center;padding:28px">Aucune demande pour le moment. Elles apparaîtront ici dès qu'un client remplira le formulaire du site ou passera commande depuis son espace.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>
@@ -529,17 +617,29 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
   <h2>🗓️ Prochains événements confirmés</h2>
   <div class="tbl-wrap">
     <table>
-      <thead><tr><th>Date</th><th>Client</th><th>Événement</th><th>Participants</th></tr></thead>
+      <thead><tr><th>Date</th><th>Client</th><th>Événement</th><th>Participants</th><th>État</th></tr></thead>
       <tbody>
         <?php foreach ($prochains as $c): ?>
-        <tr>
-          <td><strong><?= date('d/m/Y', strtotime($c['date_evenement'])) ?></strong></td>
-          <td><?= e($c['nom']) ?> — <?= e($c['telephone']) ?></td>
+        <?php
+          /* Combien de jours nous séparent de l'événement ? C'est l'information
+             qui décide de l'urgence : « dans 3 jours » parle plus qu'une date. */
+          $jours = (int)floor((strtotime($c['date_evenement']) - strtotime(date('Y-m-d'))) / 86400);
+          $delai = $jours <= 0 ? "Aujourd'hui" : ($jours === 1 ? 'Demain' : 'Dans ' . $jours . ' jours');
+          $urgence = $jours <= 2 ? 'proche' : ($jours <= 7 ? 'semaine' : '');
+        ?>
+        <tr onclick="location.href='<?= $c['origine'] === 'client' ? 'commandes-client.php' : 'commandes.php' ?>'" style="cursor:pointer">
+          <td>
+            <strong><?= date('d/m/Y', strtotime($c['date_evenement'])) ?></strong>
+            <div class="ev-delai <?= $urgence ?>"><?= $delai ?></div>
+          </td>
+          <td><?= e($c['nom']) ?>
+            <div class="orig-src"><?= $c['origine'] === 'client' ? '👤 Espace client' : '🌐 Site public' ?></div></td>
           <td><?= e($c['type_evenement']) ?></td>
           <td><?= $c['nb_invites'] ?: '—' ?></td>
+          <td><span class="badge <?= $badges[$c['statut']] ?? 'badge' ?>"><?= $labels[$c['statut']] ?? e($c['statut']) ?></span></td>
         </tr>
         <?php endforeach; ?>
-        <?php if (!$prochains): ?><tr><td colspan="4" style="text-align:center;padding:28px">Aucun événement à venir. Confirmez une demande pour la voir apparaître ici.</td></tr><?php endif; ?>
+        <?php if (!$prochains): ?><tr><td colspan="5" style="text-align:center;padding:28px">Aucun événement à venir. Confirmez une demande pour la voir apparaître ici.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>

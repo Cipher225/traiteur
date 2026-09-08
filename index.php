@@ -6,7 +6,19 @@ $s = get_settings($pdo);
 $services = $pdo->query("SELECT * FROM services WHERE actif=1 ORDER BY ordre, id")->fetchAll();
 $categories = $pdo->query("SELECT * FROM categories WHERE actif=1 ORDER BY ordre, id")->fetchAll();
 $plats = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY categorie_id, ordre, id")->fetchAll();
-$galerie = $pdo->query("SELECT * FROM galerie ORDER BY ordre, id DESC LIMIT 8")->fetchAll();
+/* Galerie : on charge les photos actives avec leur album, pour permettre
+   au visiteur de filtrer par type de prestation. */
+$galerie = $pdo->query("SELECT g.*, a.nom AS album_nom, a.icone AS album_icone, a.id AS aid
+                        FROM galerie g LEFT JOIN galerie_albums a ON a.id = g.album_id
+                        WHERE COALESCE(g.actif,1) = 1
+                        ORDER BY g.ordre, g.id DESC LIMIT 40")->fetchAll();
+$galerieAlbums = [];
+foreach ($galerie as $g) {
+    if (!empty($g['aid']) && !isset($galerieAlbums[$g['aid']])) {
+        $galerieAlbums[$g['aid']] = ['nom' => $g['album_nom'], 'icone' => $g['album_icone'], 'n' => 0];
+    }
+    if (!empty($g['aid'])) $galerieAlbums[$g['aid']]['n']++;
+}
 $temoignages = $pdo->query("SELECT * FROM temoignages WHERE statut='valide' ORDER BY id DESC LIMIT 6")->fetchAll();
 $videos = $pdo->query("SELECT * FROM videos WHERE actif=1 ORDER BY ordre, id DESC LIMIT 6")->fetchAll();
 
@@ -248,11 +260,34 @@ $f = flash();
       <span class="eyebrow" style="justify-content:center"><?= e($s['sec_galerie_eyebrow'] ?? 'En images') ?></span>
       <h2><?= e($s['sec_galerie_titre'] ?? 'Nos plus belles réalisations') ?></h2>
     </div>
-    <div class="gal-grid">
-      <?php foreach ($galerie as $g): ?>
-      <figure class="gal-item reveal">
+    <?php if (count($galerieAlbums) > 1): ?>
+    <div class="gal-filtres reveal">
+      <button type="button" class="gf actif" data-album="tous">✨ Tout voir
+        <span><?= count($galerie) ?></span></button>
+      <?php foreach ($galerieAlbums as $aid => $al): ?>
+      <button type="button" class="gf" data-album="<?= (int)$aid ?>">
+        <?= e($al['icone']) ?> <?= e($al['nom']) ?> <span><?= (int)$al['n'] ?></span></button>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+    <div class="gal-grid" id="gal-grid">
+      <?php foreach ($galerie as $i => $g):
+        /* Les photos verticales prennent deux rangées, les larges deux colonnes :
+           la mosaïque respire au lieu d'aligner des vignettes identiques. */
+        $L = (int)($g['largeur'] ?? 0); $H = (int)($g['hauteur'] ?? 0);
+        $forme = ($L && $H) ? ($H > $L * 1.25 ? 'haute' : ($L > $H * 1.6 ? 'large' : '')) : '';
+      ?>
+      <figure class="gal-item reveal <?= $forme ?>" data-album="<?= (int)($g['aid'] ?? 0) ?>"
+              data-i="<?= $i ?>" data-src="uploads/<?= e($g['image']) ?>"
+              data-titre="<?= e($g['titre']) ?>" data-legende="<?= e($g['description'] ?? '') ?>">
         <img src="uploads/<?= e($g['image']) ?>" alt="<?= e($g['titre']) ?>" loading="lazy">
-        <?php if ($g['titre']): ?><span><?= e($g['titre']) ?></span><?php endif; ?>
+        <figcaption>
+          <?php if ($g['album_nom']): ?><em><?= e($g['album_icone']) ?> <?= e($g['album_nom']) ?></em><?php endif; ?>
+          <?php if ($g['titre']): ?><strong><?= e($g['titre']) ?></strong><?php endif; ?>
+          <?php if (!empty($g['description'])): ?><span><?= e($g['description']) ?></span><?php endif; ?>
+        </figcaption>
+        <span class="gal-loupe">⤢</span>
       </figure>
       <?php endforeach; ?>
     </div>
@@ -269,17 +304,29 @@ $f = flash();
       <h2><?= e($s['sec_videos_titre'] ?? 'Nos prestations en action') ?></h2>
       <p><?= e($s['sec_videos_texte'] ?? '') ?></p>
     </div>
+    <?php /* La vidéo ne se charge qu'au clic : la page reste légère, ce qui
+             compte sur une connexion mobile. Avant cela, on n'affiche qu'une
+             vignette dans un cadre lumineux. */ ?>
     <div class="video-grid">
-      <?php foreach ($videos as $v): ?>
-      <figure class="video-item glass reveal">
+      <?php foreach ($videos as $v):
+        $estFichier = ($v['type'] === 'fichier' && $v['fichier']);
+        $source = $estFichier ? 'uploads/' . $v['fichier'] : video_embed($v['url'] ?? '');
+        $poster = $v['miniature'] ? 'uploads/' . $v['miniature'] : '';
+      ?>
+      <figure class="video-item reveal" data-type="<?= $estFichier ? 'fichier' : 'iframe' ?>"
+              data-src="<?= e($source) ?>" data-titre="<?= e($v['titre']) ?>">
         <div class="video-frame">
-          <?php if ($v['type'] === 'fichier' && $v['fichier']): ?>
-            <video controls preload="metadata" <?= $v['miniature'] ? 'poster="uploads/'.e($v['miniature']).'"' : '' ?>>
-              <source src="uploads/<?= e($v['fichier']) ?>">
-            </video>
-          <?php elseif ($v['url']): ?>
-            <iframe src="<?= e(video_embed($v['url'])) ?>" title="<?= e($v['titre']) ?>" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          <div class="vf-cadre"></div>
+          <?php if ($poster): ?>
+          <img class="vf-poster" src="<?= e($poster) ?>" alt="<?= e($v['titre']) ?>" loading="lazy">
+          <?php else: ?>
+          <div class="vf-poster vf-defaut"><span>🎬</span></div>
           <?php endif; ?>
+          <button type="button" class="vf-play" aria-label="Lire la vidéo">
+            <span class="vp-onde"></span><span class="vp-onde d2"></span>
+            <span class="vp-tri">▶</span>
+          </button>
+          <div class="vf-lecteur"></div>
         </div>
         <figcaption>
           <h3><?= e($v['titre']) ?></h3>
@@ -291,6 +338,21 @@ $f = flash();
   </div>
 </section>
 <?php endif; ?>
+<!-- Visionneuse plein écran : photos de la galerie -->
+<div class="visio" id="visio" hidden>
+  <button type="button" class="vi-fermer" aria-label="Fermer">✕</button>
+  <button type="button" class="vi-prec" aria-label="Photo précédente">‹</button>
+  <figure class="vi-scene">
+    <img id="vi-img" src="" alt="">
+    <figcaption>
+      <strong id="vi-titre"></strong>
+      <span id="vi-legende"></span>
+      <em id="vi-compteur"></em>
+    </figcaption>
+  </figure>
+  <button type="button" class="vi-suiv" aria-label="Photo suivante">›</button>
+</div>
+
 <section id="avis">
   <div class="wrap">
     <div class="sec-head reveal">
@@ -508,5 +570,119 @@ $f = flash();
 })();
 </script>
 <?php $pwaBase='.'; $pwaBouton=true; include __DIR__.'/config/pwa_script.php'; ?>
+<script>
+/* ============================================================================
+   GALERIE ET VIDÉOS
+   Filtrage par album, visionneuse plein écran, lecture différée des vidéos.
+   Aucune bibliothèque : la page reste légère sur une connexion mobile.
+   ============================================================================ */
+(function () {
+  var doux = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Filtres par album ---------- */
+  var filtres = document.querySelectorAll('.gf');
+  var photos  = Array.prototype.slice.call(document.querySelectorAll('.gal-item'));
+
+  filtres.forEach(function (b) {
+    b.addEventListener('click', function () {
+      filtres.forEach(function (x) { x.classList.remove('actif'); });
+      this.classList.add('actif');
+      var cible = this.dataset.album;
+      photos.forEach(function (p, i) {
+        var garde = (cible === 'tous') || (p.dataset.album === cible);
+        if (garde) {
+          p.hidden = false;
+          if (doux) {
+            p.style.animation = 'none';
+            void p.offsetWidth;                       // relance l'animation
+            p.style.animation = 'galEntre .5s var(--ease-ios) ' + (i % 12) * .035 + 's both';
+          }
+        } else {
+          p.hidden = true;
+        }
+      });
+    });
+  });
+
+  /* ---------- Visionneuse ---------- */
+  var visio = document.getElementById('visio');
+  if (visio) {
+    var vImg = document.getElementById('vi-img');
+    var vTit = document.getElementById('vi-titre');
+    var vLeg = document.getElementById('vi-legende');
+    var vCpt = document.getElementById('vi-compteur');
+    var courant = 0;
+
+    function visibles() { return photos.filter(function (p) { return !p.hidden; }); }
+
+    function montrer(i) {
+      var liste = visibles();
+      if (!liste.length) return;
+      courant = (i + liste.length) % liste.length;
+      var p = liste[courant];
+      vImg.style.opacity = 0;
+      var img = new Image();
+      img.onload = function () {
+        vImg.src = p.dataset.src;
+        vImg.style.opacity = 1;
+      };
+      img.src = p.dataset.src;
+      vTit.textContent = p.dataset.titre || '';
+      vLeg.textContent = p.dataset.legende || '';
+      vCpt.textContent = (courant + 1) + ' / ' + liste.length;
+    }
+
+    photos.forEach(function (p) {
+      p.addEventListener('click', function () {
+        var liste = visibles();
+        montrer(liste.indexOf(this));
+        visio.hidden = false;
+        document.body.style.overflow = 'hidden';
+      });
+    });
+
+    function fermer() { visio.hidden = true; document.body.style.overflow = ''; }
+    visio.querySelector('.vi-fermer').addEventListener('click', fermer);
+    visio.querySelector('.vi-prec').addEventListener('click', function (e) { e.stopPropagation(); montrer(courant - 1); });
+    visio.querySelector('.vi-suiv').addEventListener('click', function (e) { e.stopPropagation(); montrer(courant + 1); });
+    visio.addEventListener('click', function (e) { if (e.target === visio) fermer(); });
+    document.addEventListener('keydown', function (e) {
+      if (visio.hidden) return;
+      if (e.key === 'Escape') fermer();
+      if (e.key === 'ArrowLeft') montrer(courant - 1);
+      if (e.key === 'ArrowRight') montrer(courant + 1);
+    });
+
+    /* Balayage tactile : le geste attendu sur un téléphone. */
+    var x0 = null;
+    visio.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    visio.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      var d = e.changedTouches[0].clientX - x0;
+      if (Math.abs(d) > 55) montrer(courant + (d < 0 ? 1 : -1));
+      x0 = null;
+    }, { passive: true });
+  }
+
+  /* ---------- Vidéos : chargement au clic ---------- */
+  document.querySelectorAll('.video-item').forEach(function (fig) {
+    var bouton = fig.querySelector('.vf-play');
+    if (!bouton) return;
+    bouton.addEventListener('click', function () {
+      var zone = fig.querySelector('.vf-lecteur');
+      if (fig.dataset.type === 'fichier') {
+        zone.innerHTML = '<video controls autoplay playsinline style="width:100%;height:100%;display:block">'
+                       + '<source src="' + fig.dataset.src + '"></video>';
+      } else {
+        var u = fig.dataset.src + (fig.dataset.src.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
+        zone.innerHTML = '<iframe src="' + u + '" title="' + (fig.dataset.titre || '') + '" '
+                       + 'allow="accelerometer; autoplay; encrypted-media; picture-in-picture" '
+                       + 'allowfullscreen style="width:100%;height:100%;border:0;display:block"></iframe>';
+      }
+      fig.classList.add('joue');
+    });
+  });
+})();
+</script>
 </body>
 </html>

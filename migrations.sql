@@ -398,3 +398,34 @@ CREATE TABLE IF NOT EXISTS charges_recurrentes (
   notes VARCHAR(255) DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- =====================================================================
+--  GALERIE ENRICHIE
+--  Une photo appartient à un album (mariage, cocktail, séminaire…) et
+--  peut être rattachée à une prestation réelle. Le visiteur filtre
+--  alors les réalisations qui l'intéressent.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS galerie_albums (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nom VARCHAR(120) NOT NULL,
+  icone VARCHAR(12) DEFAULT '📸',
+  description VARCHAR(300) DEFAULT '',
+  couverture VARCHAR(255) DEFAULT '',
+  ordre INT DEFAULT 0,
+  actif TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS album_id INT DEFAULT NULL;
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS facture_id INT DEFAULT NULL;
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS description VARCHAR(300) DEFAULT '';
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS actif TINYINT(1) DEFAULT 1;
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS largeur INT DEFAULT 0;
+ALTER TABLE galerie ADD COLUMN IF NOT EXISTS hauteur INT DEFAULT 0;
+
+INSERT IGNORE INTO galerie_albums (id, nom, icone, description, ordre) VALUES
+ (1, 'Mariages',    '💍', 'Réceptions et cérémonies', 1),
+ (2, 'Séminaires',  '💼', 'Entreprises et institutions', 2),
+ (3, 'Cocktails',   '🥂', 'Réceptions debout et lancements', 3),
+ (4, 'Baptêmes',    '🕊️', 'Cérémonies familiales', 4),
+ (5, 'Nos plats',   '🍛', 'Le savoir-faire en cuisine', 5);
