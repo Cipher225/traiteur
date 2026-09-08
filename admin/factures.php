@@ -27,9 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($inf) {
             $pdo->prepare('DELETE FROM documents_auth WHERE doc_id=? AND type IN (?,?)')
                 ->execute([$fid, 'facture', 'proforma']);
-            // 2b) Entrée comptable liée (si la facture était payée)
-            $pdo->prepare("DELETE FROM transactions WHERE type='entree' AND libelle=?")
-                ->execute(['Encaissement facture ' . $inf['numero']]);
+            /* 2b) Écritures comptables liées.
+               On efface l'encaissement automatique (ancien et nouveau libellé)
+               ET toute écriture rattachée à cette activité : sinon le chiffre
+               d'affaires garderait la trace d'une facture qui n'existe plus. */
+            $pdo->prepare("DELETE FROM transactions
+                           WHERE (type='entree' AND libelle IN (?, ?))
+                              OR (facture_id = ? AND recu_id IS NULL)")
+                ->execute(['Solde facture ' . $inf['numero'],
+                           'Encaissement facture ' . $inf['numero'], $fid]);
+
+            /* Les bons de caisse rattachés perdent leur activité, mais restent :
+               l'argent a bien été encaissé ou dépensé, seul le lien disparaît. */
+            $pdo->prepare('UPDATE recus SET facture_id=NULL WHERE facture_id=?')->execute([$fid]);
+            $pdo->prepare('UPDATE transactions SET facture_id=NULL WHERE facture_id=?')->execute([$fid]);
         }
         // 3) La facture elle-même
         $pdo->prepare('DELETE FROM factures WHERE id=?')->execute([$fid]);

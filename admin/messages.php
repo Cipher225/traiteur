@@ -733,7 +733,11 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
       dests.forEach(function (d, i) {
         var j = document.createElement('span');
         j.className = 'mj';
-        j.innerHTML = '<b>' + (d.nom || d.email) + '</b>' + (d.nom ? '<i>' + d.email + '</i>' : '') +
+        /* Seule l'adresse est affichée : c'est elle qui part réellement.
+           Montrer le nom de la société pourrait laisser croire qu'il fait
+           partie du destinataire. Le nom reste visible au survol. */
+        j.title = d.nom || d.email;
+        j.innerHTML = '<b>' + d.email + '</b>' +
                       '<button type="button" data-i="' + i + '" class="mj-x">✕</button>';
         zd.appendChild(j);
         var h = document.createElement('input');
