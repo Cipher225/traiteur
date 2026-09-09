@@ -109,19 +109,71 @@ if (isset($_GET['edit'])) {
     $edit = $stmt->fetch();
     if ($edit) { $c = $pdo->prepare("SELECT * FROM users WHERE client_id=? AND role='client'"); $c->execute([$edit['id']]); $compte = $c->fetch(); }
 }
-$q = trim($_GET['q'] ?? '');
+/* ----------------------------------------------------------------------------
+   Fichier clients
+   Une simple liste de noms ne dit rien d'utile. Ce qu'on cherche en ouvrant
+   cette page, c'est : qui est ce client, combien il nous a rapporté, s'il nous
+   doit encore quelque chose, et quand on a travaillé avec lui la dernière fois.
+   ---------------------------------------------------------------------------- */
+$q       = trim($_GET['q'] ?? '');
+$fType   = $_GET['t'] ?? '';                       // entreprise | individuel
+$fLettre = strtoupper(trim($_GET['l'] ?? ''));     // navigation alphabétique
+$tri     = $_GET['tri'] ?? 'nom';                  // nom | ca | recent
+
+$where = []; $args = [];
 if ($q !== '') {
-    $stmt = $pdo->prepare("SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif FROM clients c LEFT JOIN users u ON u.client_id=c.id AND u.role='client' WHERE c.nom LIKE ? OR c.entreprise LIKE ? OR c.telephone LIKE ? ORDER BY c.nom");
-    $stmt->execute(["%$q%", "%$q%", "%$q%"]);
-    $clients = $stmt->fetchAll();
-} else {
-    /* Après quelques centaines de clients, tout afficher rend la page lente
-       et le défilement interminable. */
-    $pg = pagination($pdo, "SELECT COUNT(*) FROM clients", [], 30);
-    $clients = $pdo->query("SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif
-                            FROM clients c LEFT JOIN users u ON u.client_id=c.id AND u.role='client'
-                            ORDER BY c.nom" . $pg['limite'])->fetchAll();
+    $where[] = "(c.nom LIKE ? OR c.entreprise LIKE ? OR c.telephone LIKE ? OR c.email LIKE ?)";
+    array_push($args, "%$q%", "%$q%", "%$q%", "%$q%");
 }
+if ($fType === 'entreprise')      { $where[] = "COALESCE(c.entreprise,'') <> ''"; }
+elseif ($fType === 'individuel')  { $where[] = "COALESCE(c.entreprise,'') = ''"; }
+if ($fLettre !== '' && preg_match('/^[A-Z]$/', $fLettre)) {
+    $where[] = "UPPER(LEFT(COALESCE(NULLIF(c.entreprise,''), c.nom), 1)) = ?";
+    $args[] = $fLettre;
+}
+$sqlWhere = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+
+$ordres = [
+    'nom'    => 'affiche ASC',
+    'ca'     => 'ca DESC, affiche ASC',
+    'recent' => 'derniere IS NULL, derniere DESC',
+];
+$ordre = $ordres[$tri] ?? $ordres['nom'];
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM clients c $sqlWhere", $args, 24);
+
+/* Chaque client arrive avec son historique : nombre de documents, chiffre
+   d'affaires facturé, reste dû et date de la dernière prestation. Tout est
+   calculé en une seule requête — une par client rendrait la page lente. */
+$sql = "SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif,
+               COALESCE(NULLIF(c.entreprise,''), c.nom) AS affiche,
+               (SELECT COUNT(*) FROM factures f
+                 WHERE f.client_id = c.id AND f.type='facture' AND f.statut <> 'annulee') AS nb_docs,
+               (SELECT COALESCE(SUM(
+                    GREATEST((SELECT COALESCE(SUM(l.quantite*l.prix_unitaire),0)
+                                FROM facture_lignes l WHERE l.facture_id = f.id) - COALESCE(f.remise,0), 0)
+                    * (1 + IF(f.tva_applicable=1, f.tva_taux/100, 0))), 0)
+                  FROM factures f
+                 WHERE f.client_id = c.id AND f.type='facture' AND f.statut <> 'annulee') AS ca,
+               (SELECT COALESCE(SUM(r.montant),0) FROM recus r
+                 WHERE r.client_id = c.id AND r.type='entree') AS regle,
+               (SELECT MAX(f.date_emission) FROM factures f
+                 WHERE f.client_id = c.id AND f.statut <> 'annulee') AS derniere
+          FROM clients c
+          LEFT JOIN users u ON u.client_id = c.id AND u.role='client'
+          $sqlWhere
+      ORDER BY $ordre" . $pg['limite'];
+$stmt = $pdo->prepare($sql);
+$stmt->execute($args);
+$clients = $stmt->fetchAll();
+
+/* Lettres réellement présentes : proposer un « K » sans client serait
+   frustrant. */
+$lettres = [];
+try {
+    $lettres = $pdo->query("SELECT DISTINCT UPPER(LEFT(COALESCE(NULLIF(entreprise,''), nom), 1)) L
+                            FROM clients ORDER BY L")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {}
 
 admin_header('Clients', 'clients', $pdo, $settings);
 ?>
@@ -157,49 +209,122 @@ admin_header('Clients', 'clients', $pdo, $settings);
 </details>
 
 <div class="panel glass">
-  <h2>👥 Fichier clients (<?= count($clients) ?>)
-    <form method="get" style="margin-left:auto;display:flex;gap:8px">
-      <input class="input" name="q" value="<?= e($q) ?>" placeholder="Rechercher…" style="padding:8px 14px;width:200px">
-      <button class="btn btn-glass btn-sm">🔍</button>
+  <div class="cl-tete">
+    <h2 style="margin:0">👥 Fichier clients <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <form method="get" class="cl-recherche">
+      <?php if ($fType): ?><input type="hidden" name="t" value="<?= e($fType) ?>"><?php endif; ?>
+      <input class="input" name="q" value="<?= e($q) ?>" placeholder="Nom, société, téléphone, email…">
+      <button class="btn btn-gold btn-sm">🔍</button>
+      <?php if ($q !== '' || $fType || $fLettre): ?>
+      <a class="btn btn-glass btn-sm" href="clients.php">Effacer</a>
+      <?php endif; ?>
     </form>
-  </h2>
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th>Client</th><th>Entreprise</th><th>Téléphone</th><th>Accès espace</th><th style="text-align:right">Actions</th></tr></thead>
-      <tbody>
-        <?php foreach ($clients as $c): ?>
-        <tr>
-          <td><strong><?= e($c['nom']) ?></strong></td>
-          <td><?= e($c['entreprise'] ?: '—') ?></td>
-          <td><?= e($c['telephone'] ?: '—') ?></td>
-          <td>
-            <?php if ($c['uid']): ?><code><?= e($c['username']) ?></code> <span class="badge <?= $c['compte_actif']?'badge-teal':'badge-danger' ?>" style="font-size:10px"><?= $c['compte_actif']?'actif':'désactivé' ?></span>
-            <?php else: ?><small style="color:var(--ink-faint)">Aucun accès</small><?php endif; ?>
-          </td>
-          <td>
-            <div class="td-actions">
-              <?php if (preg_replace('/\D/', '', $c['telephone'])): ?>
-              <a class="btn btn-glass btn-sm" href="https://wa.me/<?= preg_replace('/\D/', '', $c['telephone']) ?>" target="_blank" rel="noopener">💬</a>
-              <?php endif; ?>
-              <a class="btn btn-glass btn-sm" href="factures.php?edit=new&client=<?= $c['id'] ?>">🧾 Facturer</a>
-              <a class="btn btn-glass btn-sm" href="?edit=<?= $c['id'] ?>#form">✏️</a>
-              <?php if ($c['uid']): ?>
-              <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-                <button class="btn btn-glass btn-sm" name="toggle_compte" value="<?= $c['uid'] ?>" title="<?= $c['compte_actif']?'Désactiver l\'accès':'Réactiver l\'accès' ?>"><?= $c['compte_actif']?'⏸️':'▶️' ?></button></form>
-              <?php endif; ?>
-              <form method="post" data-confirm="Supprimer « <?= e($c['nom']) ?> » et son accès ?">
-                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-                <button class="btn btn-danger btn-sm" name="supprimer" value="<?= $c['id'] ?>">✕</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-        <?php if (!$clients): ?><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--ink-faint)">Aucun client<?= $q ? ' trouvé' : '' ?>. Ajoutez votre premier client ci-dessus.</td></tr><?php endif; ?>
-      </tbody>
-    </table>
   </div>
 
-<?= pagination_html($pg, 'client', ['q' => $_GET['q'] ?? '']) ?>
+  <?php
+  /* Trois façons de retrouver un client : par son nom, par sa nature, ou en
+     sautant directement à sa lettre. Sur trois cents fiches, chercher à la
+     main dans une liste alphabétique est une perte de temps. */
+  $lienFiltre = function (array $chg) use ($q, $fType, $fLettre, $tri) {
+      $p = array_filter(array_merge(
+          ['q' => $q, 't' => $fType, 'l' => $fLettre, 'tri' => $tri === 'nom' ? '' : $tri], $chg));
+      return 'clients.php' . ($p ? '?' . http_build_query($p) : '');
+  };
+  ?>
+
+  <div class="cl-filtres">
+    <div class="cl-groupe">
+      <a class="clf <?= $fType === '' ? 'on' : '' ?>" href="<?= e($lienFiltre(['t' => ''])) ?>">Tous</a>
+      <a class="clf <?= $fType === 'entreprise' ? 'on' : '' ?>" href="<?= e($lienFiltre(['t' => 'entreprise'])) ?>">🏢 Entreprises</a>
+      <a class="clf <?= $fType === 'individuel' ? 'on' : '' ?>" href="<?= e($lienFiltre(['t' => 'individuel'])) ?>">👤 Particuliers</a>
+    </div>
+    <div class="cl-groupe">
+      <span class="cl-lbl">Trier par</span>
+      <a class="clf <?= $tri === 'nom' ? 'on' : '' ?>" href="<?= e($lienFiltre(['tri' => ''])) ?>">Nom</a>
+      <a class="clf <?= $tri === 'ca' ? 'on' : '' ?>" href="<?= e($lienFiltre(['tri' => 'ca'])) ?>">Chiffre d'affaires</a>
+      <a class="clf <?= $tri === 'recent' ? 'on' : '' ?>" href="<?= e($lienFiltre(['tri' => 'recent'])) ?>">Dernière prestation</a>
+    </div>
+  </div>
+
+  <?php if ($lettres && $q === ''): ?>
+  <div class="cl-alpha">
+    <a class="cla <?= $fLettre === '' ? 'on' : '' ?>" href="<?= e($lienFiltre(['l' => ''])) ?>">Tout</a>
+    <?php foreach ($lettres as $L): if (!preg_match('/^[A-Z]$/', (string)$L)) continue; ?>
+    <a class="cla <?= $fLettre === $L ? 'on' : '' ?>" href="<?= e($lienFiltre(['l' => $L])) ?>"><?= e($L) ?></a>
+    <?php endforeach; ?>
+  </div>
+  <?php endif; ?>
+
+  <?php if ($clients): ?>
+  <div class="cl-liste">
+    <?php foreach ($clients as $c):
+      $nom     = $c['affiche'];
+      $estEnt  = trim((string)$c['entreprise']) !== '';
+      $reste   = max(0, (float)$c['ca'] - (float)$c['regle']);
+      $tel     = preg_replace('/\D/', '', (string)$c['telephone']);
+    ?>
+    <div class="cl">
+      <div class="cl-av <?= $estEnt ? 'ent' : 'ind' ?>"><?= e(mb_strtoupper(mb_substr($nom, 0, 1))) ?></div>
+
+      <div class="cl-id">
+        <div class="cl-n"><?= e($nom) ?>
+          <?php if ($c['uid']): ?>
+          <span class="cl-acces <?= $c['compte_actif'] ? 'on' : 'off' ?>"
+                title="<?= $c['compte_actif'] ? 'Accès actif' : 'Accès désactivé' ?>">🔑</span>
+          <?php endif; ?>
+        </div>
+        <?php if ($estEnt && $c['nom'] !== $nom): ?>
+        <div class="cl-s">👤 <?= e($c['nom']) ?></div>
+        <?php endif; ?>
+        <div class="cl-coord">
+          <?php if ($c['telephone']): ?><a href="tel:<?= e($tel) ?>">📞 <?= e($c['telephone']) ?></a><?php endif; ?>
+          <?php if ($c['email']): ?><a href="mailto:<?= e($c['email']) ?>" title="<?= e($c['email']) ?>">✉️</a><?php endif; ?>
+          <?php if ($tel): ?><a href="https://wa.me/<?= e($tel) ?>" target="_blank" rel="noopener" title="WhatsApp">💬</a><?php endif; ?>
+        </div>
+      </div>
+
+      <div class="cl-chiffres">
+        <?php if ((float)$c['ca'] > 0): ?>
+        <div class="clc"><span>Facturé</span><b><?= number_format((float)$c['ca'], 0, ',', ' ') ?></b></div>
+        <?php if ($reste > 1): ?>
+        <div class="clc"><span>Reste dû</span><b class="du"><?= number_format($reste, 0, ',', ' ') ?></b></div>
+        <?php endif; ?>
+        <div class="clc"><span>Documents</span><b><?= (int)$c['nb_docs'] ?></b></div>
+        <?php else: ?>
+        <div class="clc"><span class="cl-neuf">Aucune facture</span></div>
+        <?php endif; ?>
+        <?php if ($c['derniere']): ?>
+        <div class="clc"><span>Dernière</span><b class="dt"><?= date('m/Y', strtotime($c['derniere'])) ?></b></div>
+        <?php endif; ?>
+      </div>
+
+      <div class="cl-act">
+        <a class="cl-b or" href="factures.php?edit=new&client=<?= (int)$c['id'] ?>" title="Créer une facture">🧾</a>
+        <a class="cl-b" href="?edit=<?= (int)$c['id'] ?>#form" title="Modifier">✏️</a>
+        <?php if ($c['uid']): ?>
+        <form method="post" style="display:inline">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <button class="cl-b" name="toggle_compte" value="<?= (int)$c['uid'] ?>"
+                  title="<?= $c['compte_actif'] ? "Désactiver l'accès" : "Réactiver l'accès" ?>"><?= $c['compte_actif'] ? '⏸️' : '▶️' ?></button>
+        </form>
+        <?php endif; ?>
+        <form method="post" style="display:inline"
+              data-confirm="Supprimer « <?= e($nom) ?> » et son accès ? Ses documents ne seront pas effacés.">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <button class="cl-b sup" name="supprimer" value="<?= (int)$c['id'] ?>" title="Supprimer">✕</button>
+        </form>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+  <?php else: ?>
+  <p style="text-align:center;padding:34px;color:var(--ink-faint);font-size:13px;margin:0">
+    Aucun client<?= ($q !== '' || $fType || $fLettre) ? ' pour cette recherche' : '' ?>.
+    <?= ($q === '' && !$fType && !$fLettre) ? 'Ajoutez votre premier client ci-dessus.' : '' ?>
+  </p>
+  <?php endif; ?>
+
+<?= pagination_html($pg, 'client', ['q' => $q, 't' => $fType, 'l' => $fLettre, 'tri' => $tri === 'nom' ? '' : $tri]) ?>
+</div>
 </div>
 <?php admin_footer(); ?>
