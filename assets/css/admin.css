@@ -2828,3 +2828,95 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .pg:hover{color:var(--ink);border-color:rgba(212,165,38,.4)}
 .pg.actif{color:#0a1020;background:linear-gradient(135deg,#e9c15c,#d4a526);border-color:transparent}
 .pg-pts{color:var(--ink-faint);padding:0 3px}
+
+/* ============================================================
+   JOURNAL DES OPÉRATIONS
+   Des lignes plutôt qu'un tableau : sept colonnes deviennent
+   illisibles dès la dixième écriture, alors qu'une ligne reste
+   claire même à cent.
+   ============================================================ */
+.jrn{display:flex;flex-direction:column}
+.jrn-jour{display:flex;align-items:center;gap:10px;padding:12px 4px 7px;
+  border-bottom:1px solid var(--glass-border);margin-bottom:3px}
+.jrn-jour span{font-size:11px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-faint)}
+.jrn-jour b{margin-left:auto;font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+.jrn-jour b.pos{color:#10b981}
+.jrn-jour b.neg{color:#f87171}
+
+.jrn-l{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:11px;
+  transition:background .14s}
+.jrn-l:hover{background:rgba(255,255,255,.045)}
+.jl-sens{width:24px;height:24px;flex-shrink:0;border-radius:8px;display:grid;place-items:center;
+  font-size:12px;font-weight:800}
+.jrn-l.e .jl-sens{color:#10b981;background:rgba(16,185,129,.14)}
+.jrn-l.d .jl-sens{color:#f87171;background:rgba(248,113,113,.14)}
+.jl-c{flex:1;min-width:0}
+.jl-t{font-size:13px;font-weight:600;color:var(--ink);line-height:1.35;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jl-m{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.jl-m > *{font-size:10.5px;color:var(--ink-faint);white-space:nowrap}
+.jl-cat{padding:1px 7px;border-radius:20px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border)}
+.jl-cli::before{content:'👤 '}
+.jl-mode::before{content:'· '}
+.jl-src{text-decoration:none;color:#7dd3fc}
+.jl-src:hover{color:#38bdf8}
+.jl-src.main{color:var(--ink-faint)}
+.jl-mt{font-size:14px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums;
+  flex-shrink:0}
+.jl-mt.pos{color:#10b981}
+.jl-mt.neg{color:#ffb1b1}
+.jl-a{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .16s}
+.jrn-l:hover .jl-a{opacity:1}
+.jl-b{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;cursor:pointer;
+  font-size:11px;text-decoration:none;color:var(--ink-faint);background:var(--glass-border-soft);
+  border:1px solid var(--glass-border)}
+.jl-b:hover{color:var(--gold);border-color:rgba(212,165,38,.4)}
+.jl-b.sup:hover{color:#f87171;border-color:rgba(248,113,113,.4)}
+
+@media (max-width:640px){
+  .jl-a{opacity:1}
+  .jl-m > .jl-mode,.jl-m > .jl-cli{display:none}
+  .jl-mt{font-size:13px}
+}
+
+/* ============================================================
+   RENTABILITÉ — une carte par prestation
+   Sept colonnes de chiffres deviennent illisibles sur un
+   téléphone ; une carte garde son sens à toutes les largeurs.
+   ============================================================ */
+.rent-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin-top:14px}
+.rc{padding:14px 16px;border-radius:16px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);border-left:3px solid transparent;
+  transition:transform .18s var(--ease-ios), border-color .18s}
+.rc:hover{transform:translateY(-2px)}
+.rc.bon{border-left-color:#10b981}
+.rc.moyen{border-left-color:#f0b429}
+.rc.faible{border-left-color:#f87171}
+.rc-tete{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px}
+.rc-id{flex:1;min-width:0}
+.rc-id strong{display:block;font-size:13.5px;color:var(--ink);line-height:1.35}
+.rc-id span{display:block;font-size:11px;color:var(--ink-faint);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-taux{flex-shrink:0;font-family:var(--font-display);font-size:22px;font-weight:800;
+  letter-spacing:-.03em;line-height:1}
+.rc-taux i{font-style:normal;font-size:11px;margin-left:1px}
+.rc-taux.bon{color:#10b981}
+.rc-taux.moyen{color:#f0b429}
+.rc-taux.faible{color:#f87171}
+.rc-barre{height:6px;border-radius:4px;overflow:hidden;margin-bottom:12px;
+  background:linear-gradient(90deg,rgba(16,185,129,.35),rgba(16,185,129,.18))}
+.rb-dep{display:block;height:100%;border-radius:4px;
+  background:linear-gradient(90deg,#fca5a5,#f87171)}
+.rc-chiffres{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.rch{min-width:0}
+.rch span{display:block;font-size:10.5px;color:var(--ink-faint);letter-spacing:.03em}
+.rch b{display:block;font-size:13.5px;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums;margin-top:1px}
+.rch b.ok{color:#10b981}
+.rch b.dep{color:#f87171}
+.rch b.attente{color:var(--ink-faint)}
+.rch em{display:block;font-style:normal;font-size:10px;color:#f0b429;margin-top:1px}
+.rch.marge b{font-size:15px;font-weight:800}
+@media (max-width:420px){ .rent-liste{grid-template-columns:1fr} }

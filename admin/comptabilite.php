@@ -174,6 +174,12 @@ $clients = $pdo->query('SELECT id, nom FROM clients ORDER BY nom')->fetchAll();
 $charges = charges_du_mois($pdo, $mois);
 $chargesDues = array_values(array_filter($charges, fn($c) => !$c['deja']));
 
+/* Montant court : la devise est rappelée en tête de page, la répéter sur
+   chaque ligne alourdirait la lecture. */
+if (!function_exists('nfc')) {
+    function nfc($v) { return number_format((float)$v, 0, ',', ' '); }
+}
+
 admin_header('Comptabilité', 'comptabilite', $pdo, $settings);
 ?>
 <?php
@@ -281,48 +287,74 @@ try {
       </select>
     </form>
   </h2>
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Origine</th><th>Mode</th><th style="text-align:right">Montant</th><th style="text-align:right">Actions</th></tr></thead>
-      <tbody>
-        <?php foreach ($ops as $o): ?>
-        <tr>
-          <td><?= date('d/m/Y', strtotime($o['date_operation'])) ?></td>
-          <td><strong><?= e($o['libelle']) ?></strong><?= $o['client'] ? '<br><small>'.e($o['client']).'</small>' : '' ?></td>
-          <td><span class="badge"><?= e($o['categorie']) ?></span></td>
-          <td>
-            <?php /* D'où vient cette écriture ? Un bon de caisse l'a créée
-                     automatiquement, ou elle a été saisie ici à la main. */ ?>
+  <?php
+  /* Un tableau à sept colonnes devient illisible dès la dixième ligne : les
+     colonnes se serrent et le libellé se coupe. On présente donc chaque
+     opération sur une ligne compacte, où l'essentiel — date, libellé, montant —
+     saute aux yeux, et le reste s'efface derrière. */
+  $moisNoms = ['', 'jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
+  $jourPrec = '';
+  ?>
+  <div class="jrn">
+    <?php foreach ($ops as $o):
+      $d = strtotime($o['date_operation']);
+      $jour = date('Y-m-d', $d);
+      $entree = $o['type'] === 'entree';
+    ?>
+      <?php if ($jour !== $jourPrec): $jourPrec = $jour; ?>
+      <div class="jrn-jour">
+        <span><?= date('j', $d) . ' ' . $moisNoms[(int)date('n', $d)] ?></span>
+        <?php
+          /* Solde du jour : on voit tout de suite si la journée a rapporté. */
+          $sj = 0;
+          foreach ($ops as $x) if (date('Y-m-d', strtotime($x['date_operation'])) === $jour)
+              $sj += ($x['type'] === 'entree' ? 1 : -1) * (float)$x['montant'];
+        ?>
+        <b class="<?= $sj >= 0 ? 'pos' : 'neg' ?>"><?= ($sj >= 0 ? '+' : '−') . ' ' . nfc(abs($sj)) ?></b>
+      </div>
+      <?php endif; ?>
+
+      <div class="jrn-l <?= $entree ? 'e' : 'd' ?>">
+        <span class="jl-sens" title="<?= $entree ? 'Entrée' : 'Dépense' ?>"><?= $entree ? '↓' : '↑' ?></span>
+
+        <div class="jl-c">
+          <div class="jl-t"><?= e($o['libelle']) ?></div>
+          <div class="jl-m">
+            <span class="jl-cat"><?= e($o['categorie']) ?></span>
+            <?php if ($o['client']): ?><span class="jl-cli"><?= e($o['client']) ?></span><?php endif; ?>
+            <?php if ($o['mode_paiement']): ?><span class="jl-mode"><?= e($o['mode_paiement']) ?></span><?php endif; ?>
             <?php if (!empty($o['recu_id'])): ?>
-              <a class="orig orig-bon" href="recus.php?type=<?= $o['type'] === 'entree' ? 'entree' : 'sortie' ?>&edit=<?= (int)$o['recu_id'] ?>#form"
-                 title="Voir le bon de caisse">🔗 Bon de caisse</a>
+            <a class="jl-src" href="recus.php?type=<?= $entree ? 'entree' : 'sortie' ?>&edit=<?= (int)$o['recu_id'] ?>#form">🔗 bon</a>
             <?php else: ?>
-              <span class="orig orig-main">✍️ Saisie directe</span>
+            <span class="jl-src main">✍️ saisie</span>
             <?php endif; ?>
-          </td>
-          <td><?= e($o['mode_paiement']) ?></td>
-          <td style="text-align:right;font-weight:800;color:<?= $o['type']==='entree'?'var(--teal)':'#ffb1b1' ?>">
-            <?= $o['type']==='entree'?'+':'−' ?> <?= money($o['montant'], $devise) ?>
-          </td>
-          <td>
-            <div class="td-actions">
-              <?php if (!empty($o['recu_id'])): ?>
-                <a class="btn btn-glass btn-sm" href="recus.php?type=<?= $o['type'] === 'entree' ? 'entree' : 'sortie' ?>&edit=<?= (int)$o['recu_id'] ?>#form"
-                   title="Se modifie sur le bon de caisse">✏️ Le bon</a>
-              <?php else: ?>
-                <a class="btn btn-glass btn-sm" href="?edit=<?= $o['id'] ?>#form">✏️</a>
-                <form method="post" data-confirm="Supprimer cette opération ?">
-                  <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-                  <button class="btn btn-danger btn-sm" name="supprimer" value="<?= $o['id'] ?>">✕</button>
-                </form>
-              <?php endif; ?>
-            </div>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-        <?php if (!$ops): ?><tr><td colspan="7" style="text-align:center;padding:30px;color:var(--ink-faint)">Aucune opération pour cette période.</td></tr><?php endif; ?>
-      </tbody>
-    </table>
+          </div>
+        </div>
+
+        <div class="jl-mt <?= $entree ? 'pos' : 'neg' ?>">
+          <?= $entree ? '+' : '−' ?> <?= nfc($o['montant']) ?>
+        </div>
+
+        <div class="jl-a">
+          <?php if (!empty($o['recu_id'])): ?>
+            <a class="jl-b" href="recus.php?type=<?= $entree ? 'entree' : 'sortie' ?>&edit=<?= (int)$o['recu_id'] ?>#form"
+               title="Se modifie sur le bon de caisse">✏️</a>
+          <?php else: ?>
+            <a class="jl-b" href="?mois=<?= e($mois) ?>&edit=<?= $o['id'] ?>#form" title="Modifier">✏️</a>
+            <form method="post" style="display:inline"
+                  data-confirm="Supprimer cette opération ? Elle disparaîtra définitivement de vos comptes.">
+              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+              <button class="jl-b sup" name="supprimer" value="<?= $o['id'] ?>" title="Supprimer">✕</button>
+            </form>
+          <?php endif; ?>
+        </div>
+      </div>
+    <?php endforeach; ?>
+
+    <?php if (!$ops): ?>
+    <p style="text-align:center;padding:30px;color:var(--ink-faint);font-size:13px;margin:0">
+      Aucune opération pour cette période.</p>
+    <?php endif; ?>
   </div>
 
   <?php if ($nbPages > 1): ?>

@@ -167,6 +167,9 @@ function retourArriere(){
 <?php $pwaBase='..'; $pwaBouton=false; include __DIR__.'/../../config/pwa_script.php'; ?>
 <script>window.INACTIVITE_SECONDES = <?= (int)INACTIVITE_MAX ?>; window.INACTIVITE_URL = '../login.php?inactif=1';</script>
 <script src="../assets/js/inactivite.js"></script>
+<?php /* Fenêtres de confirmation et progression des envois, communes à toute
+         l'application. Chargé en dernier : il s'applique à tout ce qui précède. */ ?>
+<script src="<?= asset('../assets/js/ui.js') ?>"></script>
 </body>
 </html>
 <?php } ?>

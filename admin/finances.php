@@ -253,39 +253,49 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
       <span class="rr-l">Charges générales</span></div>
   </div>
 
-  <div class="tbl-wrap" style="margin-top:12px">
-    <table>
-      <thead><tr>
-        <th class="l">Activité</th><th>Client</th>
-        <th class="r">Facturé</th><th class="r">Encaissé</th>
-        <th class="r">Dépenses</th><th class="r">Marge</th><th style="width:110px">Rentabilité</th>
-      </tr></thead>
-      <tbody>
-      <?php foreach ($activites as $iAct => $a):
-        $t = (float)$a['taux'];
-        $classe = $t >= 40 ? 'bon' : ($t >= 15 ? 'moyen' : 'faible'); ?>
-        <tr class="<?= $iAct >= $activitesVisibles ? 'act-cachee' : '' ?>"
-            <?= $iAct >= $activitesVisibles ? 'hidden' : '' ?>>
-          <td>
-            <span style="font-weight:700;color:var(--ink)"><?= e($a['activite'] ?: $a['numero']) ?></span>
-            <div style="font-size:11px;color:var(--ink-faint)"><?= e($a['numero']) ?> ·
-              <?= !empty($a['date_emission']) ? date('d/m/Y', strtotime($a['date_emission'])) : '' ?></div>
-          </td>
-          <td style="font-size:12.5px"><?= e($a['client'] ?: '—') ?></td>
-          <td class="r"><?= nf($a['ca']) ?></td>
-          <td class="r" style="color:<?= $a['encaisse'] >= $a['ca'] ? '#10b981' : 'var(--ink-faint)' ?>"><?= nf($a['encaisse']) ?></td>
-          <td class="r" style="color:#f87171"><?= nf($a['depenses']) ?></td>
-          <td class="r" style="font-weight:800;color:<?= $a['marge'] >= 0 ? '#10b981' : '#f87171' ?>"><?= nf($a['marge']) ?></td>
-          <td>
-            <div class="rent-jauge <?= $classe ?>">
-              <span style="width:<?= max(3, min(100, (int)$t)) ?>%"></span>
-            </div>
-            <div class="rent-pct <?= $classe ?>"><?= number_format($t, 0) ?> %</div>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
+  <?php
+  /* Une carte par prestation plutôt qu'un tableau de sept colonnes. Sur un
+     téléphone, sept colonnes de chiffres deviennent illisibles ; une carte
+     garde son sens à toutes les largeurs, et la barre de marge se lit d'un
+     coup d'œil sans chercher dans une colonne. */
+  ?>
+  <div class="rent-liste">
+    <?php foreach ($activites as $iAct => $a):
+      $t = (float)$a['taux'];
+      $classe = $t >= 40 ? 'bon' : ($t >= 15 ? 'moyen' : 'faible');
+      $reste  = $a['ca'] - $a['encaisse'];
+      /* Part des dépenses dans le chiffre d'affaires : c'est elle qui explique
+         la marge, et la barre la rend immédiatement lisible. */
+      $partDep = $a['ca'] > 0 ? min(100, $a['depenses'] / $a['ca'] * 100) : 0;
+    ?>
+    <div class="rc <?= $classe ?> <?= $iAct >= $activitesVisibles ? 'act-cachee' : '' ?>"
+         <?= $iAct >= $activitesVisibles ? 'hidden' : '' ?>>
+
+      <div class="rc-tete">
+        <div class="rc-id">
+          <strong><?= e($a['activite'] ?: $a['numero']) ?></strong>
+          <span><?= e($a['client'] ?: 'Client de passage') ?>
+            · <?= e($a['numero']) ?><?= !empty($a['date_emission']) ? ' · ' . date('d/m/Y', strtotime($a['date_emission'])) : '' ?></span>
+        </div>
+        <div class="rc-taux <?= $classe ?>"><?= number_format($t, 0) ?><i>%</i></div>
+      </div>
+
+      <div class="rc-barre" title="Part des dépenses dans le chiffre d'affaires">
+        <span class="rb-dep" style="width:<?= round($partDep, 1) ?>%"></span>
+      </div>
+
+      <div class="rc-chiffres">
+        <div class="rch"><span>Facturé</span><b><?= nf($a['ca']) ?></b></div>
+        <div class="rch"><span>Encaissé</span>
+          <b class="<?= $a['encaisse'] >= $a['ca'] - 1 ? 'ok' : 'attente' ?>"><?= nf($a['encaisse']) ?></b>
+          <?php if ($reste > 1): ?><em>reste <?= nf($reste) ?></em><?php endif; ?>
+        </div>
+        <div class="rch"><span>Dépenses</span><b class="dep"><?= nf($a['depenses']) ?></b></div>
+        <div class="rch marge"><span>Marge</span>
+          <b class="<?= $a['marge'] >= 0 ? 'ok' : 'dep' ?>"><?= nf($a['marge']) ?></b></div>
+      </div>
+    </div>
+    <?php endforeach; ?>
   </div>
 
   <?php if ($activitesTotal > $activitesVisibles): ?>
@@ -316,7 +326,7 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
   var b = document.getElementById('voir-activites');
   if (!b) return;
   b.addEventListener('click', function () {
-    var lignes = document.querySelectorAll('tr.act-cachee');
+    var lignes = document.querySelectorAll('.act-cachee');
     lignes.forEach(function (l, i) {
       l.hidden = false;
       l.style.opacity = 0;
