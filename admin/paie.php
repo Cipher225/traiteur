@@ -67,7 +67,11 @@ if (isset($_GET['edit'])) {
 }
 
 $employes = $pdo->query('SELECT id, nom, poste, salaire_base, banque, numero_compte FROM employes WHERE actif=1 AND COALESCE(fiche_perso,0)=0 ORDER BY nom')->fetchAll();
-$fiches = $pdo->query("SELECT fp.*, e.nom AS employe, e.poste FROM fiches_paie fp LEFT JOIN employes e ON e.id=fp.employe_id ORDER BY fp.periode DESC, fp.id DESC")->fetchAll();
+/* Douze bulletins par employé et par an : la liste grossit vite. */
+$pg = pagination($pdo, "SELECT COUNT(*) FROM fiches_paie", [], 30);
+$fiches = $pdo->query("SELECT fp.*, e.nom AS employe, e.poste FROM fiches_paie fp
+                       LEFT JOIN employes e ON e.id=fp.employe_id
+                       ORDER BY fp.periode DESC, fp.id DESC" . $pg['limite'])->fetchAll();
 
 /* Rangement par année → mois (période de paie) */
 require_once __DIR__ . '/includes/rangement.php';
@@ -246,6 +250,8 @@ calc();
     </div>
   <?php endif; ?>
   </div>
+
+<?= pagination_html($pg, 'bulletin', []) ?>
 </div>
 <?php include __DIR__ . '/includes/envoyer_modal.php'; ?>
 <?php endif; ?>

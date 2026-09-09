@@ -239,7 +239,11 @@ foreach ($factures as &$fg) {
 unset($fg);
 
 $vueRng = ($_GET['vue'] ?? 'arbre') === 'liste' ? 'liste' : 'arbre';
-$fRng = ['client' => (int)($_GET['fc'] ?? 0), 'mois' => (int)($_GET['fm'] ?? 0), 'annee' => (int)($_GET['fa'] ?? 0)];
+/* Par défaut, on n'affiche que l'année en cours. Charger dix ans de documents
+   à chaque ouverture ferait une page de plusieurs mégaoctets, alors qu'on
+   consulte presque toujours l'année en cours. Le filtre permet de remonter. */
+$anneeParDefaut = isset($_GET['fa']) ? (int)$_GET['fa'] : (int)date('Y');
+$fRng = ['client' => (int)($_GET['fc'] ?? 0), 'mois' => (int)($_GET['fm'] ?? 0), 'annee' => $anneeParDefaut];
 // Filtre par statut (dont "impayees" = brouillon + envoyée)
 $fStatut = $_GET['fs'] ?? '';
 $statutsValides = ['brouillon','envoyee','payee','annulee','impayees'];
@@ -265,6 +269,15 @@ if ($fStatut !== '' && $doc === 'facture') {
         return $s === $fStatut;
     }));
 }
+/* Bornage de l'affichage. Une année chargée peut compter plusieurs centaines
+   de documents : les produire tous alourdit la page sans servir personne. On
+   affiche les plus récents et on indique combien restent, avec les filtres
+   pour aller les chercher. */
+$docsTotal = count($facturesAff);
+$docsMax   = 50;
+$docsTronque = $docsTotal > $docsMax;
+if ($docsTronque) $facturesAff = array_slice($facturesAff, 0, $docsMax);
+
 $anneesRng = rangement_annees($factures, 'date_emission');
 
 $badges = ['brouillon'=>'badge','envoyee'=>'badge-violet','payee'=>'badge-teal','annulee'=>'badge-danger'];

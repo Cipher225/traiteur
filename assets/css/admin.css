@@ -2920,3 +2920,34 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .rch em{display:block;font-style:normal;font-size:10px;color:#f0b429;margin-top:1px}
 .rch.marge b{font-size:15px;font-weight:800}
 @media (max-width:420px){ .rent-liste{grid-template-columns:1fr} }
+
+/* Graphique d'évolution du bilan financier */
+.evo-tete{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  flex-wrap:wrap;margin-bottom:12px}
+.evo-series{display:flex;gap:6px;flex-wrap:wrap}
+.evs{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:20px;
+  cursor:pointer;font-size:12px;color:var(--ink-faint);background:transparent;
+  border:1px solid var(--glass-border);transition:all .18s}
+.evs i{width:9px;height:9px;border-radius:50%;display:inline-block;opacity:.35;transition:opacity .18s}
+.evs.actif{color:var(--ink);background:var(--glass-border-soft);border-color:rgba(212,165,38,.32)}
+.evs.actif i{opacity:1}
+.evs:hover{color:var(--ink)}
+.evo-zone{position:relative;border-radius:16px;padding:10px 8px 4px;
+  background:rgba(0,0,0,.16);border:1px solid var(--glass-border)}
+.evo-zone svg{width:100%;height:290px;display:block}
+.ev-hit{cursor:crosshair}
+@media (max-width:700px){ .evo-zone svg{height:220px} }
+
+/* Annuaire : sociétés dépliables */
+.an-soc-bloc > summary{cursor:pointer;list-style:none}
+.an-soc-bloc > summary::-webkit-details-marker{display:none}
+.an-soc-chev{font-size:11px;color:var(--ink-faint);transition:transform .2s;flex-shrink:0}
+.an-soc-bloc[open] .an-soc-chev{transform:rotate(180deg)}
+.an-soc-corps{padding-bottom:4px}
+.an-soc-corps .an-soc-add{display:inline-block;margin:8px 0 4px 14px}
+
+/* Avertissement quand la liste de documents est bornée */
+.rng-tronque{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;
+  padding:10px 15px;border-radius:12px;font-size:12.5px;color:var(--ink-dim);
+  background:rgba(240,180,41,.07);border:1px solid rgba(240,180,41,.24)}
+.rt-aide{color:var(--ink-faint);font-size:11.5px}

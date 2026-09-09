@@ -141,19 +141,37 @@ $renderDoc = function($f) use ($doc, $devise) {
   </div>
 <?php else: ?>
   <!-- Vue arborescence : Année → Mois → Entreprise (ou nom du particulier) -->
-  <?php $arbre = rangement_arbre($facturesAff, 'date_emission', '_rangement'); ?>
+  <?php
+  /* Tout ouvrir affichait des centaines de lignes d'un coup : au bout de deux
+     ans, la page devenait interminable. Seuls l'année et le mois en cours
+     s'ouvrent d'office — le reste attend un clic. */
+  $arbre = rangement_arbre($facturesAff, 'date_emission', '_rangement');
+  $anneeCourante = date('Y');
+  $moisCourant   = date('n');
+  $premierBloc   = true;
+  ?>
   <div class="rng-tree">
-    <?php foreach ($arbre as $annee => $mois): $nbA = 0; foreach($mois as $cl) foreach($cl as $ds) $nbA += count($ds); ?>
-    <details class="rng-annee" open>
+    <?php foreach ($arbre as $annee => $mois): $nbA = 0; foreach($mois as $cl) foreach($cl as $ds) $nbA += count($ds);
+      /* On ouvre l'année en cours, ou la plus récente s'il n'y a rien cette année. */
+      $ouvrirAnnee = ((string)$annee === $anneeCourante) || $premierBloc;
+      $premierBloc = false;
+    ?>
+    <details class="rng-annee" <?= $ouvrirAnnee ? 'open' : '' ?>>
       <summary><?= $annee ?><span class="cnt"><?= $nbA ?> doc<?= $nbA>1?'s':'' ?></span></summary>
-      <?php foreach ($mois as $m => $clients): $nbM = 0; foreach($clients as $ds) $nbM += count($ds); ?>
-      <details class="rng-mois" open>
+      <?php $premierMois = true; foreach ($mois as $m => $clients): $nbM = 0; foreach($clients as $ds) $nbM += count($ds);
+        $ouvrirMois = $ouvrirAnnee && (((int)$m === $moisCourant) || $premierMois);
+        $premierMois = false;
+      ?>
+      <details class="rng-mois" <?= $ouvrirMois ? 'open' : '' ?>>
         <summary><?= $moisFr($m) ?><span class="cnt"><?= $nbM ?></span></summary>
         <?php foreach ($clients as $client => $docs):
           $estEntreprise = (($docs[0]['type_client'] ?? '') === 'entreprise') || (trim((string)($docs[0]['entreprise'] ?? '')) !== '' && ($docs[0]['entreprise'] === $client));
           $ico = $estEntreprise ? '🏢' : '👤';
+          /* Un client avec beaucoup de documents reste replié : sinon un gros
+             client à lui seul remplirait l'écran. */
+          $ouvrirClient = $ouvrirMois && count($docs) <= 8;
         ?>
-        <details class="rng-client" open>
+        <details class="rng-client" <?= $ouvrirClient ? 'open' : '' ?>>
           <summary><?= $ico ?> <?= e($client) ?><span class="cnt"><?= count($docs) ?></span></summary>
           <div class="rng-docs">
             <?php foreach ($docs as $f) echo $renderDoc($f); ?>
@@ -165,4 +183,11 @@ $renderDoc = function($f) use ($doc, $devise) {
     </details>
     <?php endforeach; ?>
   </div>
+<?php endif; ?>
+
+<?php if (!empty($docsTronque)): ?>
+<div class="rng-tronque">
+  <span>📄 <?= (int)count($facturesAff) ?> documents affichés sur <?= (int)$docsTotal ?></span>
+  <span class="rt-aide">Affinez par mois, client ou statut pour voir les autres.</span>
+</div>
 <?php endif; ?>

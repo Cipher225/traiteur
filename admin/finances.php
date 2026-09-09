@@ -83,9 +83,15 @@ try {
                          FROM factures f LEFT JOIN clients c ON c.id = f.client_id
                          WHERE f.type='facture' AND f.statut <> 'annulee'
                            AND YEAR(f.date_emission) = ?
-                         ORDER BY f.date_emission DESC");
+                         ORDER BY f.date_emission DESC LIMIT 60");
     $st->execute([$annee]);
+    /* On analyse les 60 prestations les plus récentes de l'année. Calculer la
+       rentabilité demande trois requêtes par facture : sur plusieurs centaines,
+       la page mettrait plusieurs secondes à s'ouvrir pour un intérêt nul —
+       personne n'examine deux cents lignes à la fois. */
+    $analysees = 0;
     foreach ($st->fetchAll() as $f) {
+        $analysees++;
         $r = rentabilite_activite($pdo, (int)$f['id']);
         if ($r['ca'] <= 0 && $r['depenses'] <= 0) continue;
         $activites[] = $f + $r;
@@ -93,11 +99,20 @@ try {
     /* Les prestations les moins rentables en premier : ce sont celles qui
        demandent votre attention. */
     usort($activites, fn($a, $b) => $a['taux'] <=> $b['taux']);
-    /* Sur une année chargée, la liste devient interminable. On montre les plus
-       urgentes — les moins rentables — et le reste se déplie à la demande. */
+
+    /* Nombre total de prestations de l'année, pour situer l'échantillon. */
+    $stN = $pdo->prepare("SELECT COUNT(*) FROM factures
+                          WHERE type='facture' AND statut <> 'annulee' AND YEAR(date_emission) = ?");
+    $stN->execute([$annee]);
+    $activitesAnnee = (int)$stN->fetchColumn();
+
+    /* On n'affiche que 24 cartes : au-delà, la page devient un mur. */
     $activitesTotal = count($activites);
+    $activites = array_slice($activites, 0, 24);
     $activitesVisibles = 8;
-} catch (Throwable $e) { $activites = []; $activitesTotal = 0; $activitesVisibles = 8; }
+} catch (Throwable $e) {
+    $activites = []; $activitesTotal = 0; $activitesVisibles = 8; $activitesAnnee = 0; $analysees = 0;
+}
 
 $totalCA   = array_sum(array_column($activites, 'ca'));
 $totalDep  = array_sum(array_column($activites, 'depenses'));
@@ -143,27 +158,195 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
   </div>
 </div>
 
-<div class="panel glass" style="margin-bottom:14px">
-  <h2>📈 Évolution mensuelle</h2>
-  <div class="fin-legende">
-    <span><i style="background:#10b981"></i> Encaissements</span>
-    <span><i style="background:#f87171"></i> Dépenses</span>
-  </div>
-  <div class="fin-graphe">
-    <?php for ($m = 1; $m <= 12; $m++):
-      $e = $mois[$m]['entree']; $d = $mois[$m]['depense'];
-      $he = $maxMois > 0 ? max(2, round($e / $maxMois * 100)) : 2;
-      $hd = $maxMois > 0 ? max(2, round($d / $maxMois * 100)) : 2; ?>
-    <div class="fin-col" title="<?= $nomsMois[$m] ?> — encaissé <?= $fmt($e) ?>, dépensé <?= $fmt($d) ?>">
-      <div class="fin-barres">
-        <div class="fin-b fin-e" style="height:<?= $he ?>%"><span><?= $e > 0 ? $fmt($e) : '' ?></span></div>
-        <div class="fin-b fin-d" style="height:<?= $hd ?>%"></div>
-      </div>
-      <div class="fin-mois"><?= $nomsMois[$m] ?></div>
+<div class="panel glass" id="evo" style="margin-bottom:14px">
+  <div class="evo-tete">
+    <h2 style="margin:0">📈 Évolution mensuelle</h2>
+    <div class="evo-series">
+      <button type="button" class="evs actif" data-serie="entrees">
+        <i style="background:linear-gradient(135deg,#6ee7b7,#10b981)"></i>Encaissements</button>
+      <button type="button" class="evs actif" data-serie="depenses">
+        <i style="background:linear-gradient(135deg,#fca5a5,#f87171)"></i>Dépenses</button>
+      <button type="button" class="evs" data-serie="solde">
+        <i style="background:linear-gradient(135deg,#e9c15c,#d4a526)"></i>Solde</button>
     </div>
-    <?php endfor; ?>
+  </div>
+  <div class="evo-zone">
+    <svg id="evo-svg" viewBox="0 0 900 300" preserveAspectRatio="none"
+         aria-label="Évolution des encaissements et dépenses sur l'année"></svg>
+    <div id="evo-bulle" class="pg-bulle" hidden></div>
   </div>
 </div>
+
+<script>
+(function () {
+  /* Même moteur que le pouls du tableau de bord : des aires adoucies plutôt
+     que des barres. Sur douze mois, une courbe montre la tendance ; des barres
+     obligent à comparer des hauteurs une à une. */
+  var svg = document.getElementById('evo-svg');
+  var bulle = document.getElementById('evo-bulle');
+  if (!svg) return;
+
+  var MOIS = <?= json_encode(array_values(array_slice($nomsMois, 1)), JSON_UNESCAPED_UNICODE) ?>;
+  var DATA = {
+    entrees:  <?= json_encode(array_map(fn($m) => round($m['entree']), array_values($mois))) ?>,
+    depenses: <?= json_encode(array_map(fn($m) => round($m['depense']), array_values($mois))) ?>,
+    solde:    <?= json_encode(array_map(fn($m) => round($m['entree'] - $m['depense']), array_values($mois))) ?>
+  };
+  var COUL = { entrees: ['#6ee7b7', '#10b981'], depenses: ['#fca5a5', '#f87171'], solde: ['#e9c15c', '#d4a526'] };
+  var NOMS = { entrees: 'Encaissements', depenses: 'Dépenses', solde: 'Solde' };
+
+  var actives = ['entrees', 'depenses'];
+  var anime = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var L = 900, H = 300, MG = 58, MD = 18, MH = 20, MB = 38;
+  var lg = L - MG - MD, ht = H - MH - MB;
+
+  function fmt(v) {
+    var a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1).replace('.0', '') + ' Md';
+    if (a >= 1e6) return (v / 1e6).toFixed(1).replace('.0', '') + ' M';
+    if (a >= 1e3) return Math.round(v / 1e3) + ' k';
+    return String(Math.round(v));
+  }
+  function fmtLong(v) { return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+  function bornes() {
+    var vals = [];
+    actives.forEach(function (s) { vals = vals.concat(DATA[s]); });
+    if (!vals.length) vals = [0];
+    var mx = Math.max.apply(null, vals.concat([0]));
+    var mn = Math.min.apply(null, vals.concat([0]));
+    if (mx === mn) mx = mn + 1;
+    return { mx: mx * 1.08, mn: mn < 0 ? mn * 1.12 : 0 };
+  }
+  function y(v, b) { return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht; }
+  function x(i) { return MG + (MOIS.length > 1 ? i * (lg / (MOIS.length - 1)) : lg / 2); }
+
+  function chemin(vals, b) {
+    var d = '';
+    for (var i = 0; i < vals.length; i++) {
+      var px = x(i), py = y(vals[i], b);
+      if (i === 0) { d += 'M' + px + ',' + py; continue; }
+      var pxp = x(i - 1), pyp = y(vals[i - 1], b), mx = (pxp + px) / 2;
+      d += 'C' + mx + ',' + pyp + ' ' + mx + ',' + py + ' ' + px + ',' + py;
+    }
+    return d;
+  }
+
+  function dessiner() {
+    var b = bornes(), el = '<defs>';
+    Object.keys(COUL).forEach(function (s) {
+      el += '<linearGradient id="ev-a-' + s + '" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0%" stop-color="' + COUL[s][0] + '" stop-opacity=".40"/>'
+          + '<stop offset="100%" stop-color="' + COUL[s][1] + '" stop-opacity="0"/></linearGradient>'
+          + '<linearGradient id="ev-l-' + s + '" x1="0" y1="0" x2="0" y2="1">'
+          + '<stop offset="0%" stop-color="' + COUL[s][0] + '"/>'
+          + '<stop offset="100%" stop-color="' + COUL[s][1] + '"/></linearGradient>';
+    });
+    el += '<filter id="ev-lueur"><feGaussianBlur stdDeviation="3.5" result="f"/>'
+        + '<feMerge><feMergeNode in="f"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
+
+    for (var k = 0; k <= 4; k++) {
+      var v = b.mn + (b.mx - b.mn) * (k / 4), py = y(v, b);
+      el += '<line x1="' + MG + '" y1="' + py + '" x2="' + (L - MD) + '" y2="' + py
+          + '" stroke="rgba(255,255,255,.07)"/>'
+          + '<text x="' + (MG - 10) + '" y="' + (py + 4) + '" text-anchor="end" '
+          + 'fill="rgba(255,255,255,.36)" font-size="11">' + fmt(v) + '</text>';
+    }
+    if (b.mn < 0) {
+      el += '<line x1="' + MG + '" y1="' + y(0, b) + '" x2="' + (L - MD) + '" y2="' + y(0, b)
+          + '" stroke="rgba(255,255,255,.22)" stroke-width="1.5" stroke-dasharray="4 4"/>';
+    }
+    MOIS.forEach(function (m, i) {
+      el += '<text x="' + x(i) + '" y="' + (H - 13) + '" text-anchor="middle" '
+          + 'fill="rgba(255,255,255,.42)" font-size="11.5">' + m + '</text>';
+    });
+
+    actives.forEach(function (s) {
+      var d = chemin(DATA[s], b), base = y(Math.max(0, b.mn), b);
+      el += '<path d="' + d + ' L' + x(MOIS.length - 1) + ',' + base + ' L' + x(0) + ',' + base
+          + ' Z" fill="url(#ev-a-' + s + ')" class="ev-aire"/>'
+          + '<path d="' + d + '" fill="none" stroke="url(#ev-l-' + s + ')" stroke-width="2.6" '
+          + 'stroke-linecap="round" filter="url(#ev-lueur)" class="ev-ligne"/>';
+      DATA[s].forEach(function (v, i) {
+        el += '<circle class="ev-pt" cx="' + x(i) + '" cy="' + y(v, b) + '" r="3.4" fill="'
+            + COUL[s][1] + '" stroke="#0a1020" stroke-width="1.6"/>';
+      });
+    });
+
+    MOIS.forEach(function (m, i) {
+      var larg = lg / MOIS.length;
+      el += '<rect class="ev-hit" data-i="' + i + '" x="' + (x(i) - larg / 2) + '" y="' + MH
+          + '" width="' + larg + '" height="' + ht + '" fill="transparent"/>';
+    });
+    el += '<line id="ev-guide" x1="0" y1="' + MH + '" x2="0" y2="' + (MH + ht)
+        + '" stroke="rgba(240,193,75,.5)" stroke-dasharray="3 3" opacity="0"/>';
+
+    svg.innerHTML = el;
+    survol();
+
+    if (anime) {
+      svg.querySelectorAll('.ev-ligne').forEach(function (p, n) {
+        var l = p.getTotalLength();
+        p.style.strokeDasharray = l; p.style.strokeDashoffset = l;
+        p.style.transition = 'stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1) ' + (n * .16) + 's';
+        requestAnimationFrame(function () { p.style.strokeDashoffset = 0; });
+      });
+      svg.querySelectorAll('.ev-aire').forEach(function (a, n) {
+        a.style.opacity = 0; a.style.transition = 'opacity .9s ease ' + (.3 + n * .16) + 's';
+        requestAnimationFrame(function () { a.style.opacity = 1; });
+      });
+      svg.querySelectorAll('.ev-pt').forEach(function (c, n) {
+        c.style.opacity = 0; c.style.transition = 'opacity .4s ease ' + (.65 + n * .02) + 's';
+        requestAnimationFrame(function () { c.style.opacity = 1; });
+      });
+    }
+  }
+
+  function survol() {
+    var guide = svg.querySelector('#ev-guide');
+    svg.querySelectorAll('.ev-hit').forEach(function (z) {
+      z.addEventListener('mouseenter', function () {
+        var i = +this.dataset.i;
+        if (guide) { guide.setAttribute('x1', x(i)); guide.setAttribute('x2', x(i)); guide.setAttribute('opacity', 1); }
+        var h = '<div class="pb-mois">' + MOIS[i] + '</div>';
+        actives.forEach(function (s) {
+          h += '<div class="pb-l"><i style="background:' + COUL[s][1] + '"></i><span>'
+             + NOMS[s] + '</span><b>' + fmtLong(DATA[s][i]) + '</b></div>';
+        });
+        bulle.innerHTML = h; bulle.hidden = false;
+        var r = svg.getBoundingClientRect();
+        bulle.style.left = Math.min(Math.max((x(i) / L) * r.width, 90), r.width - 90) + 'px';
+      });
+    });
+    svg.addEventListener('mouseleave', function () {
+      bulle.hidden = true;
+      if (guide) guide.setAttribute('opacity', 0);
+    });
+  }
+
+  document.querySelectorAll('#evo .evs').forEach(function (b2) {
+    b2.addEventListener('click', function () {
+      var s = this.dataset.serie, i = actives.indexOf(s);
+      if (i >= 0) { if (actives.length === 1) return; actives.splice(i, 1); this.classList.remove('actif'); }
+      else { actives.push(s); this.classList.add('actif'); }
+      dessiner();
+    });
+  });
+
+  var vu = false;
+  function lancer() { if (vu) return; vu = true; dessiner(); }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (e, o) {
+      e.forEach(function (x2) { if (x2.isIntersecting) { lancer(); o.disconnect(); } });
+    }, { threshold: .15 }).observe(document.getElementById('evo'));
+  } else { lancer(); }
+
+  var t;
+  window.addEventListener('resize', function () {
+    clearTimeout(t); t = setTimeout(function () { if (vu) { anime = false; dessiner(); } }, 200);
+  });
+})();
+</script>
 
 <div class="fin-duo">
   <div class="panel glass">
@@ -298,9 +481,16 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
     <?php endforeach; ?>
   </div>
 
-  <?php if ($activitesTotal > $activitesVisibles): ?>
+  <?php $affichees = count($activites); ?>
+  <?php if ($affichees > $activitesVisibles): ?>
   <button type="button" class="btn btn-glass btn-sm" id="voir-activites" style="margin-top:12px">
-    ▾ Voir les <?= $activitesTotal - $activitesVisibles ?> autres activités</button>
+    ▾ Voir les <?= $affichees - $activitesVisibles ?> autres activités</button>
+  <?php endif; ?>
+  <?php if ($activitesAnnee > $analysees): ?>
+  <p style="margin:10px 0 0;font-size:11.5px;color:var(--ink-faint)">
+    Analyse portant sur les <?= (int)$analysees ?> prestations les plus récentes,
+    sur <?= (int)$activitesAnnee ?> en <?= (int)$annee ?>.
+  </p>
   <?php endif; ?>
 
   <p style="margin:12px 0 0;font-size:12px;color:var(--ink-faint);line-height:1.6">

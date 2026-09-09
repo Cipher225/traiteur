@@ -115,7 +115,12 @@ if ($q !== '') {
     $stmt->execute(["%$q%", "%$q%", "%$q%"]);
     $clients = $stmt->fetchAll();
 } else {
-    $clients = $pdo->query("SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif FROM clients c LEFT JOIN users u ON u.client_id=c.id AND u.role='client' ORDER BY c.nom")->fetchAll();
+    /* Après quelques centaines de clients, tout afficher rend la page lente
+       et le défilement interminable. */
+    $pg = pagination($pdo, "SELECT COUNT(*) FROM clients", [], 30);
+    $clients = $pdo->query("SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif
+                            FROM clients c LEFT JOIN users u ON u.client_id=c.id AND u.role='client'
+                            ORDER BY c.nom" . $pg['limite'])->fetchAll();
 }
 
 admin_header('Clients', 'clients', $pdo, $settings);
@@ -194,5 +199,7 @@ admin_header('Clients', 'clients', $pdo, $settings);
       </tbody>
     </table>
   </div>
+
+<?= pagination_html($pg, 'client', ['q' => $_GET['q'] ?? '']) ?>
 </div>
 <?php admin_footer(); ?>

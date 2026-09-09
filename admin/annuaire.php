@@ -89,7 +89,15 @@ if ($q !== '') {
     $args = array_fill(0, 8, '%' . $q . '%');
 }
 $sql .= " ORDER BY ct.principal DESC, ct.nom";
-$st = $pdo->prepare($sql);
+
+/* On ne charge qu'une page de contacts. Produire deux cents fiches, même
+   repliées, alourdit la page inutilement : le navigateur doit tout construire
+   avant d'afficher quoi que ce soit. */
+$sqlCompte = preg_replace('/^SELECT .*? FROM /s', 'SELECT COUNT(*) FROM ', $sql);
+$sqlCompte = preg_replace('/ ORDER BY .*$/s', '', $sqlCompte);
+$pg = pagination($pdo, $sqlCompte, $args, 40);
+
+$st = $pdo->prepare($sql . $pg['limite']);
 $st->execute($args);
 $contacts = $st->fetchAll();
 
@@ -135,9 +143,20 @@ admin_header('Annuaire téléphonique', 'annuaire', $pdo, $settings);
 ?>
 
 <div class="stats-row" style="margin-bottom:14px">
-  <div class="stat-card"><div class="stat-val"><?= count($contacts) ?></div><div class="stat-lbl">Contacts</div></div>
-  <div class="stat-card"><div class="stat-val"><?= count($societes) ?></div><div class="stat-lbl">Entreprises</div></div>
-  <div class="stat-card"><div class="stat-val"><?= count($particuliers) ?></div><div class="stat-lbl">Particuliers</div></div>
+  <?php
+  /* Ces compteurs portent sur l'annuaire ENTIER, pas sur la page affichée :
+     un total qui change en tournant les pages n'aurait aucun sens. */
+  $totContacts = (int)$pdo->query("SELECT COUNT(*) FROM contacts")->fetchColumn();
+  $totSocietes = (int)$pdo->query("SELECT COUNT(DISTINCT ct.client_id) FROM contacts ct
+                                   JOIN clients c ON c.id = ct.client_id
+                                   WHERE c.type_client='entreprise' OR COALESCE(c.entreprise,'') <> ''")->fetchColumn();
+  $totPartic   = (int)$pdo->query("SELECT COUNT(*) FROM contacts ct
+                                   JOIN clients c ON c.id = ct.client_id
+                                   WHERE c.type_client <> 'entreprise' AND COALESCE(c.entreprise,'') = ''")->fetchColumn();
+  ?>
+  <div class="stat-card"><div class="stat-val"><?= $totContacts ?></div><div class="stat-lbl">Contacts</div></div>
+  <div class="stat-card"><div class="stat-val"><?= $totSocietes ?></div><div class="stat-lbl">Entreprises</div></div>
+  <div class="stat-card"><div class="stat-val"><?= $totPartic ?></div><div class="stat-lbl">Particuliers</div></div>
 </div>
 
 <div class="panel glass" style="margin-bottom:14px">
@@ -183,31 +202,57 @@ function ligne_contact(array $ct, bool $admin): void {
 
 <?php if ($societes): ?>
 <div class="panel glass" style="margin-bottom:14px">
-  <h2>🏢 Entreprises <span class="cnt"><?= count($societes) ?></span></h2>
-  <?php foreach ($societes as $s): ?>
-  <div class="an-soc-bloc">
-    <div class="an-soc-tete">
+  <h2>🏢 Entreprises <span class="cnt"><?= count($societes) ?> sur cette page</span></h2>
+  <?php
+  /* Avec deux cents interlocuteurs, tout afficher rend la page lourde et le
+     défilement interminable. Chaque société se déplie à la demande ; seules
+     les premières s'ouvrent d'office, et une recherche ouvre tout ce qu'elle
+     trouve — c'est le comportement attendu quand on cherche quelqu'un. */
+  $iSoc = 0;
+  ?>
+  <?php foreach ($societes as $s): $iSoc++; ?>
+  <details class="an-soc-bloc" <?= ($q !== '' || $iSoc <= 5) ? 'open' : '' ?>>
+    <summary class="an-soc-tete">
       <span class="an-soc-nom">🏢 <?= e($s['nom']) ?></span>
       <span class="an-soc-nb"><?= count($s['contacts']) ?> contact<?= count($s['contacts']) > 1 ? 's' : '' ?></span>
-      <a class="an-soc-add" href="annuaire.php?nouveau=<?= $s['client_id'] ?>#form">➕ Ajouter</a>
+      <span class="an-soc-chev">▾</span>
+    </summary>
+    <div class="an-soc-corps">
+      <?php foreach ($s['contacts'] as $ct) ligne_contact($ct, is_admin()); ?>
+      <a class="an-soc-add" href="annuaire.php?nouveau=<?= $s['client_id'] ?>#form">➕ Ajouter un contact</a>
     </div>
-    <?php foreach ($s['contacts'] as $ct) ligne_contact($ct, is_admin()); ?>
-  </div>
+  </details>
   <?php endforeach; ?>
 </div>
 <?php endif; ?>
 
 <?php if ($particuliers): ?>
 <div class="panel glass" style="margin-bottom:14px">
-  <h2>👤 Particuliers <span class="cnt"><?= count($particuliers) ?></span></h2>
-  <?php foreach ($particuliers as $ct) ligne_contact($ct, is_admin()); ?>
+  <h2>👤 Particuliers <span class="cnt"><?= count($particuliers) ?> sur cette page</span></h2>
+  <?php foreach ($particuliers as $iC => $ct): ?>
+    <div class="<?= ($q === '' && $iC >= 20) ? 'an-cache' : '' ?>" <?= ($q === '' && $iC >= 20) ? 'hidden' : '' ?>>
+      <?php ligne_contact($ct, is_admin()); ?>
+    </div>
+  <?php endforeach; ?>
+  <?php if ($q === '' && count($particuliers) > 20): ?>
+  <button type="button" class="btn btn-glass btn-sm an-plus" style="margin-top:10px">
+    ▾ Voir les <?= count($particuliers) - 20 ?> autres</button>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <?php if ($libres): ?>
 <div class="panel glass" style="margin-bottom:14px">
   <h2>📇 Fournisseurs &amp; partenaires <span class="cnt"><?= count($libres) ?></span></h2>
-  <?php foreach ($libres as $ct) ligne_contact($ct, is_admin()); ?>
+  <?php foreach ($libres as $iC => $ct): ?>
+    <div class="<?= ($q === '' && $iC >= 20) ? 'an-cache' : '' ?>" <?= ($q === '' && $iC >= 20) ? 'hidden' : '' ?>>
+      <?php ligne_contact($ct, is_admin()); ?>
+    </div>
+  <?php endforeach; ?>
+  <?php if ($q === '' && count($libres) > 20): ?>
+  <button type="button" class="btn btn-glass btn-sm an-plus" style="margin-top:10px">
+    ▾ Voir les <?= count($libres) - 20 ?> autres</button>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -281,5 +326,25 @@ $clientPre = (int)($_GET['nouveau'] ?? 0);
     </div>
   </form>
 </details>
+
+<?= pagination_html($pg, 'contact', ['q' => $q]) ?>
+
+<script>
+(function () {
+  /* Le reste d'une liste apparaît à la demande. */
+  document.querySelectorAll('.an-plus').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var bloc = this.closest('.panel');
+      bloc.querySelectorAll('.an-cache').forEach(function (l, i) {
+        l.hidden = false;
+        l.style.opacity = 0;
+        l.style.transition = 'opacity .35s ease ' + (i * .02) + 's';
+        requestAnimationFrame(function () { l.style.opacity = 1; });
+      });
+      this.remove();
+    });
+  });
+})();
+</script>
 
 <?php admin_footer(); ?>

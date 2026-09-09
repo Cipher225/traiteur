@@ -832,6 +832,66 @@ function next_numero(PDO $pdo, string $table, string $prefixe): string {
     return sprintf('%s-%s-%04d', $prefixe, $annee, $n);
 }
 
+/* ----------------------------------------------------------------------------
+   Pagination réutilisable.
+   Après un an d'activité, une liste non bornée fait charger des milliers de
+   lignes : la page devient lente et impossible à parcourir. Cet utilitaire
+   calcule les bornes et fournit le rendu de la navigation.
+   ---------------------------------------------------------------------------- */
+function pagination(PDO $pdo, string $sqlCompte, array $args = [], int $parPage = 30): array {
+    $total = 0;
+    try {
+        $st = $pdo->prepare($sqlCompte);
+        $st->execute($args);
+        $total = (int)$st->fetchColumn();
+    } catch (Throwable $e) {}
+
+    $pages  = max(1, (int)ceil($total / max(1, $parPage)));
+    $page   = max(1, min($pages, (int)($_GET['p'] ?? 1)));
+    return [
+        'total'   => $total,
+        'pages'   => $pages,
+        'page'    => $page,
+        'parPage' => $parPage,
+        'depart'  => ($page - 1) * $parPage,
+        'limite'  => ' LIMIT ' . (int)$parPage . ' OFFSET ' . (int)(($page - 1) * $parPage),
+    ];
+}
+
+/* Rendu de la navigation. $garder : paramètres d'URL à conserver (filtres). */
+function pagination_html(array $p, string $motLibelle = 'élément', array $garder = []): string {
+    if ($p['pages'] <= 1) return '';
+
+    $base = array_filter($garder, fn($v) => $v !== '' && $v !== null);
+    $lien = function (int $n) use ($base) {
+        $base['p'] = $n;
+        return '?' . http_build_query($base);
+    };
+
+    /* On n'affiche pas cinquante numéros : les pages proches, plus la première
+       et la dernière. C'est ce dont on a besoin pour se repérer. */
+    $liste = array_unique(array_filter(
+        [1, $p['page'] - 2, $p['page'] - 1, $p['page'], $p['page'] + 1, $p['page'] + 2, $p['pages']],
+        fn($n) => $n >= 1 && $n <= $p['pages']
+    ));
+    sort($liste);
+
+    $o = '<div class="pagin"><span class="pg-info">'
+       . number_format($p['total'], 0, ',', ' ') . ' ' . $motLibelle . ($p['total'] > 1 ? 's' : '')
+       . ' · page ' . $p['page'] . ' sur ' . $p['pages'] . '</span><div class="pg-liens">';
+
+    if ($p['page'] > 1) $o .= '<a class="pg" href="' . e($lien($p['page'] - 1)) . '">‹</a>';
+    $prec = 0;
+    foreach ($liste as $n) {
+        if ($prec && $n > $prec + 1) $o .= '<span class="pg-pts">…</span>';
+        $o .= '<a class="pg' . ($n === $p['page'] ? ' actif' : '') . '" href="' . e($lien($n)) . '">' . $n . '</a>';
+        $prec = $n;
+    }
+    if ($p['page'] < $p['pages']) $o .= '<a class="pg" href="' . e($lien($p['page'] + 1)) . '">›</a>';
+
+    return $o . '</div></div>';
+}
+
 /* Ajoute la date de modification du fichier à l'URL d'un asset
    → le navigateur recharge automatiquement CSS/JS après une mise à jour */
 function asset(string $chemin): string {
