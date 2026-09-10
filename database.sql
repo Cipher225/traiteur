@@ -1031,3 +1031,19 @@ INSERT IGNORE INTO galerie_albums (id, nom, icone, description, ordre) VALUES
  (3, 'Cocktails',   '🥂', 'Réceptions debout et lancements', 3),
  (4, 'Baptêmes',    '🕊️', 'Cérémonies familiales', 4),
  (5, 'Nos plats',   '🍛', 'Le savoir-faire en cuisine', 5);
+
+-- =====================================================================
+--  LIGNES FACTURÉES PAR JOUR
+--  Sur un événement de plusieurs jours, certaines prestations se
+--  répètent chaque jour : les petits-déjeuners, les pauses café, les
+--  repas. D'autres non : la décoration de la salle, la location de
+--  sono, le transport aller-retour.
+--
+--  Cette colonne dit, ligne par ligne, si la quantité doit être
+--  multipliée par le nombre de jours de l'événement.
+--
+--  Valeur 0 par défaut : les documents DÉJÀ ÉMIS gardent exactement
+--  leur montant. Une facture envoyée à un client ne doit jamais
+--  changer de total après coup.
+-- =====================================================================
+ALTER TABLE facture_lignes ADD COLUMN IF NOT EXISTS par_jour TINYINT(1) DEFAULT 0;

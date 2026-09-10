@@ -54,9 +54,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ->execute([mb_substr($nom,0,120), $type, mb_substr($entreprise,0,150), mb_substr($tel,0,30), mb_substr($email,0,120), mb_substr($adresse,0,255), mb_substr($ncc,0,60), 'Inscription via le site.']);
                 $cid = (int)$pdo->lastInsertId();
             }
-            // Créer le compte
-            $pdo->prepare("INSERT INTO users (username,password,nom,role,client_id,actif) VALUES (?,?,?,'client',?,1)")
-                ->execute([mb_substr($username,0,50), password_hash($pass, PASSWORD_DEFAULT), mb_substr($nom,0,100), $cid]);
+            /* Créer le compte. On y reporte l'email et le téléphone : sans eux,
+               le client ne recevrait aucune notification et son profil
+               s'afficherait incomplet dès sa première visite. */
+            $pdo->prepare("INSERT INTO users (username,password,nom,email,telephone,role,client_id,actif,profil_complet)
+                           VALUES (?,?,?,?,?,'client',?,1,1)")
+                ->execute([mb_substr($username,0,50), password_hash($pass, PASSWORD_DEFAULT),
+                           mb_substr($nom,0,100), mb_substr($email,0,120), mb_substr($tel,0,30), $cid]);
             $uid = (int)$pdo->lastInsertId();
             unset($_SESSION['devis_ok']);
             session_regenerate_id(true);

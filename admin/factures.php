@@ -163,7 +163,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Éléments inclus : une ligne par élément, sans prix
         $det = trim((string)($detsL[$i] ?? ''));
         $det = $det === '' ? null : mb_substr(implode("\n", array_filter(array_map('trim', preg_split('/\r?\n/', $det)))), 0, 2000);
-        $lignes[] = [mb_substr($d, 0, 255), max(0, (float)($qtes[$i] ?? 1)), max(0, (float)($prix[$i] ?? 0)), mb_substr(trim($catsL[$i] ?? ''), 0, 120), $det];
+        /* La case « par jour » arrive sous forme de tableau indexé par la ligne :
+           une case décochée n'envoie rien, d'où la vérification par clé. */
+        $parJour = isset($_POST['par_jour'][$i]) ? 1 : 0;
+        $lignes[] = [mb_substr($d, 0, 255), max(0, (float)($qtes[$i] ?? 1)), max(0, (float)($prix[$i] ?? 0)), mb_substr(trim($catsL[$i] ?? ''), 0, 120), $det, $parJour];
     }
     $retour = $type === 'proforma' ? '?doc=proforma' : '';
     if (!$lignes) { flash('Ajoutez au moins une ligne.', 'error'); header('Location: factures.php'.($retour ?: '').'&edit='.($id?:'new')); exit; }
@@ -181,8 +184,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = (int)$pdo->lastInsertId();
         flash(($type==='proforma'?'Proforma ':'Facture ') . $numero . ' créée.');
     }
-    $ins = $pdo->prepare('INSERT INTO facture_lignes (facture_id, designation, quantite, prix_unitaire, categorie, details) VALUES (?,?,?,?,?,?)');
-    foreach ($lignes as $l) $ins->execute([$id, $l[0], $l[1], $l[2], $l[3] ?: null, $l[4]]);
+    $ins = $pdo->prepare('INSERT INTO facture_lignes (facture_id, designation, quantite, prix_unitaire, categorie, details, par_jour) VALUES (?,?,?,?,?,?,?)');
+    foreach ($lignes as $l) $ins->execute([$id, $l[0], $l[1], $l[2], $l[3] ?: null, $l[4], $l[5] ?? 0]);
 
     /* Si la facture était déjà réglée, son montant vient peut-être de changer :
        la comptabilité doit refléter le nouveau total, sinon elle garderait la
@@ -222,7 +225,7 @@ foreach ($platsMenu as $p) if (isset($menuData[$p['categorie_id']])) $menuData[$
 
 /* ---------- Liste (filtrée par type) ---------- */
 $stmt = $pdo->prepare("SELECT f.*, c.nom AS client, c.entreprise, c.type_client,
-    (SELECT COALESCE(SUM(quantite*prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
+    (SELECT COALESCE(SUM(quantite * IF(par_jour = 1, GREATEST(1, f.nb_jours), 1) * prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
     FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.type=? ORDER BY f.date_emission DESC, f.id DESC");
 $stmt->execute([$doc]);
 $factures = $stmt->fetchAll();
@@ -319,7 +322,7 @@ admin_header($isPro ? 'Proformas' : 'Factures', $isPro ? 'proformas' : 'factures
       <div class="field full"><label>Activité / Description de la prestation</label><input class="input" name="activite" placeholder="ex : Buffet mariage, Cocktail dînatoire, Séminaire…" value="<?= e($edit['activite'] ?? '') ?>"></div>
       <div class="field"><label>Date de l'événement</label><input class="input" type="date" name="date_evenement" value="<?= e($edit['date_evenement'] ?? '') ?>"></div>
       <div class="field"><label>Nombre de jours</label>
-        <input class="input" type="number" name="nb_jours" min="1" max="60" value="<?= (int)($edit['nb_jours'] ?? 1) ?: 1 ?>">
+        <input class="input" type="number" id="nb_jours" name="nb_jours" min="1" max="60" value="<?= (int)($edit['nb_jours'] ?? 1) ?: 1 ?>" oninput="calc()">
         <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">1 pour une prestation d'une seule journée.</span>
       </div>
       <div class="field"><label>Lieu de l'événement</label><input class="input" name="lieu" placeholder="ex : Cocody, Salle des fêtes…" value="<?= e($edit['lieu'] ?? '') ?>"></div>
@@ -364,7 +367,8 @@ admin_header($isPro ? 'Proformas' : 'Factures', $isPro ? 'proformas' : 'factures
         <thead><tr><th style="width:52%">Prestation &amp; éléments inclus</th><th style="width:12%">Quantité</th><th style="width:18%">Prix unitaire</th><th style="text-align:right">Total</th><th></th></tr></thead>
         <tbody id="lignesBody">
           <?php $rows = $lignes ?: [['designation'=>'','categorie'=>'','details'=>'','quantite'=>1,'prix_unitaire'=>'']];
-          foreach ($rows as $l): ?>
+          $iL = -1;
+          foreach ($rows as $l): $iL++; ?>
           <tr>
             <td>
               <input class="input l-desig" name="designation[]" value="<?= e($l['designation']) ?>" placeholder="Prestation (ex : Pause café du matin)">
@@ -377,7 +381,14 @@ admin_header($isPro ? 'Proformas' : 'Factures', $isPro ? 'proformas' : 'factures
                 </div>
               </div>
             </td>
-            <td><input class="input l-qte" name="quantite[]" type="number" step="0.01" min="0" value="<?= e($l['quantite']) ?>" oninput="calc()" style="width:90px"></td>
+            <td>
+              <input class="input l-qte" name="quantite[]" type="number" step="0.01" min="0" value="<?= e($l['quantite']) ?>" oninput="calc()" style="width:90px">
+              <label class="pj" title="Multiplier par le nombre de jours de l'événement">
+                <input type="checkbox" class="l-pj" name="par_jour[<?= $iL ?>]" value="1"
+                       <?= !empty($l['par_jour']) ? 'checked' : '' ?> onchange="calc()">
+                <span>× jours</span>
+              </label>
+            </td>
             <td><input class="input l-pu" name="prix_unitaire[]" type="number" step="1" min="0" value="<?= e($l['prix_unitaire']) ?>" oninput="calc()" style="width:130px" placeholder="ex : 30000"></td>
             <td style="text-align:right" class="l-total">0</td>
             <td><button type="button" class="btn btn-danger btn-sm" onclick="delLigne(this)">✕</button></td>
@@ -513,7 +524,13 @@ function rowHTML(){
         <div class="incl-add"><input type="text" class="input incl-input" placeholder="+ ajouter un élément inclus" onkeydown="if(event.key==='Enter'){event.preventDefault();addIncl(this);}"></div>
       </div>
     </td>
-    <td><input class="input l-qte" name="quantite[]" type="number" step="0.01" min="0" value="1" oninput="calc()" style="width:90px"></td>
+    <td>
+      <input class="input l-qte" name="quantite[]" type="number" step="0.01" min="0" value="1" oninput="calc()" style="width:90px">
+      <label class="pj" title="Multiplier par le nombre de jours de l'événement">
+        <input type="checkbox" class="l-pj" value="1" onchange="calc()">
+        <span>× jours</span>
+      </label>
+    </td>
     <td><input class="input l-pu" name="prix_unitaire[]" type="number" step="1" min="0" value="" oninput="calc()" style="width:130px" placeholder="ex : 30000"></td>
     <td style="text-align:right" class="l-total">0</td>
     <td><button type="button" class="btn btn-danger btn-sm" onclick="delLigne(this)">✕</button></td>`;
@@ -540,11 +557,32 @@ function majTva(){
 
 function calc(){
   let ht = 0;
-  document.querySelectorAll('#lignesBody tr').forEach(tr=>{
-    const q = parseFloat(tr.querySelector('.l-qte').value)||0;
+  /* Une ligne cochée « × jours » est facturée autant de fois qu'il y a de
+     jours : 25 petits-déjeuners sur 3 jours font 75. Le total de la ligne
+     montre le calcul, pour qu'il n'y ait aucune surprise. */
+  const champJours = document.getElementById('nb_jours');
+  const jours = Math.max(1, parseInt(champJours ? champJours.value : 1) || 1);
+
+  document.querySelectorAll('#lignesBody tr').forEach((tr, i)=>{
+    const q  = parseFloat(tr.querySelector('.l-qte').value)||0;
     const pu = parseFloat(tr.querySelector('.l-pu').value)||0;
-    const t = q*pu; ht += t;
-    tr.querySelector('.l-total').textContent = fmt(t);
+    const pj = tr.querySelector('.l-pj');
+    const actif = pj && pj.checked;
+
+    /* Chaque case porte l'indice de sa ligne : c'est ce qui permet au serveur
+       de savoir laquelle est cochée, une case décochée n'envoyant rien. */
+    if (pj) pj.name = 'par_jour[' + i + ']';
+
+    const qEff = actif ? q * jours : q;
+    const t = qEff * pu; ht += t;
+
+    const cell = tr.querySelector('.l-total');
+    cell.innerHTML = (actif && jours > 1)
+      ? '<span class="tj">' + q + ' × ' + jours + ' j</span><br>' + fmt(t)
+      : fmt(t);
+
+    const etq = pj ? pj.closest('.pj') : null;
+    if (etq) etq.classList.toggle('on', !!actif);
   });
   const remise = parseFloat(document.getElementById('remise').value)||0;
   const tvaOn = document.querySelector('input[name="tva_applicable"]:checked').value === '1';

@@ -30,7 +30,10 @@ function get_facture(PDO $pdo, int $id): ?array {
     $lg->execute([$id]);
     $f['lignes'] = $lg->fetchAll();
     $ht = 0;
-    foreach ($f['lignes'] as $l) $ht += (float)$l['quantite'] * (float)$l['prix_unitaire'];
+    /* Une ligne marquée « par jour » est comptée autant de fois qu'il y a de
+       jours d'événement : 25 petits-déjeuners sur 3 jours font 75. */
+    $jours = max(1, (int)($f['nb_jours'] ?? 1));
+    foreach ($f['lignes'] as $l) $ht += ligne_montant($l, $jours);
     $f['montant_ht'] = $ht;
     $f['base'] = max(0, $ht - (float)$f['remise']);
     /* Quand la TVA n'est pas applicable, elle ne doit pas être calculée :

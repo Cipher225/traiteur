@@ -359,6 +359,24 @@ function categories_recette(): array {
 }
 
 /* ----------------------------------------------------------------------------
+   Quantité réellement facturée pour une ligne.
+
+   « Petit déjeuner, 25 personnes » sur un événement de 3 jours représente
+   75 petits-déjeuners. Mais « décoration de la salle, 1 » reste 1, même sur
+   3 jours. C'est la ligne elle-même qui porte l'information.
+   ---------------------------------------------------------------------------- */
+function ligne_quantite_effective(array $ligne, int $nbJours): float {
+    $q = (float)($ligne['quantite'] ?? 0);
+    if (empty($ligne['par_jour'])) return $q;
+    return $q * max(1, $nbJours);
+}
+
+/* Montant d'une ligne, jours compris. */
+function ligne_montant(array $ligne, int $nbJours): float {
+    return ligne_quantite_effective($ligne, $nbJours) * (float)($ligne['prix_unitaire'] ?? 0);
+}
+
+/* ----------------------------------------------------------------------------
    Montant TTC d'une facture. Calculé en UN SEUL endroit : la remise est un
    pourcentage, et l'appliquer comme un montant fixe ailleurs fausserait les
    comptes sans que rien ne le signale.
@@ -366,8 +384,10 @@ function categories_recette(): array {
 function facture_ttc(PDO $pdo, int $factureId): float {
     try {
         $st = $pdo->prepare("SELECT f.remise, f.tva_taux, f.tva_applicable,
-                    (SELECT COALESCE(SUM(quantite * prix_unitaire), 0)
-                       FROM facture_lignes WHERE facture_id = f.id) AS ht
+                    (SELECT COALESCE(SUM(l.quantite
+                                * IF(l.par_jour = 1, GREATEST(1, COALESCE(f.nb_jours, 1)), 1)
+                                * l.prix_unitaire), 0)
+                       FROM facture_lignes l WHERE l.facture_id = f.id) AS ht
                  FROM factures f WHERE f.id = ?");
         $st->execute([$factureId]);
         $f = $st->fetch();
@@ -890,6 +910,59 @@ function pagination_html(array $p, string $motLibelle = 'élément', array $gard
     if ($p['page'] < $p['pages']) $o .= '<a class="pg" href="' . e($lien($p['page'] + 1)) . '">›</a>';
 
     return $o . '</div></div>';
+}
+
+/* ----------------------------------------------------------------------------
+   Jeton de sécurité de la connexion Google.
+
+   Il était auparavant conservé en session. Or la session se perd dès que le
+   domaine change entre le départ et le retour — typiquement « site.com » et
+   « www.site.com », qui sont deux domaines différents pour un navigateur.
+   L'utilisateur voyait alors « Jeton de sécurité invalide » sans rien pouvoir y
+   faire.
+
+   Le jeton se valide désormais tout seul : il porte sa date et une signature
+   calculée avec une clé secrète du serveur. Personne ne peut le fabriquer, et
+   sa vérification ne dépend plus de la session. La protection contre les
+   attaques par rejeu reste entière : un jeton expire après dix minutes.
+   ---------------------------------------------------------------------------- */
+function google_cle_secrete(PDO $pdo): string {
+    try {
+        $st = $pdo->query("SELECT valeur FROM settings WHERE cle='google_state_secret'");
+        $cle = (string)$st->fetchColumn();
+        if ($cle !== '') return $cle;
+
+        $cle = bin2hex(random_bytes(32));
+        $pdo->prepare("INSERT INTO settings (cle, valeur) VALUES ('google_state_secret', ?)
+                       ON DUPLICATE KEY UPDATE valeur = VALUES(valeur)")->execute([$cle]);
+        return $cle;
+    } catch (Throwable $e) {
+        /* Repli : une clé dérivée de la configuration, stable d'une requête à
+           l'autre. Moins solide qu'une clé aléatoire, mais fonctionnelle. */
+        return hash('sha256', (defined('DB_NAME') ? DB_NAME : '') . __DIR__);
+    }
+}
+
+function google_state_creer(PDO $pdo, string $role): string {
+    $charge = $role . '.' . time() . '.' . bin2hex(random_bytes(8));
+    $sig    = hash_hmac('sha256', $charge, google_cle_secrete($pdo));
+    return rtrim(strtr(base64_encode($charge . '.' . $sig), '+/', '-_'), '=');
+}
+
+/* Renvoie le rôle demandé, ou null si le jeton est invalide ou périmé. */
+function google_state_verifier(PDO $pdo, string $state, int $validite = 600): ?string {
+    $brut = base64_decode(strtr($state, '-_', '+/'), true);
+    if ($brut === false) return null;
+
+    $bouts = explode('.', $brut);
+    if (count($bouts) !== 4) return null;
+    [$role, $quand, $alea, $sig] = $bouts;
+
+    $attendu = hash_hmac('sha256', $role . '.' . $quand . '.' . $alea, google_cle_secrete($pdo));
+    if (!hash_equals($attendu, $sig)) return null;          // signature falsifiée
+    if (abs(time() - (int)$quand) > $validite) return null;  // trop ancien
+
+    return $role === 'employe' ? 'employe' : 'client';
 }
 
 /* Ajoute la date de modification du fichier à l'URL d'un asset

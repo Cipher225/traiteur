@@ -8,18 +8,52 @@ if ($G_ID === '') {
 }
 
 /* Détermine l'URL de redirection (doit correspondre à celle déclarée dans la console Google) */
+/* Adresse de retour de Google.
+
+   On part du réglage du site, mais on conserve le domaine par lequel
+   l'utilisateur navigue réellement : « site.com » et « www.site.com » sont
+   deux domaines distincts pour un navigateur, et basculer de l'un à l'autre
+   au milieu de la connexion faisait perdre la session.
+
+   Google exige que cette adresse figure parmi les adresses autorisées :
+   inscrivez-y les deux formes, avec et sans « www ». */
 function base_url(): string {
-    global $pdo; $s = get_settings($pdo); if (!empty($s['site_url'])) return rtrim($s['site_url'], '/');
-    if (defined('SITE_URL') && SITE_URL !== '') return rtrim(SITE_URL, '/');
+    global $pdo;
+    $reference = '';
+    try { $s = get_settings($pdo); $reference = (string)($s['site_url'] ?? ''); } catch (Throwable $e) {}
+    if ($reference === '' && defined('SITE_URL')) $reference = (string)SITE_URL;
+    $reference = rtrim(trim($reference), '/');
+
+    $hoteReel = $_SERVER['HTTP_HOST'] ?? '';
+    if ($reference !== '' && $hoteReel !== '') {
+        $p = parse_url($reference);
+        /* Même site, écriture différente du domaine : on garde celle du
+           navigateur pour ne pas casser la session. */
+        if (!empty($p['host'])
+            && ltrim($p['host'], 'w.') === ltrim($hoteReel, 'w.')
+            && $p['host'] !== $hoteReel) {
+            $reference = ($p['scheme'] ?? 'https') . '://' . $hoteReel
+                       . rtrim($p['path'] ?? '', '/');
+        }
+        return $reference;
+    }
+    if ($reference !== '') return $reference;
+
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
-    return $scheme . '://' . $host . $dir;
+    return $scheme . '://' . ($hoteReel ?: 'localhost') . $dir;
 }
 
 $redirect = base_url() . '/google-callback.php';
-$_SESSION['google_state'] = bin2hex(random_bytes(16));
-$_SESSION['google_role']  = ($_GET['role'] ?? 'client') === 'employe' ? 'employe' : 'client';
+
+/* Le jeton porte le rôle demandé et se vérifie par signature : il survit à un
+   changement de domaine entre l'aller et le retour. On le garde aussi en
+   session, ce qui n'coûte rien et sert de seconde vérification quand elle
+   est disponible. */
+$role  = ($_GET['role'] ?? 'client') === 'employe' ? 'employe' : 'client';
+$state = google_state_creer($pdo, $role);
+$_SESSION['google_state'] = $state;
+$_SESSION['google_role']  = $role;
 
 $params = [
     'client_id'     => $G_ID,
@@ -27,7 +61,7 @@ $params = [
     'response_type' => 'code',
     'scope'         => 'openid email profile',
     'access_type'   => 'online',
-    'state'         => $_SESSION['google_state'],
+    'state'         => $state,
     'prompt'        => 'select_account',
 ];
 header('Location: https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($params));

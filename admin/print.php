@@ -350,14 +350,23 @@ if ($AUTH) {
     <table>
       <thead><tr><th style="width:56px">N°</th><th class="l">Désignation</th><th style="width:70px">Qté</th><th class="r">Prix unit. (<?= e($devise) ?>)</th><th class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
       <tbody>
-        <?php $n=0; foreach ($doc['lignes'] as $l): $n++; $t=(float)$l['quantite']*(float)$l['prix_unitaire'];
+        <?php $jours = max(1, (int)($doc['nb_jours'] ?? 1)); ?>
+        <?php $n=0; foreach ($doc['lignes'] as $l): $n++; $t = ligne_montant($l, $jours);
+          $parJour = !empty($l['par_jour']) && $jours > 1;
           $incl = array_values(array_filter(array_map('trim', preg_split('/\r?\n/', (string)($l['details'] ?? ''))))); ?>
         <tr>
           <td class="c"><?= $n ?></td>
           <td><span class="des"><?= e($l['designation']) ?></span>
             <?php if ($incl): ?><ul class="incl"><?php foreach ($incl as $it): ?><li><?= e(element_avec_description($it, $descriptionsPlats)) ?></li><?php endforeach; ?></ul><?php endif; ?>
           </td>
-          <td class="c"><?= qte_fmt($l['quantite']) ?></td>
+          <td class="c">
+            <?php if ($parJour): ?>
+              <span class="qj"><?= qte_fmt($l['quantite']) ?> × <?= $jours ?> j</span><br>
+              <strong><?= qte_fmt(ligne_quantite_effective($l, $jours)) ?></strong>
+            <?php else: ?>
+              <?= qte_fmt($l['quantite']) ?>
+            <?php endif; ?>
+          </td>
           <td class="r"><?= nf($l['prix_unitaire']) ?></td>
           <td class="r"><?= nf($t) ?></td>
         </tr>

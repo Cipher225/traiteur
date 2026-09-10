@@ -3,13 +3,40 @@
    crée le compte s'il n'existe pas, puis connecte l'utilisateur. */
 require __DIR__ . '/config/db.php';
 
+/* Adresse de retour de Google.
+
+   On part du réglage du site, mais on conserve le domaine par lequel
+   l'utilisateur navigue réellement : « site.com » et « www.site.com » sont
+   deux domaines distincts pour un navigateur, et basculer de l'un à l'autre
+   au milieu de la connexion faisait perdre la session.
+
+   Google exige que cette adresse figure parmi les adresses autorisées :
+   inscrivez-y les deux formes, avec et sans « www ». */
 function base_url(): string {
-    global $pdo; $s = get_settings($pdo); if (!empty($s['site_url'])) return rtrim($s['site_url'], '/');
-    if (defined('SITE_URL') && SITE_URL !== '') return rtrim(SITE_URL, '/');
+    global $pdo;
+    $reference = '';
+    try { $s = get_settings($pdo); $reference = (string)($s['site_url'] ?? ''); } catch (Throwable $e) {}
+    if ($reference === '' && defined('SITE_URL')) $reference = (string)SITE_URL;
+    $reference = rtrim(trim($reference), '/');
+
+    $hoteReel = $_SERVER['HTTP_HOST'] ?? '';
+    if ($reference !== '' && $hoteReel !== '') {
+        $p = parse_url($reference);
+        /* Même site, écriture différente du domaine : on garde celle du
+           navigateur pour ne pas casser la session. */
+        if (!empty($p['host'])
+            && ltrim($p['host'], 'w.') === ltrim($hoteReel, 'w.')
+            && $p['host'] !== $hoteReel) {
+            $reference = ($p['scheme'] ?? 'https') . '://' . $hoteReel
+                       . rtrim($p['path'] ?? '', '/');
+        }
+        return $reference;
+    }
+    if ($reference !== '') return $reference;
+
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
-    return $scheme . '://' . $host . $dir;
+    return $scheme . '://' . ($hoteReel ?: 'localhost') . $dir;
 }
 function stop(string $msg): void {
     die('<div style="font-family:sans-serif;max-width:520px;margin:80px auto;text-align:center">'
@@ -49,7 +76,14 @@ $G_ID = google_client_id($pdo); $G_SECRET = google_client_secret($pdo);
 if ($G_ID === '') stop("La connexion Google n'est pas configuree.");
 if (isset($_GET['error'])) stop('Autorisation refusée.');
 if (empty($_GET['code']) || empty($_GET['state'])) stop('Réponse Google invalide.');
-if (($_SESSION['google_state'] ?? '') !== $_GET['state']) stop('Jeton de sécurité invalide, veuillez réessayer.');
+/* Vérification par signature : elle ne dépend pas de la session, qui peut
+   avoir été perdue si le domaine a changé entre l'aller et le retour. */
+$roleDemande = google_state_verifier($pdo, (string)$_GET['state']);
+if ($roleDemande === null) {
+    stop("Le lien de connexion a expiré ou n'est plus valide. "
+       . "Relancez la connexion depuis la page d'accueil.");
+}
+$_SESSION['google_role'] = $roleDemande;
 
 $redirect = base_url() . '/google-callback.php';
 

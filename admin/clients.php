@@ -69,6 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
     if ($id) {
         $pdo->prepare('UPDATE clients SET nom=?, entreprise=?, type_client=?, telephone=?, email=?, adresse=?, ncc=?, notes=? WHERE id=?')->execute([...$data, $id]);
+
+        /* Le compte de connexion suit la fiche. Sans cela, le client verrait
+           encore son ancien nom dans son espace, et les emails partiraient à
+           l'ancienne adresse — un décalage invisible mais gênant.
+           On ne touche ni au mot de passe, ni au lien Google, ni à
+           l'identifiant : ils appartiennent au client. */
+        try {
+            $pdo->prepare("UPDATE users SET nom = ?, email = COALESCE(NULLIF(?, ''), email),
+                                            telephone = COALESCE(NULLIF(?, ''), telephone)
+                           WHERE client_id = ? AND role = 'client'")
+                ->execute([$data[0], $data[4], $data[3], $id]);
+        } catch (Throwable $e) { /* la fiche reste enregistrée même sans compte lié */ }
         $cid = $id; flash('Client modifié.');
     } else {
         $pdo->prepare('INSERT INTO clients (nom, entreprise, type_client, telephone, email, adresse, ncc, notes) VALUES (?,?,?,?,?,?,?,?)')->execute($data);
@@ -150,7 +162,7 @@ $sql = "SELECT c.*, u.id AS uid, u.username, u.actif AS compte_actif,
                (SELECT COUNT(*) FROM factures f
                  WHERE f.client_id = c.id AND f.type='facture' AND f.statut <> 'annulee') AS nb_docs,
                (SELECT COALESCE(SUM(
-                    GREATEST((SELECT COALESCE(SUM(l.quantite*l.prix_unitaire),0)
+                    GREATEST((SELECT COALESCE(SUM(l.quantite * IF(l.par_jour = 1, GREATEST(1, f.nb_jours), 1) * l.prix_unitaire),0)
                                 FROM facture_lignes l WHERE l.facture_id = f.id) - COALESCE(f.remise,0), 0)
                     * (1 + IF(f.tva_applicable=1, f.tva_taux/100, 0))), 0)
                   FROM factures f

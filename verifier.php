@@ -43,7 +43,7 @@ if ($auth) {
     try {
         if ($t==='facture' || $t==='proforma' || $t==='livraison') {
             $st=$pdo->prepare("SELECT f.numero,f.date_emission,f.statut,f.tva_taux,f.remise,COALESCE(NULLIF(c.entreprise,''), c.nom) clientnom,
-                (SELECT COALESCE(SUM(quantite*prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
+                (SELECT COALESCE(SUM(quantite * IF(par_jour = 1, GREATEST(1, f.nb_jours), 1) * prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
                 FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.id=?");
             $st->execute([$did]);
             if($d=$st->fetch()){

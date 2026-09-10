@@ -447,10 +447,25 @@ function pdf_corps(string $type, array $doc, string $devise): string {
           <td><span class="des"><?= e($l['designation']) ?></span>
             <?php foreach ($det as $d): ?><br><span class="det">• <?= e(pdf_element($d, $descriptions)) ?></span><?php endforeach; ?>
           </td>
-          <td class="c"><?= qte_fmt($l['quantite']) ?></td>
+          <?php
+            /* Sur un événement de plusieurs jours, on montre le calcul :
+               « 25 × 3 j = 75 ». Le client doit pouvoir refaire l'opération
+               lui-même, sinon il conteste le total. */
+            $jours = max(1, (int)($doc['nb_jours'] ?? 1));
+            $qEff  = ligne_quantite_effective($l, $jours);
+            $parJour = !empty($l['par_jour']) && $jours > 1;
+          ?>
+          <td class="c">
+            <?php if ($parJour): ?>
+              <span class="qj"><?= qte_fmt($l['quantite']) ?> × <?= $jours ?> j</span><br>
+              <strong><?= qte_fmt($qEff) ?></strong>
+            <?php else: ?>
+              <?= qte_fmt($l['quantite']) ?>
+            <?php endif; ?>
+          </td>
           <?php if (!$estLivraison): ?>
           <td class="r"><?= nf($l['prix_unitaire']) ?></td>
-          <td class="r"><?= nf((float)$l['quantite'] * (float)$l['prix_unitaire']) ?></td>
+          <td class="r"><?= nf(ligne_montant($l, $jours)) ?></td>
           <?php endif; ?>
         </tr>
       <?php endforeach; ?>
