@@ -150,11 +150,16 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
     $c->text($DROITE - $l, $y + 1, $signataire, $gras, 8, $marine);
     $c->line($DROITE - $mm(62), $y + 12, $DROITE, $y + 12, [0.70, 0.73, 0.78], 0.6);
 
-    /* Tampon à sa taille réelle sur A4 (42 mm, comme un cachet d'entreprise),
-       et paraphe juste en dessous — l'ordre habituel sur un document signé. */
-    $lTampon = $mm(42);
-    $hTampon = $mm(16);
-    $xTampon = $DROITE - $mm(52);
+    /* Tampon et paraphe — dimensions identiques à celles de admin/pdf.php.
+       Un même document doit se présenter exactement pareil, qu'on le
+       télécharge ou qu'on le reçoive en pièce jointe d'un email.
+
+       La zone réservée sous le filet mesure 38 mm : le tampon occupe
+       52 × 20 mm et le paraphe descend jusqu'à 36 mm, laissant 2 mm de
+       sécurité avant le pied de page. */
+    $lTampon = $mm(52);
+    $hTampon = $mm(20);
+    $xTampon = $DROITE - $mm(62);      // aligné sur le filet du signataire
     $yImg    = $y + $mm(5);
 
     if ($fTampon) $c->image($fTampon, $xTampon, $yImg, $lTampon, $hTampon);
@@ -163,9 +168,9 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
        basse, en débordant légèrement : c'est ainsi qu'on signe un document
        déjà cacheté. */
     if ($fSignature) {
-        $lSig = $mm(34);
+        $lSig = $mm(42);
         $c->image($fSignature, $xTampon + ($lTampon - $lSig) / 2,
-                  $yImg + $hTampon - $mm(4), $lSig, $mm(12));
+                  $yImg + $hTampon - $mm(5), $lSig, $mm(14));
     }
 });
 

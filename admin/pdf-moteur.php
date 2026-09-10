@@ -94,7 +94,11 @@ function pdf_document_html(PDO $pdo, array $settings, string $type, array $doc,
         $refs[] = ['N° Bulletin', $doc['numero']];
         $refs[] = ['Période', moisfr((string)$doc['periode'])];
     } else {
-        $refs[] = ['N° ' . ucfirst($type === 'proforma' ? 'proforma' : 'facture'), $doc['numero']];
+        /* Le libellé suit le document : un reçu n'a pas de « numéro de facture »,
+           et un bon de livraison non plus. */
+        $libelles = ['proforma' => 'N° Proforma', 'recu' => 'N° Reçu',
+                     'livraison' => 'N° Bon de livraison', 'rapport' => 'Référence'];
+        $refs[] = [$libelles[$type] ?? 'N° Facture', $doc['numero']];
         /* Selon le type, la date porte un nom différent : on prend celle qui existe. */
         $quand = $doc['date_emission'] ?? $doc['date_paiement'] ?? $doc['created_at'] ?? 'now';
         $refs[] = ['Date', date('d/m/Y', strtotime((string)$quand))];
@@ -386,12 +390,16 @@ function pdf_corps(string $type, array $doc, string $devise): string {
     if ($type === 'fiche') { echo pdf_corps_paie($doc, $devise); return ob_get_clean(); }
 
     if ($type === 'recu') {
-        /* Un reçu porte un montant unique, pas un tableau de lignes. */
+        /* Un reçu porte un montant unique, pas un tableau de lignes.
+           Le tampon de sortie est DÉJÀ ouvert en tête de fonction : en ouvrir
+           un second ici laissait le premier béant, et tout ce qui suivait —
+           en-tête de l'entreprise, pied de page, mentions légales — y restait
+           piégé au lieu d'être écrit dans le document. */
         $montant = (float)($doc['montant'] ?? 0);
         $entree  = ($doc['type'] ?? 'entree') === 'entree';
-        ob_start(); ?>
+        ?>
         <table class="lignes">
-          <thead><tr><th style="text-align:left">Motif</th><th width="30%" class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
+          <thead><tr><th style="text-align:left">Motif</th><th width="30%" class="r">Montant</th></tr></thead>
           <tbody><tr>
             <td><span class="des"><?= e($doc['motif'] ?? ($entree ? 'Encaissement' : 'Décaissement')) ?></span></td>
             <td class="r"><b><?= nf($montant) ?></b></td>

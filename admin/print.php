@@ -326,7 +326,7 @@ if ($AUTH) {
     </div>
   <?php elseif ($type === 'recu'): ?>
     <table>
-      <thead><tr><th style="width:60px">N°</th><th class="l">Désignation</th><th class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
+      <thead><tr><th style="width:60px">N°</th><th class="l">Désignation</th><th class="r">Montant</th></tr></thead>
       <tbody><tr><td class="c">1</td><td><span class="des"><?= e(trim((string)$doc['motif']) !== '' ? $doc['motif'] : ((($doc['type'] ?? 'sortie') === 'entree') ? 'Montant encaissé' : 'Montant décaissé')) ?></span></td><td class="r"><?= nf($doc['montant']) ?></td></tr></tbody>
     </table>
   <?php elseif ($estLivraison): ?>
