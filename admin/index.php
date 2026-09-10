@@ -750,9 +750,15 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
         <button type="button" class="pgs" data-serie="marge">
           <i style="background:linear-gradient(135deg,#6ee7b7,#10b981)"></i>Marge</button>
       </div>
-      <div class="pg-mode">
-        <button type="button" class="pgm actif" data-mode="aire">Aires</button>
-        <button type="button" class="pgm" data-mode="barres">Barres</button>
+      <div class="pg-outils">
+        <div class="pg-mode">
+          <button type="button" class="pgm actif" data-mode="aire">Aires</button>
+          <button type="button" class="pgm" data-mode="barres">Barres</button>
+        </div>
+        <div class="pg-mode" id="pg-echelle" hidden>
+          <button type="button" class="pge" data-echelle="lineaire">Proportionnel</button>
+          <button type="button" class="pge actif" data-echelle="compresse">Compressé</button>
+        </div>
       </div>
     </div>
     <div class="pg-zone">
@@ -844,6 +850,20 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
 
   var actives = ['entrees', 'depenses'];
   var mode = 'aire';
+  var echelle = 'lineaire';
+
+  /* Faut-il compresser ? On compare la plus grande valeur à la plus petite
+     valeur non nulle : au-delà d'un rapport de 20, le graphique proportionnel
+     devient inexploitable. */
+  function ecartFort() {
+    var vals = [];
+    actives.forEach(function (s) {
+      DATA[s].forEach(function (v) { if (Math.abs(v) > 0) vals.push(Math.abs(v)); });
+    });
+    if (vals.length < 3) return false;
+    var mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals);
+    return mn > 0 && mx / mn > 20;
+  }
   var anime = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var dejaVu = false;
 
@@ -872,7 +892,36 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
     return { mx: mx * 1.08, mn: mn < 0 ? mn * 1.12 : 0 };
   }
 
-  function y(v, b) { return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht; }
+  /* Échelle compressée.
+
+     Un mois à 20 millions à côté de mois à 450 000 écrase tout : les petits
+     mois se collent à la ligne du zéro et deviennent illisibles. La compression
+     rapproche visuellement les grandeurs — un rapport de 100 devient un rapport
+     de 2 à l'écran — sans changer les valeurs, qui restent exactes dans
+     l'infobulle. Les zéros et les valeurs négatives sont gérés. */
+  function comprimer(v) {
+    var s = v < 0 ? -1 : 1;
+    return s * Math.log10(1 + Math.abs(v));
+  }
+  function y(v, b) {
+    if (echelle === 'compresse') {
+      var cv = comprimer(v), cmn = comprimer(b.mn), cmx = comprimer(b.mx);
+      if (cmx === cmn) return MH + ht;
+      return MH + ht - ((cv - cmn) / (cmx - cmn)) * ht;
+    }
+    return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht;
+  }
+
+  /* Valeur correspondant à une position, pour graduer l'axe correctement. */
+  function valeurAu(part, b) {
+    if (echelle === 'compresse') {
+      var cmn = comprimer(b.mn), cmx = comprimer(b.mx);
+      var c2 = cmn + (cmx - cmn) * part;
+      var s = c2 < 0 ? -1 : 1;
+      return s * (Math.pow(10, Math.abs(c2)) - 1);
+    }
+    return b.mn + (b.mx - b.mn) * part;
+  }
   function x(i) { return MG + (MOIS.length > 1 ? i * (lg / (MOIS.length - 1)) : lg / 2); }
 
   /* Courbe adoucie : des segments droits feraient « graphique de tableur ». */
@@ -906,13 +955,30 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
     el += '</defs>';
 
     /* Repères horizontaux et échelle */
-    for (var k = 0; k <= 4; k++) {
-      var v = b.mn + (b.mx - b.mn) * (k / 4), py = y(v, b);
+    /* Graduations. En échelle compressée on prend des valeurs rondes —
+       1 000, 100 000, 10 000 000 — plutôt que les valeurs mathématiques
+       exactes, qui donneraient « 317 k » ou « 67 » et n'aideraient personne. */
+    var graduations = [];
+    if (echelle === 'compresse') {
+      graduations.push(0);
+      var plafond = Math.max(Math.abs(b.mx), Math.abs(b.mn));
+      for (var p = 2; Math.pow(10, p) <= plafond * 1.5; p++) graduations.push(Math.pow(10, p));
+      if (graduations.length > 6) {
+        /* Une graduation sur deux si l'échelle en compte trop. */
+        graduations = graduations.filter(function (v, i) { return i === 0 || i % 2 === 1 || i === graduations.length - 1; });
+      }
+    } else {
+      for (var k = 0; k <= 4; k++) graduations.push(valeurAu(k / 4, b));
+    }
+
+    graduations.forEach(function (v) {
+      var py = y(v, b);
+      if (py < MH - 2 || py > MH + ht + 2) return;
       el += '<line x1="' + MG + '" y1="' + py + '" x2="' + (L - MD) + '" y2="' + py
           + '" stroke="rgba(255,255,255,.07)" stroke-width="1"/>';
       el += '<text x="' + (MG - 10) + '" y="' + (py + 4) + '" text-anchor="end" '
           + 'fill="rgba(255,255,255,.36)" font-size="11">' + fmt(v) + '</text>';
-    }
+    });
     /* La ligne du zéro, plus marquée : elle sépare le gain de la perte. */
     if (b.mn < 0) {
       el += '<line x1="' + MG + '" y1="' + y(0, b) + '" x2="' + (L - MD) + '" y2="' + y(0, b)
@@ -1041,6 +1107,7 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
       var s = this.dataset.serie, i = actives.indexOf(s);
       if (i >= 0) { if (actives.length === 1) return; actives.splice(i, 1); this.classList.remove('actif'); }
       else { actives.push(s); this.classList.add('actif'); }
+      majEchelle();
       dessiner();
     });
   });
@@ -1053,8 +1120,29 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
     });
   });
 
+  document.querySelectorAll('#pouls .pge').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#pouls .pge').forEach(function (b2) { b2.classList.remove('actif'); });
+      this.classList.add('actif');
+      echelle = this.dataset.echelle;
+      dessiner();
+    });
+  });
+
+  /* Le choix d'échelle n'apparaît que s'il sert à quelque chose : sur des
+     montants comparables, proposer une compression n'aurait aucun sens. */
+  function majEchelle() {
+    var zone = document.getElementById('pg-echelle');
+    var fort = ecartFort();
+    if (zone) zone.hidden = !fort;
+    echelle = fort ? 'compresse' : 'lineaire';
+    document.querySelectorAll('#pouls .pge').forEach(function (b2) {
+      b2.classList.toggle('actif', b2.dataset.echelle === echelle);
+    });
+  }
+
   /* On n'anime qu'au moment où la section entre à l'écran. */
-  function lancer() { if (dejaVu) return; dejaVu = true; dessiner(); compter(); }
+  function lancer() { if (dejaVu) return; dejaVu = true; majEchelle(); dessiner(); compter(); }
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (ents, obs) {
       ents.forEach(function (en) { if (en.isIntersecting) { lancer(); obs.disconnect(); } });

@@ -432,8 +432,8 @@ function pdf_corps(string $type, array $doc, string $devise): string {
         <th style="text-align:left">Désignation</th>
         <th width="<?= $estLivraison ? '14%' : '9%' ?>"><?= $estLivraison ? 'Qté livrée' : 'Qté' ?></th>
         <?php if (!$estLivraison): ?>
-        <th width="16%" class="r">Prix unit. (<?= e($devise) ?>)</th>
-        <th width="17%" class="r">Montant (<?= e($devise) ?>)</th>
+        <th width="16%" class="r">Prix unitaire</th>
+        <th width="17%" class="r">Montant</th>
         <?php endif; ?>
       </tr></thead>
       <tbody>

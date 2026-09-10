@@ -161,6 +161,10 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
 <div class="panel glass" id="evo" style="margin-bottom:14px">
   <div class="evo-tete">
     <h2 style="margin:0">📈 Évolution mensuelle</h2>
+    <div class="pg-mode" id="evo-echelle" hidden>
+      <button type="button" class="pge" data-echelle="lineaire">Proportionnel</button>
+      <button type="button" class="pge actif" data-echelle="compresse">Compressé</button>
+    </div>
     <div class="evo-series">
       <button type="button" class="evs actif" data-serie="entrees">
         <i style="background:linear-gradient(135deg,#6ee7b7,#10b981)"></i>Encaissements</button>
@@ -196,7 +200,21 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
   var NOMS = { entrees: 'Encaissements', depenses: 'Dépenses', solde: 'Solde' };
 
   var actives = ['entrees', 'depenses'];
+  var echelle = 'lineaire';
   var anime = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Un mois exceptionnel écrase tous les autres. Au-delà d'un rapport de 20
+     entre le plus gros et le plus petit mois, on compresse l'échelle. */
+  function ecartFort() {
+    var vals = [];
+    actives.forEach(function (s) {
+      DATA[s].forEach(function (v) { if (Math.abs(v) > 0) vals.push(Math.abs(v)); });
+    });
+    if (vals.length < 3) return false;
+    var mx = Math.max.apply(null, vals), mn = Math.min.apply(null, vals);
+    return mn > 0 && mx / mn > 20;
+  }
+  function comprimer(v) { var s = v < 0 ? -1 : 1; return s * Math.log10(1 + Math.abs(v)); }
   var L = 900, H = 300, MG = 58, MD = 18, MH = 20, MB = 38;
   var lg = L - MG - MD, ht = H - MH - MB;
 
@@ -218,7 +236,14 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
     if (mx === mn) mx = mn + 1;
     return { mx: mx * 1.08, mn: mn < 0 ? mn * 1.12 : 0 };
   }
-  function y(v, b) { return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht; }
+  function y(v, b) {
+    if (echelle === 'compresse') {
+      var cv = comprimer(v), cmn = comprimer(b.mn), cmx = comprimer(b.mx);
+      if (cmx === cmn) return MH + ht;
+      return MH + ht - ((cv - cmn) / (cmx - cmn)) * ht;
+    }
+    return MH + ht - ((v - b.mn) / (b.mx - b.mn)) * ht;
+  }
   function x(i) { return MG + (MOIS.length > 1 ? i * (lg / (MOIS.length - 1)) : lg / 2); }
 
   function chemin(vals, b) {
@@ -245,13 +270,22 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
     el += '<filter id="ev-lueur"><feGaussianBlur stdDeviation="3.5" result="f"/>'
         + '<feMerge><feMergeNode in="f"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
 
-    for (var k = 0; k <= 4; k++) {
-      var v = b.mn + (b.mx - b.mn) * (k / 4), py = y(v, b);
+    var graduations = [];
+    if (echelle === 'compresse') {
+      graduations.push(0);
+      var plafond = Math.max(Math.abs(b.mx), Math.abs(b.mn));
+      for (var p = 2; Math.pow(10, p) <= plafond * 1.5; p++) graduations.push(Math.pow(10, p));
+    } else {
+      for (var k = 0; k <= 4; k++) graduations.push(b.mn + (b.mx - b.mn) * (k / 4));
+    }
+    graduations.forEach(function (v) {
+      var py = y(v, b);
+      if (py < MH - 2 || py > MH + ht + 2) return;
       el += '<line x1="' + MG + '" y1="' + py + '" x2="' + (L - MD) + '" y2="' + py
           + '" stroke="rgba(255,255,255,.07)"/>'
           + '<text x="' + (MG - 10) + '" y="' + (py + 4) + '" text-anchor="end" '
           + 'fill="rgba(255,255,255,.36)" font-size="11">' + fmt(v) + '</text>';
-    }
+    });
     if (b.mn < 0) {
       el += '<line x1="' + MG + '" y1="' + y(0, b) + '" x2="' + (L - MD) + '" y2="' + y(0, b)
           + '" stroke="rgba(255,255,255,.22)" stroke-width="1.5" stroke-dasharray="4 4"/>';
@@ -329,12 +363,31 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
       var s = this.dataset.serie, i = actives.indexOf(s);
       if (i >= 0) { if (actives.length === 1) return; actives.splice(i, 1); this.classList.remove('actif'); }
       else { actives.push(s); this.classList.add('actif'); }
+      majEchelle();
       dessiner();
     });
   });
 
+  document.querySelectorAll('#evo .pge').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#evo .pge').forEach(function (b2) { b2.classList.remove('actif'); });
+      this.classList.add('actif');
+      echelle = this.dataset.echelle;
+      dessiner();
+    });
+  });
+  function majEchelle() {
+    var zone = document.getElementById('evo-echelle');
+    var fort = ecartFort();
+    if (zone) zone.hidden = !fort;
+    echelle = fort ? 'compresse' : 'lineaire';
+    document.querySelectorAll('#evo .pge').forEach(function (b2) {
+      b2.classList.toggle('actif', b2.dataset.echelle === echelle);
+    });
+  }
+
   var vu = false;
-  function lancer() { if (vu) return; vu = true; dessiner(); }
+  function lancer() { if (vu) return; vu = true; majEchelle(); dessiner(); }
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(function (e, o) {
       e.forEach(function (x2) { if (x2.isIntersecting) { lancer(); o.disconnect(); } });

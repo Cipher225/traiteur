@@ -348,7 +348,7 @@ if ($AUTH) {
     </table>
   <?php else: ?>
     <table>
-      <thead><tr><th style="width:56px">N°</th><th class="l">Désignation</th><th style="width:70px">Qté</th><th class="r">Prix unit. (<?= e($devise) ?>)</th><th class="r">Montant (<?= e($devise) ?>)</th></tr></thead>
+      <thead><tr><th style="width:56px">N°</th><th class="l">Désignation</th><th style="width:70px">Qté</th><th class="r">Prix unitaire</th><th class="r">Montant</th></tr></thead>
       <tbody>
         <?php $jours = max(1, (int)($doc['nb_jours'] ?? 1)); ?>
         <?php $n=0; foreach ($doc['lignes'] as $l): $n++; $t = ligne_montant($l, $jours);
