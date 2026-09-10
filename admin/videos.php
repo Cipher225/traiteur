@@ -27,8 +27,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $fichier = null;
     if ($type === 'fichier' && !empty($_FILES['fichier']['name'])) {
-        $fichier = upload_video($_FILES['fichier'], UPLOAD_DIR);
-        if (!$fichier) { flash('Fichier vidéo invalide (mp4/webm/ogg/mov, 60 Mo max).', 'error'); header('Location: videos.php'); exit; }
+        $motifVideo = null;
+        $fichier = upload_video($_FILES['fichier'], UPLOAD_DIR, $motifVideo);
+        if (!$fichier) {
+            flash($motifVideo ?: 'Fichier vidéo invalide.', 'error');
+            header('Location: videos.php'); exit;
+        }
     }
     // miniature optionnelle
     $miniature = null;
@@ -70,8 +74,26 @@ admin_header('Vidéos', 'videos', $pdo, $settings);
       </select>
     </div>
     <div class="field"><label>Ordre d'affichage</label><input class="input" type="number" name="ordre" value="<?= e($edit['ordre'] ?? 0) ?>"></div>
-    <div class="field full" id="blocUrl"><label>Lien de la vidéo (YouTube ou Vimeo)</label><input class="input" name="url" value="<?= e($edit['url'] ?? '') ?>" placeholder="https://www.youtube.com/watch?v=..."></div>
-    <div class="field full" id="blocFichier" style="display:none"><label>Fichier vidéo (mp4/webm, 60 Mo max)</label><input class="input" type="file" name="fichier" accept="video/*">
+    <div class="field full" id="blocUrl">
+      <label>Lien de la vidéo</label>
+      <input class="input" name="url" id="champUrl" value="<?= e($edit['url'] ?? '') ?>"
+             placeholder="Collez le lien copié depuis YouTube, Vimeo ou Dailymotion">
+      <span class="vid-aide">
+        Toutes les écritures sont acceptées : lien du navigateur, bouton « Partager »,
+        Short, direct, version mobile. Collez simplement ce que vous avez copié.
+      </span>
+      <div id="apercuLien" class="vid-verif" hidden></div>
+    </div>
+    <div class="field full" id="blocFichier" style="display:none">
+      <label>Fichier vidéo</label>
+      <input class="input" type="file" name="fichier" id="champFichier"
+             accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/*">
+      <span class="vid-aide">
+        MP4, WebM, MOV ou AVI — jusqu'à <?= (int)VIDEO_MAX_MO ?> Mo.
+        Une vidéo lourde ralentit le chargement de votre site : préférez un lien
+        YouTube au-delà de quelques minutes de film.
+      </span>
+      <div id="poidsFichier" class="vid-verif" hidden></div>
       <?php if (!empty($edit['fichier'])): ?><small style="color:var(--ink-faint)">Actuel : <?= e($edit['fichier']) ?></small><?php endif; ?>
     </div>
     <div class="field full"><label>Miniature (image, facultatif — utile pour les fichiers vidéo)</label><input class="input" type="file" name="miniature" accept="image/*"></div>
@@ -116,4 +138,60 @@ function majType(){
 }
 majType();
 </script>
+<script>
+(function () {
+  /* On vérifie le lien et le poids AVANT l'envoi : découvrir après quatre
+     minutes de transfert que le fichier est trop lourd est décourageant. */
+  var MAX = <?= (int)VIDEO_MAX_MO ?>;
+
+  var champ = document.getElementById('champUrl');
+  var vu = document.getElementById('apercuLien');
+  if (champ) {
+    var motifs = [
+      /[?&]v=([\w-]{11})/, /youtu\.be\/([\w-]{11})/,
+      /youtube(?:-nocookie)?\.com\/embed\/([\w-]{11})/,
+      /youtube\.com\/shorts\/([\w-]{11})/, /youtube\.com\/live\/([\w-]{11})/
+    ];
+    function verifier() {
+      var u = champ.value.trim();
+      if (!u) { vu.hidden = true; return; }
+      var id = null;
+      for (var i = 0; i < motifs.length; i++) { var m = u.match(motifs[i]); if (m) { id = m[1]; break; } }
+      vu.hidden = false;
+      if (id) {
+        vu.className = 'vid-verif ok';
+        vu.innerHTML = '✓ Vidéo YouTube reconnue'
+          + '<img src="https://img.youtube.com/vi/' + id + '/mqdefault.jpg" alt="">';
+      } else if (/vimeo\.com\/\d+/.test(u)) {
+        vu.className = 'vid-verif ok'; vu.textContent = '✓ Vidéo Vimeo reconnue';
+      } else if (/dailymotion\.com|dai\.ly/.test(u)) {
+        vu.className = 'vid-verif ok'; vu.textContent = '✓ Vidéo Dailymotion reconnue';
+      } else {
+        vu.className = 'vid-verif non';
+        vu.textContent = "Ce lien n'est pas reconnu. Copiez l'adresse depuis la barre du navigateur ou le bouton « Partager ».";
+      }
+    }
+    champ.addEventListener('input', verifier);
+    verifier();
+  }
+
+  var cf = document.getElementById('champFichier');
+  var pf = document.getElementById('poidsFichier');
+  if (cf) cf.addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) { pf.hidden = true; return; }
+    var mo = f.size / 1048576;
+    pf.hidden = false;
+    if (mo > MAX) {
+      pf.className = 'vid-verif non';
+      pf.textContent = 'Fichier trop lourd : ' + mo.toFixed(0) + ' Mo pour ' + MAX + ' Mo autorisés.';
+      this.value = '';
+    } else {
+      pf.className = 'vid-verif ok';
+      pf.textContent = f.name + ' — ' + mo.toFixed(1) + ' Mo';
+    }
+  });
+})();
+</script>
+
 <?php admin_footer(); ?>

@@ -158,21 +158,102 @@ function upload_image_redim(array $file, string $dir, int $largeur, int $hauteur
     return $ok ? $name : null;
 }
 
-function upload_video(array $file, string $dir): ?string {
-    if (empty($file['name']) || $file['error'] !== UPLOAD_ERR_OK) return null;
+/* Taille maximale d'une vidéo. Définie en un seul endroit : le contrôle du
+   fichier, le message d'erreur et l'aide affichée à l'utilisateur doivent
+   toujours annoncer le même chiffre. */
+if (!defined('VIDEO_MAX_MO')) define('VIDEO_MAX_MO', 500);
+
+function upload_video(array $file, string $dir, ?string &$motif = null): ?string {
+    if (empty($file['name'])) { $motif = 'Aucun fichier choisi.'; return null; }
+
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        /* Un message précis évite les allers-retours : « le fichier dépasse la
+           limite du serveur » n'appelle pas la même action que « transfert
+           interrompu ». */
+        $motifs = [
+            UPLOAD_ERR_INI_SIZE   => 'Le fichier dépasse la limite du serveur ('
+                                   . ini_get('upload_max_filesize') . ').',
+            UPLOAD_ERR_FORM_SIZE  => 'Le fichier dépasse la limite du formulaire.',
+            UPLOAD_ERR_PARTIAL    => 'Le transfert a été interrompu. Réessayez.',
+            UPLOAD_ERR_NO_FILE    => 'Aucun fichier reçu.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Dossier temporaire introuvable sur le serveur.',
+            UPLOAD_ERR_CANT_WRITE => "Le serveur n'a pas pu écrire le fichier.",
+        ];
+        $motif = $motifs[$file['error']] ?? 'Le transfert a échoué.';
+        return null;
+    }
+
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, ['mp4','webm','ogg','mov'])) return null;
-    if ($file['size'] > 60 * 1024 * 1024) return null; // 60 Mo max
+    if (!in_array($ext, ['mp4','webm','ogg','ogv','mov','m4v','avi','mkv'])) {
+        $motif = 'Format non accepté (' . $ext . '). Utilisez MP4, WebM, MOV ou AVI.';
+        return null;
+    }
+
+    if ($file['size'] > VIDEO_MAX_MO * 1024 * 1024) {
+        $motif = 'Fichier trop lourd (' . round($file['size'] / 1048576) . ' Mo) : '
+               . VIDEO_MAX_MO . ' Mo au maximum.';
+        return null;
+    }
+
     $name = uniqid('vid_') . '.' . $ext;
-    if (move_uploaded_file($file['tmp_name'], rtrim($dir,'/') . '/' . $name)) return $name;
+    if (move_uploaded_file($file['tmp_name'], rtrim($dir, '/') . '/' . $name)) return $name;
+
+    $motif = "Le fichier n'a pas pu être enregistré sur le serveur.";
     return null;
 }
 
 /* Transforme une URL YouTube/Vimeo en URL d'intégration (embed) */
+/* ----------------------------------------------------------------------------
+   Adresse de lecture d'une vidéo.
+
+   Un lien YouTube prend beaucoup de formes : l'adresse copiée depuis le
+   navigateur, celle du bouton « Partager », un Short, un direct, une version
+   mobile, ou une adresse chargée de paramètres de suivi. L'ancien motif
+   n'acceptait que la forme la plus simple — les autres ne jouaient pas.
+
+   On extrait donc l'identifiant, d'où qu'il vienne.
+   ---------------------------------------------------------------------------- */
 function video_embed(string $url): string {
-    if (preg_match('~youtu(?:be\.com/watch\?v=|\.be/)([\w-]{11})~', $url, $m)) return 'https://www.youtube.com/embed/' . $m[1];
-    if (preg_match('~youtube\.com/embed/([\w-]{11})~', $url, $m)) return 'https://www.youtube.com/embed/' . $m[1];
-    if (preg_match('~vimeo\.com/(\d+)~', $url, $m)) return 'https://player.vimeo.com/video/' . $m[1];
+    $url = trim($url);
+    if ($url === '') return '';
+
+    /* Toutes les écritures de YouTube, y compris m.youtube.com et
+       youtube-nocookie.com. L'identifiant fait toujours 11 caractères. */
+    $motifs = [
+        '~[?&]v=([\w-]{11})~',                       // watch?...&v=ID
+        '~youtu\.be/([\w-]{11})~',                   // lien court
+        '~youtube(?:-nocookie)?\.com/embed/([\w-]{11})~',
+        '~youtube\.com/shorts/([\w-]{11})~',         // Short
+        '~youtube\.com/live/([\w-]{11})~',           // direct
+        '~youtube\.com/v/([\w-]{11})~',              // ancienne forme
+    ];
+    foreach ($motifs as $motif) {
+        if (preg_match($motif, $url, $m)) {
+            /* rel=0 limite les suggestions à la même chaîne à la fin de la
+               vidéo : on évite d'envoyer le visiteur chez un concurrent. */
+            return 'https://www.youtube.com/embed/' . $m[1] . '?rel=0';
+        }
+    }
+
+    /* Vimeo, avec ou sans jeton de partage privé. */
+    if (preg_match('~vimeo\.com/(?:video/)?(\d+)(?:/(\w+))?~', $url, $m)) {
+        return 'https://player.vimeo.com/video/' . $m[1]
+             . (!empty($m[2]) ? '?h=' . $m[2] : '');
+    }
+
+    /* Dailymotion, présent en Afrique de l'Ouest. */
+    if (preg_match('~dailymotion\.com/video/([a-zA-Z0-9]+)~', $url, $m)) {
+        return 'https://www.dailymotion.com/embed/video/' . $m[1];
+    }
+    if (preg_match('~dai\.ly/([a-zA-Z0-9]+)~', $url, $m)) {
+        return 'https://www.dailymotion.com/embed/video/' . $m[1];
+    }
+
+    /* Facebook : la lecture passe par le lecteur social. */
+    if (preg_match('~facebook\.com/.+/videos?/~', $url)) {
+        return 'https://www.facebook.com/plugins/video.php?href=' . urlencode($url) . '&show_text=0';
+    }
+
     return $url;
 }
 
@@ -356,6 +437,40 @@ function charge_rattachable(string $categorie): bool {
 /* Catégories d'encaissement */
 function categories_recette(): array {
     return ['Ventes' => '💰', 'Acompte' => '🤝', 'Solde' => '✅', 'Autre recette' => '📌'];
+}
+
+/* ----------------------------------------------------------------------------
+   Nom du fichier d'un document téléchargé.
+
+   « Facture-FAC-2026-0001.pdf » ne dit pas de qui il s'agit : dans un dossier
+   de téléchargements, on ne retrouve rien. On préfixe donc par le nom de
+   l'entreprise, ou celui de la personne quand il n'y a pas d'entreprise :
+   « Cabinet-ATraore-Facture-FAC-2026-0001.pdf ».
+   ---------------------------------------------------------------------------- */
+function document_nom_fichier(string $type, string $numero, string $client = ''): string {
+    $prefixes = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
+                 'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie', 'rapport' => 'Document'];
+
+    /* Les accents et les espaces posent problème sur certains systèmes : on
+       les remplace, sans quoi le fichier arrive avec un nom illisible. */
+    $propre = function (string $t): string {
+        $t = str_replace(
+            ['à','â','ä','á','ã','å','é','è','ê','ë','î','ï','í','ì','ô','ö','ó','ò','õ',
+             'û','ü','ú','ù','ç','ñ','À','Â','Ä','Á','É','È','Ê','Ë','Î','Ï','Ô','Ö','Û','Ü','Ç','Ñ'],
+            ['a','a','a','a','a','a','e','e','e','e','i','i','i','i','o','o','o','o','o',
+             'u','u','u','u','c','n','A','A','A','A','E','E','E','E','I','I','O','O','U','U','C','N'],
+            $t);
+        $t = preg_replace('/[^A-Za-z0-9]+/', '-', $t);
+        return trim((string)$t, '-');
+    };
+
+    $morceaux = [];
+    $nomClient = $propre($client);
+    if ($nomClient !== '') $morceaux[] = mb_substr($nomClient, 0, 40);
+    $morceaux[] = $prefixes[$type] ?? 'Document';
+    $morceaux[] = $propre($numero);
+
+    return implode('-', array_filter($morceaux)) . '.pdf';
 }
 
 /* ----------------------------------------------------------------------------

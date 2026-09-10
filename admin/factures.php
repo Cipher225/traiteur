@@ -73,9 +73,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $corps = '<p>Bonjour <strong>' . htmlspecialchars($fdoc['client']) . '</strong>,</p>
                 <p>Veuillez trouver votre ' . $typeLbl . ' <strong>' . htmlspecialchars($fdoc['numero']) . '</strong>.</p>'
                 . ($lien ? '<p style="text-align:center;margin:24px 0"><a href="' . $lien . '" style="background:#d4a526;color:#0a1020;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">Consulter le document</a></p>' : '')
-                . '<p>Pour toute question, n\'hésitez pas à nous contacter.</p>
-                <p>Cordialement,<br><strong>' . htmlspecialchars($s['nom_entreprise'] ?? 'Groupe Helisce') . '</strong></p>';
-            if (@envoyer_email($pdo, $fdoc['email'], 'Votre ' . $typeLbl . ' ' . $fdoc['numero'], $corps)) {
+                . '<p>Pour toute question, n\'hésitez pas à nous contacter.</p>';
+
+            /* Le document part avec la signature de l'entreprise, comme tout
+               message sortant, et avec le PDF en pièce jointe : le client ne
+               devrait pas avoir à cliquer sur un lien pour obtenir sa facture. */
+            require_once __DIR__ . '/../config/signature_mail.php';
+            $images = []; $aSupprimer = [];
+            $sujet  = 'Votre ' . $typeLbl . ' ' . $fdoc['numero'];
+            $corps  = email_signe($pdo, $s, $corps, $images, $aSupprimer, false, $fdoc['email'], $sujet);
+
+            $pieces = [];
+            $tmp = __DIR__ . '/../uploads/tmp';
+            if (!is_dir($tmp)) @mkdir($tmp, 0775, true);
+            $chemin = $tmp . '/doc-' . $fid . '-' . bin2hex(random_bytes(3)) . '.pdf';
+            $_GET['type'] = $fdoc['type']; $_GET['id'] = $fid;
+            ob_start(); try { include __DIR__ . '/pdf-piece.php'; } catch (Throwable $e) {} $pdf = ob_get_clean();
+            if ($pdf !== '' && strncmp($pdf, '%PDF', 4) === 0) {
+                file_put_contents($chemin, $pdf);
+                $pieces[] = ['chemin' => $chemin,
+                             'nom'    => document_nom_fichier($fdoc['type'], $fdoc['numero'], $fdoc['client']),
+                             'type'   => 'application/pdf'];
+                $aSupprimer[] = $chemin;
+            }
+
+            $envoye = @envoyer_email($pdo, $fdoc['email'], $sujet, $corps, '', $pieces, $motifErr, $images);
+            foreach ($aSupprimer as $x) { if (is_file($x)) @unlink($x); }
+
+            if ($envoye) {
                 flash('Document envoyé par email à ' . $fdoc['email'] . '.');
             } else {
                 flash("L'email n'a pas pu être envoyé. Vérifiez les réglages SMTP dans Paramètres.", 'error');

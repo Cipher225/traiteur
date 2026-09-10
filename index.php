@@ -197,10 +197,19 @@ $f = flash();
     </div>
     <div class="services-grid">
       <?php foreach ($services as $sv): ?>
+      <?php $points = array_filter(array_map('trim', explode("\n", (string)($sv['details'] ?? '')))); ?>
       <article class="service-card glass reveal">
         <div class="ico"><?= e($sv['icone']) ?></div>
         <h3><?= e($sv['nom']) ?></h3>
         <p><?= e($sv['description']) ?></p>
+        <?php if ($points): ?>
+        <ul class="sc-points">
+          <?php foreach ($points as $pt): ?><li><?= e($pt) ?></li><?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+        <?php if (!empty($sv['prix_indicatif'])): ?>
+        <div class="sc-prix"><?= e($sv['prix_indicatif']) ?></div>
+        <?php endif; ?>
       </article>
       <?php endforeach; ?>
     </div>
@@ -275,8 +284,9 @@ $f = flash();
       <?php foreach ($galerie as $i => $g):
         /* Les photos verticales prennent deux rangées, les larges deux colonnes :
            la mosaïque respire au lieu d'aligner des vignettes identiques. */
-        $L = (int)($g['largeur'] ?? 0); $H = (int)($g['hauteur'] ?? 0);
-        $forme = ($L && $H) ? ($H > $L * 1.25 ? 'haute' : ($L > $H * 1.6 ? 'large' : '')) : '';
+        /* Chaque photo garde ses proportions : la disposition en colonnes
+           s'adapte d'elle-même, sans classe particulière. */
+        $forme = '';
       ?>
       <figure class="gal-item reveal <?= $forme ?>" data-album="<?= (int)($g['aid'] ?? 0) ?>"
               data-i="<?= $i ?>" data-src="uploads/<?= e($g['image']) ?>"

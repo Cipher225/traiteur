@@ -18,10 +18,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Réglages PHP adaptés à l'application (uploads jusqu'à 200 Mo)
 RUN { \
-        echo 'upload_max_filesize = 200M'; \
-        echo 'post_max_size = 210M'; \
-        echo 'memory_limit = 256M'; \
-        echo 'max_execution_time = 120'; \
+        echo 'upload_max_filesize = 500M'; \
+        echo 'post_max_size = 512M'; \
+        echo 'memory_limit = 512M'; \
+        echo 'max_execution_time = 900'; \
+        echo 'max_input_time = 900'; \
         echo 'expose_php = Off'; \
     } > /usr/local/etc/php/conf.d/zzz-app.ini
 

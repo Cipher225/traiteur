@@ -33,7 +33,44 @@ foreach ($factures as $k => $f) {
     $factures[$k]['_ttc'] = $ttc;
     if (($f['type'] ?? 'facture') === 'proforma') $nb_pro++; else { $nb_fac++; $total_fac += $ttc; }
 }
-$total_recu = array_sum(array_map(fn($r)=>(float)$r['montant'], $recus));
+/* ----------------------------------------------------------------------------
+   Total réglé.
+
+   Additionner les seuls bons de caisse ne suffisait pas : quand vous marquez
+   une facture « payée » depuis l'administration sans émettre de bon, le client
+   ne voyait rien changer et croyait sa facture toujours due.
+
+   On calcule donc, pour chaque facture, ce qui a réellement été réglé — bons
+   de caisse et paiements en ligne confondus — puis on ajoute les encaissements
+   qui ne se rattachent à aucune facture.
+   ---------------------------------------------------------------------------- */
+require_once __DIR__ . '/../config/wave.php';
+
+$total_recu = 0.0;
+$reste_du   = 0.0;
+foreach ($factures as $k => $f) {
+    if (($f['type'] ?? 'facture') === 'proforma') continue;
+    if (($f['statut'] ?? '') === 'annulee') continue;
+
+    $ttc   = (float)($f['_ttc'] ?? 0);
+    $regle = min($ttc, paiements_deja_regles($pdo, (int)$f['id']));
+
+    /* Une facture marquée payée est réglée, même sans bon de caisse. */
+    if (($f['statut'] ?? '') === 'payee') $regle = $ttc;
+
+    $factures[$k]['_regle'] = $regle;
+    $factures[$k]['_reste'] = max(0, $ttc - $regle);
+
+    $total_recu += $regle;
+    $reste_du   += max(0, $ttc - $regle);
+}
+
+/* Encaissements sans facture rattachée : ils comptent aussi. */
+foreach ($recus as $r) {
+    if (($r['type'] ?? 'entree') === 'entree' && empty($r['facture_id'])) {
+        $total_recu += (float)$r['montant'];
+    }
+}
 
 $statutBadge = ['brouillon'=>'badge-gold','envoyee'=>'badge-violet','payee'=>'badge-teal','annulee'=>'badge-danger'];
 $statutLabel = ['brouillon'=>'Brouillon','envoyee'=>'Envoyée','payee'=>'Payée','annulee'=>'Annulée'];
@@ -46,9 +83,15 @@ client_header('Mon espace', 'accueil', $settings, $CLIENT);
 ?>
 <div class="stats">
   <div class="stat glass violet"><div class="s-ico">🧾</div><div class="s-num"><?= $nb_fac ?></div><div class="s-label">Factures</div></div>
-  <div class="stat glass gold"><div class="s-ico">📋</div><div class="s-num"><?= $nb_pro ?></div><div class="s-label">Proforma (proforma)</div></div>
+  <div class="stat glass gold"><div class="s-ico">📋</div><div class="s-num"><?= $nb_pro ?></div><div class="s-label">Proformas</div></div>
   <div class="stat glass teal"><div class="s-ico">💳</div><div class="s-num" style="font-size:20px"><?= money($total_recu, $devise) ?></div><div class="s-label">Total réglé</div></div>
-  <div class="stat glass rose"><div class="s-ico">📄</div><div class="s-num"><?= count($recus) ?></div><div class="s-label">Sorties</div></div>
+  <?php /* Le client doit savoir ce qu'il reste à payer : c'est l'information
+           qu'il vient chercher en premier. */ ?>
+  <div class="stat glass <?= $reste_du > 0 ? 'rose' : 'teal' ?>">
+    <div class="s-ico"><?= $reste_du > 0 ? '⏳' : '✅' ?></div>
+    <div class="s-num" style="font-size:20px"><?= money($reste_du, $devise) ?></div>
+    <div class="s-label"><?= $reste_du > 0 ? 'Reste à régler' : 'Tout est réglé' ?></div>
+  </div>
 </div>
 
 <?php

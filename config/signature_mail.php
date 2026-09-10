@@ -159,3 +159,61 @@ function signature_image(array $s, string $reference, string $empreinte, string 
     imagedestroy($im);
     return (bool)$ok;
 }
+
+/* ----------------------------------------------------------------------------
+   Habille un message de la signature de l'entreprise.
+
+   Tout email sortant doit porter la même signature, qu'il vienne du module
+   E-mail ou du bouton « Envoyer par mail » d'un document. Sans cela, le client
+   reçoit tantôt un message signé, tantôt un texte nu — et se demande si le
+   second vient bien de vous.
+
+   L'image est jointe en interne (cid) : elle s'affiche même quand le client
+   bloque les images distantes, ce qui est le réglage par défaut de la plupart
+   des messageries.
+
+   Renvoie le corps complet ; $images est rempli des pièces à intégrer, et
+   $aSupprimer des fichiers temporaires à effacer après l'envoi.
+   ---------------------------------------------------------------------------- */
+function email_signe(PDO $pdo, array $settings, string $corps,
+                     array &$images, array &$aSupprimer,
+                     bool $authentifier = false, string $destinataire = '', string $sujet = ''): string
+{
+    $dossier = __DIR__ . '/../uploads/signatures';
+    if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
+
+    $date      = date('Y-m-d H:i:s');
+    $reference = signature_reference($pdo);
+    $empreinte = $authentifier ? signature_empreinte($destinataire, $sujet, $corps, $date) : '';
+    $fichier   = $dossier . '/' . $reference . '.png';
+
+    if (!signature_image($settings, $reference, $empreinte, $fichier, $authentifier)) {
+        return $corps;                     // sans image, on renvoie le texte tel quel
+    }
+
+    $images[] = ['cid' => 'signature-entreprise', 'chemin' => $fichier];
+
+    $logo = __DIR__ . '/../uploads/' . (string)($settings['logo'] ?? '');
+    if (!empty($settings['logo']) && is_file($logo)) {
+        $images[] = ['cid' => 'logo-entreprise', 'chemin' => $logo];
+    }
+
+    /* Une signature non authentifiée ne sert à rien après l'envoi : on la
+       supprime pour ne pas encombrer le disque. */
+    if (!$authentifier) $aSupprimer[] = $fichier;
+
+    $site = adresse_site($settings);
+    $url  = $site . '/verifier.php?c=' . urlencode($reference);
+
+    return $corps
+        . '<div style="margin-top:26px;border-top:1px solid #e8ecf2;padding-top:16px">'
+        . '<img src="cid:signature-entreprise" alt="' . e($settings['nom_entreprise'] ?? '')
+        . '" style="max-width:100%;height:auto;display:block">'
+        . ($authentifier
+            ? '<p style="margin:10px 0 0;font-size:11px;color:#8a9ab5;line-height:1.6">'
+              . 'Référence de ce message : <strong style="color:#0a1f44">' . e($reference) . '</strong>'
+              . ($site !== '' ? ' — <a href="' . e($url) . '" style="color:#b8870f">vérifier son authenticité</a>' : '')
+              . '</p>'
+            : '')
+        . '</div>';
+}

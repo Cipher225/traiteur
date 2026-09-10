@@ -1,9 +1,11 @@
-# Uploads volumineux (messagerie : 200 Mo max)
-php_value upload_max_filesize 200M
-php_value post_max_size 210M
-php_value max_execution_time 300
-php_value max_input_time 300
-php_value memory_limit 256M
+# Fichiers volumineux : vidéos jusqu'à 500 Mo.
+# Le temps d'exécution suit : sur une connexion à 2 Mo/s, 500 Mo demandent
+# plus de quatre minutes rien que pour le transfert.
+php_value upload_max_filesize 500M
+php_value post_max_size 512M
+php_value max_execution_time 900
+php_value max_input_time 900
+php_value memory_limit 512M
 
 # Sécurité : empêcher l'accès aux fichiers de configuration
 <FilesMatch "\.(sql|md|log)$">

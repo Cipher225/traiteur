@@ -175,10 +175,13 @@ $canvas->page_script(function ($page, $pages, $c, $fm)
 });
 
 /* ---- Nom du fichier ---- */
-$prefixes = ['facture' => 'Facture', 'proforma' => 'Proforma', 'livraison' => 'Bon-de-livraison',
-             'recu' => 'Recu', 'fiche' => 'Bulletin-de-paie', 'rapport' => 'Document'];
+/* Le fichier porte le nom du client : dans un dossier de téléchargements,
+   « Facture-FAC-2026-0001.pdf » ne dit pas de qui il s'agit. */
 $numFichier = ($type === 'livraison') ? numero_bon_livraison($pdo, (int)$doc['id']) : $doc['numero'];
-$nom = ($prefixes[$type] ?? 'Document') . '-' . preg_replace('/[^A-Za-z0-9\-]/', '-', $numFichier) . '.pdf';
+$nomClient  = trim((string)($doc['entreprise'] ?? '')) !== ''
+            ? (string)$doc['entreprise']
+            : (string)($doc['client_nom'] ?? $doc['nom'] ?? $doc['employe'] ?? '');
+$nom = document_nom_fichier($type, (string)$numFichier, $nomClient);
 
 /* Le PDF est produit AVANT de supprimer l'image du QR : le dessin de la
    dernière page a besoin du fichier jusqu'au bout. */

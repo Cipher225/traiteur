@@ -445,3 +445,12 @@ INSERT IGNORE INTO galerie_albums (id, nom, icone, description, ordre) VALUES
 --  changer de total après coup.
 -- =====================================================================
 ALTER TABLE facture_lignes ADD COLUMN IF NOT EXISTS par_jour TINYINT(1) DEFAULT 0;
+
+-- =====================================================================
+--  SERVICES ENRICHIS
+--  Un service n'est pas qu'un nom : le visiteur veut savoir ce qu'il
+--  comprend et à partir de quel prix. Ces colonnes restent facultatives.
+-- =====================================================================
+ALTER TABLE services ADD COLUMN IF NOT EXISTS prix_indicatif VARCHAR(80) DEFAULT '';
+ALTER TABLE services ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS image VARCHAR(255) DEFAULT '';
