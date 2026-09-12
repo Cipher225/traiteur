@@ -324,7 +324,8 @@ $f = flash();
         $poster = $v['miniature'] ? 'uploads/' . $v['miniature'] : '';
       ?>
       <figure class="video-item reveal" data-type="<?= $estFichier ? 'fichier' : 'iframe' ?>"
-              data-src="<?= e($source) ?>" data-titre="<?= e($v['titre']) ?>">
+              data-src="<?= e($source) ?>" data-lien="<?= e($v['url'] ?? '') ?>"
+              data-titre="<?= e($v['titre']) ?>">
         <div class="video-frame">
           <div class="vf-cadre"></div>
           <?php if ($poster): ?>
@@ -675,19 +676,52 @@ $f = flash();
   }
 
   /* ---------- Vidéos : chargement au clic ---------- */
+  function secours(fig, zone) {
+    var lien = fig.dataset.lien || fig.dataset.src;
+    zone.innerHTML =
+      '<div class="vf-secours">'
+      + '<p>La vidéo ne peut pas être lue ici.</p>'
+      + '<a href="' + lien + '" target="_blank" rel="noopener">Ouvrir sur YouTube ↗</a>'
+      + '</div>';
+  }
+
   document.querySelectorAll('.video-item').forEach(function (fig) {
     var bouton = fig.querySelector('.vf-play');
     if (!bouton) return;
     bouton.addEventListener('click', function () {
       var zone = fig.querySelector('.vf-lecteur');
       if (fig.dataset.type === 'fichier') {
-        zone.innerHTML = '<video controls autoplay playsinline style="width:100%;height:100%;display:block">'
-                       + '<source src="' + fig.dataset.src + '"></video>';
+        zone.innerHTML = '<video controls autoplay playsinline preload="metadata" '
+                       + 'style="width:100%;height:100%;display:block">'
+                       + '<source src="' + fig.dataset.src + '">'
+                       + 'Votre navigateur ne peut pas lire cette vidéo.</video>';
       } else {
         var u = fig.dataset.src + (fig.dataset.src.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
-        zone.innerHTML = '<iframe src="' + u + '" title="' + (fig.dataset.titre || '') + '" '
-                       + 'allow="accelerometer; autoplay; encrypted-media; picture-in-picture" '
-                       + 'allowfullscreen style="width:100%;height:100%;border:0;display:block"></iframe>';
+        var cadre = document.createElement('iframe');
+        cadre.src = u;
+        cadre.title = fig.dataset.titre || 'Vidéo';
+        /* « fullscreen » doit figurer dans « allow » : sans lui, le bouton
+           plein écran du lecteur reste inactif dans un cadre intégré. */
+        cadre.setAttribute('allow',
+          'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
+        cadre.setAttribute('allowfullscreen', '');
+        cadre.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        cadre.setAttribute('loading', 'eager');
+        cadre.style.cssText = 'width:100%;height:100%;border:0;display:block';
+
+        /* Si le lecteur ne se charge pas — vidéo privée, lecture intégrée
+           refusée par son propriétaire, réseau coupé — on propose le lien
+           direct plutôt que de laisser un rectangle noir. */
+        var minuteur = setTimeout(function () {
+          if (!fig.dataset.charge) secours(fig, zone);
+        }, 6000);
+        cadre.addEventListener('load', function () {
+          fig.dataset.charge = '1';
+          clearTimeout(minuteur);
+        });
+
+        zone.innerHTML = '';
+        zone.appendChild(cadre);
       }
       fig.classList.add('joue');
     });

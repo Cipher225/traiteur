@@ -2,7 +2,9 @@
    SERVICE WORKER — permet l'installation de l'application (PWA)
    et un fonctionnement de base même avec une connexion instable.
    ============================================================================ */
-const CACHE = 'helisce-v2';
+/* Ce numéro doit changer à chaque correction du service worker : sans cela,
+   les navigateurs gardent l'ancienne version et la correction ne prend pas. */
+const CACHE = 'helisce-v3';
 const PAGE_HORS_LIGNE = 'hors-ligne.php';
 
 // À l'installation : on active immédiatement.
@@ -27,7 +29,25 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+
+  /* On ne s'occupe QUE de notre propre site.
+
+     Sans cette barrière, le lecteur YouTube, les polices distantes et les
+     services de paiement passaient par ici : à la moindre lenteur, ils
+     recevaient la page « Hors connexion » à la place de leur contenu — et la
+     vidéo ne démarrait jamais. Ces domaines gèrent leur propre cache, ils
+     n'ont aucun besoin du nôtre. */
+  if (url.origin !== self.location.origin) return;
+
+  /* Les requêtes de flux vidéo demandent un fragment de fichier à la fois
+     (en-tête « Range ») : les mettre en cache les casserait. */
+  if (req.headers.has('range')) return;
+
   const estStatique = /\.(css|js|png|jpg|jpeg|webp|svg|woff2?|ico)$/i.test(url.pathname);
+
+  /* Une vidéo hébergée sur le site passe en direct : un fichier de 500 Mo
+     n'a rien à faire dans un cache de navigateur. */
+  if (/\.(mp4|webm|ogg|ogv|mov|m4v|avi|mkv)$/i.test(url.pathname)) return;
 
   if (estStatique) {
     // Ressources statiques : cache d'abord, mise à jour en arrière-plan.

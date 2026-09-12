@@ -177,8 +177,16 @@ function signature_image(array $s, string $reference, string $empreinte, string 
    ---------------------------------------------------------------------------- */
 function email_signe(PDO $pdo, array $settings, string $corps,
                      array &$images, array &$aSupprimer,
-                     bool $authentifier = false, string $destinataire = '', string $sujet = ''): string
+                     ?bool $authentifier = null, string $destinataire = '', string $sujet = '',
+                     ?int $clientId = null, string $nomDestinataire = '', string $pieces = ''): string
 {
+    /* Si l'appelant ne tranche pas, on suit le réglage général — celui que
+       pilote l'interrupteur du module E-mail. Un document envoyé depuis une
+       facture doit être authentifiable au même titre qu'un message. */
+    if ($authentifier === null) {
+        $authentifier = ($settings['signature_auth_defaut'] ?? '1') !== '0';
+    }
+
     $dossier = __DIR__ . '/../uploads/signatures';
     if (!is_dir($dossier)) @mkdir($dossier, 0775, true);
 
@@ -200,7 +208,25 @@ function email_signe(PDO $pdo, array $settings, string $corps,
 
     /* Une signature non authentifiée ne sert à rien après l'envoi : on la
        supprime pour ne pas encombrer le disque. */
-    if (!$authentifier) $aSupprimer[] = $fichier;
+    if (!$authentifier) {
+        $aSupprimer[] = $fichier;
+    } else {
+        /* Un message authentifiable doit être ENREGISTRÉ, sinon la page de
+           vérification ne reconnaîtra pas sa référence et le destinataire
+           conclura que le document est faux. */
+        try {
+            $pdo->prepare('INSERT INTO emails_envoyes (reference, empreinte, destinataire,
+                           destinataire_nom, client_id, sujet, corps, piece_jointe,
+                           envoye_par, envoye_par_nom, statut, envoye_le, authentifie)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)')
+                ->execute([$reference, $empreinte, $destinataire,
+                           mb_substr($nomDestinataire, 0, 150), $clientId,
+                           mb_substr($sujet, 0, 200), $corps, mb_substr($pieces, 0, 190),
+                           (int)($_SESSION['admin_id'] ?? 0) ?: null,
+                           (string)($_SESSION['admin_nom'] ?? 'Système'),
+                           'envoye', $date]);
+        } catch (Throwable $e) { /* l'envoi prime sur la traçabilité */ }
+    }
 
     $site = adresse_site($settings);
     $url  = $site . '/verifier.php?c=' . urlencode($reference);

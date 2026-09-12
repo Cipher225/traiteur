@@ -60,7 +60,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['envoyer_mail'])) {
         require_once __DIR__ . '/../config/mail.php';
         $fid = (int)$_POST['envoyer_mail'];
-        $q = $pdo->prepare("SELECT f.numero, f.type, c.nom AS client, c.email
+        $q = $pdo->prepare("SELECT f.numero, f.type, f.client_id,
+                COALESCE(NULLIF(c.entreprise,''), c.nom) AS client, c.email
             FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.id=?");
         $q->execute([$fid]); $fdoc = $q->fetch();
         if (!$fdoc || empty($fdoc['email'])) {
@@ -81,7 +82,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             require_once __DIR__ . '/../config/signature_mail.php';
             $images = []; $aSupprimer = [];
             $sujet  = 'Votre ' . $typeLbl . ' ' . $fdoc['numero'];
-            $corps  = email_signe($pdo, $s, $corps, $images, $aSupprimer, false, $fdoc['email'], $sujet);
 
             $pieces = [];
             $tmp = __DIR__ . '/../uploads/tmp';
@@ -96,6 +96,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              'type'   => 'application/pdf'];
                 $aSupprimer[] = $chemin;
             }
+
+            /* La signature vient en dernier : elle enregistre le message avec
+               la liste de ses pièces, ce qui rend la vérification complète.
+               L'authentification suit l'interrupteur réglé dans le module
+               E-mail — aucun réglage séparé à tenir à jour. */
+            $nomsPJ = implode(', ', array_map(fn($p) => $p['nom'], $pieces));
+            $corps  = email_signe($pdo, $s, $corps, $images, $aSupprimer, null,
+                                  $fdoc['email'], $sujet, (int)($fdoc['client_id'] ?? 0) ?: null,
+                                  (string)$fdoc['client'], $nomsPJ);
 
             $envoye = @envoyer_email($pdo, $fdoc['email'], $sujet, $corps, '', $pieces, $motifErr, $images);
             foreach ($aSupprimer as $x) { if (is_file($x)) @unlink($x); }
@@ -135,7 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['envoyer_mail'])) {
         require_once __DIR__ . '/../config/mail.php';
         $fid = (int)$_POST['envoyer_mail'];
-        $q = $pdo->prepare("SELECT f.numero, f.type, c.nom AS client, c.email
+        $q = $pdo->prepare("SELECT f.numero, f.type, f.client_id,
+                COALESCE(NULLIF(c.entreprise,''), c.nom) AS client, c.email
             FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.id=?");
         $q->execute([$fid]); $fdoc = $q->fetch();
         if (!$fdoc || empty($fdoc['email'])) {
