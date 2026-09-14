@@ -183,7 +183,9 @@ section { padding: 88px 0; }
 
 /* Footer */
 /* ---------- Vidéos ---------- */
-.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 22px; }
+/* Cartes plus compactes : quatre tiennent sur un écran large au lieu de trois,
+   et la section ne prend plus toute la hauteur de la page. */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 18px; }
 .video-item { border-radius: var(--r-lg); overflow: hidden; padding: 0; }
 .video-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; }
 .video-frame iframe, .video-frame video {

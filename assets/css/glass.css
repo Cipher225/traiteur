@@ -595,21 +595,46 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 /* ============================================================
    VIDÉOS — cadre lumineux, lecture au clic
    ============================================================ */
-.video-item{position:relative;margin:0;border-radius:22px;overflow:hidden;
-  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);
-  transition:transform .3s cubic-bezier(.2,.8,.3,1), box-shadow .3s}
-.video-item:hover{transform:translateY(-4px);box-shadow:0 22px 55px rgba(0,0,0,.42)}
+/* ------------------------------------------------------------------
+   Lecteur vidéo.
+   Le lecteur occupe tout le cadre : c'est lui qui affiche sa vignette,
+   ses commandes et son bouton de son. Notre rôle se limite à l'habiller
+   — un liseré doré, une ombre, et un léger soulèvement au survol.
+   ------------------------------------------------------------------ */
+.video-item{position:relative;margin:0;border-radius:18px;overflow:hidden;
+  background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+  border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 6px 22px rgba(0,0,0,.26);
+  transition:transform .32s cubic-bezier(.2,.8,.3,1),
+             box-shadow .32s, border-color .32s}
+.video-item:hover{transform:translateY(-5px);border-color:rgba(240,193,75,.34);
+  box-shadow:0 20px 48px rgba(0,0,0,.46), 0 0 0 1px rgba(240,193,75,.14)}
+
 .video-frame{position:relative;aspect-ratio:16/9;overflow:hidden;background:#050b16}
-.vf-cadre{position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:22px 22px 0 0;
-  box-shadow:inset 0 0 0 1px rgba(240,193,75,.22), inset 0 0 34px rgba(240,193,75,.08)}
-/* Le lecteur occupe tout le cadre : c'est lui qui affiche sa vignette et son
-   bouton de lecture. Notre cadre doré se contente de l'entourer. */
 .video-frame iframe,
 .video-frame video{width:100%;height:100%;border:0;display:block;background:#050b16}
-.vf-cadre{border-radius:22px 22px 0 0}
-.video-item figcaption{padding:17px 20px 20px}
-.video-item figcaption h3{margin:0;font-size:16.5px;color:#fff}
-.video-item figcaption p{margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.62);line-height:1.6}
+
+/* Liseré intérieur : il donne du relief sans masquer les commandes du
+   lecteur, d'où « pointer-events: none ». */
+.vf-cadre{position:absolute;inset:0;z-index:3;pointer-events:none;
+  border-radius:18px 18px 0 0;
+  box-shadow:inset 0 0 0 1px rgba(240,193,75,.2), inset 0 0 30px rgba(240,193,75,.06)}
+
+/* Repère « son coupé » : discret, il s'efface au survol pour ne pas gêner. */
+/* En haut à gauche : le bas du cadre est occupé par les commandes du lecteur,
+   un repère posé là masquerait le bouton de lecture. */
+.vf-muet{position:absolute;left:10px;top:10px;z-index:4;pointer-events:none;
+  padding:4px 11px;border-radius:16px;font-size:10.5px;white-space:nowrap;
+  color:rgba(255,255,255,.82);background:rgba(6,12,26,.72);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.14);
+  opacity:.9;transition:opacity .25s}
+.video-item:hover .vf-muet{opacity:0}
+.video-item figcaption{padding:13px 16px 15px}
+.video-item figcaption h3{margin:0;font-size:14.5px;color:#fff;line-height:1.35}
+.video-item figcaption p{margin:4px 0 0;font-size:12.5px;color:rgba(255,255,255,.6);
+  line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden}
 
 @media (max-width:1100px){ .gal-grid{column-count:3} }
 @media (max-width:700px){

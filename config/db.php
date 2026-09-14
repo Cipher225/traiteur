@@ -229,24 +229,31 @@ function video_embed(string $url): string {
     ];
     foreach ($motifs as $motif) {
         if (preg_match($motif, $url, $m)) {
-            /* rel=0 limite les suggestions à la même chaîne à la fin de la
-               vidéo : on évite d'envoyer le visiteur chez un concurrent. */
-            return 'https://www.youtube.com/embed/' . $m[1] . '?rel=0';
+            /* Paramètres de lecture :
+               rel=0        les suggestions de fin restent sur votre chaîne,
+                            on n'envoie pas le visiteur chez un concurrent ;
+               autoplay+mute la vidéo démarre seule, sans son. Les navigateurs
+                            refusent la lecture automatique sonore — c'est une
+                            règle qu'aucun site ne contourne. Le visiteur
+                            rétablit le son d'un clic sur l'icône du lecteur ;
+               playsinline  sur iPhone, la vidéo reste dans sa vignette au lieu
+                            de passer en plein écran de force. */
+            return 'https://www.youtube.com/embed/' . $m[1]
+                 . '?rel=0&autoplay=1&mute=1&playsinline=1&modestbranding=1';
         }
     }
 
     /* Vimeo, avec ou sans jeton de partage privé. */
     if (preg_match('~vimeo\.com/(?:video/)?(\d+)(?:/(\w+))?~', $url, $m)) {
         return 'https://player.vimeo.com/video/' . $m[1]
-             . (!empty($m[2]) ? '?h=' . $m[2] : '');
+             . (!empty($m[2]) ? '?h=' . $m[2] . '&' : '?')
+             . 'autoplay=1&muted=1&playsinline=1';
     }
 
     /* Dailymotion, présent en Afrique de l'Ouest. */
-    if (preg_match('~dailymotion\.com/video/([a-zA-Z0-9]+)~', $url, $m)) {
-        return 'https://www.dailymotion.com/embed/video/' . $m[1];
-    }
-    if (preg_match('~dai\.ly/([a-zA-Z0-9]+)~', $url, $m)) {
-        return 'https://www.dailymotion.com/embed/video/' . $m[1];
+    if (preg_match('~(?:dailymotion\.com/video|dai\.ly)/([a-zA-Z0-9]+)~', $url, $m)) {
+        return 'https://www.dailymotion.com/embed/video/' . $m[1]
+             . '?autoplay=1&mute=1&queue-enable=false';
     }
 
     /* Facebook : la lecture passe par le lecteur social. */

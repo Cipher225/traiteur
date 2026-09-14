@@ -341,7 +341,10 @@ $f = flash();
           <div class="vf-cadre"></div>
 
           <?php if ($estFichier): ?>
-            <video controls preload="none" playsinline
+            <?php /* Même règle que pour YouTube : la lecture automatique n'est
+                     autorisée que sans son. « preload=metadata » évite de
+                     télécharger toute la vidéo avant de l'afficher. */ ?>
+            <video controls autoplay muted playsinline preload="metadata"
                    <?= $poster ? 'poster="' . e($poster) . '"' : '' ?>>
               <source src="<?= e($source) ?>">
               Votre navigateur ne peut pas lire cette vidéo.
@@ -360,6 +363,12 @@ $f = flash();
               <p>Ce lien ne peut pas être lu ici.</p>
               <a href="<?= e($v['url'] ?? '#') ?>" target="_blank" rel="noopener">Ouvrir la vidéo ↗</a>
             </div>
+          <?php endif; ?>
+
+          <?php if ($lisible): ?>
+          <?php /* Le visiteur doit comprendre pourquoi il n'entend rien : sans
+                   ce repère, il croit que la vidéo est muette à la source. */ ?>
+          <span class="vf-muet">🔇 Son coupé — activez-le dans le lecteur</span>
           <?php endif; ?>
         </div>
         <figcaption>
