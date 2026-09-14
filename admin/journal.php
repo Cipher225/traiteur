@@ -1,5 +1,23 @@
 <?php
 require __DIR__ . '/includes/auth.php';
+
+/* ----------------------------------------------------------------------------
+   Anciennetés proposées à la purge, définies UNE FOIS.
+   Elles servent au contrôle de la valeur reçue, au calcul des compteurs et au
+   menu déroulant : trois listes séparées finissaient toujours par diverger.
+   Une semaine est utile après une séance de mise au point, quand le journal
+   s'est rempli d'essais sans intérêt.
+   ---------------------------------------------------------------------------- */
+const ANCIENNETES = [7, 30, 90, 180, 365];
+
+function anciennete_libelle(int $j): string {
+    if ($j === 7)   return '1 semaine';
+    if ($j === 30)  return '1 mois';
+    if ($j === 90)  return '3 mois';
+    if ($j === 180) return '6 mois';
+    if ($j === 365) return '1 an';
+    return $j . ' jours';
+}
 require __DIR__ . '/includes/layout.php';
 
 /* ============================================================================
@@ -19,17 +37,17 @@ if (!is_admin()) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger'])) {
     csrf_check();
     $jours = (int)($_POST['jours'] ?? 90);
-    if (!in_array($jours, [30, 90, 180, 365], true)) $jours = 90;
+    if (!in_array($jours, ANCIENNETES, true)) $jours = 90;
 
     $st = $pdo->prepare("SELECT COUNT(*) FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
     $st->execute([$jours]);
     $aSupprimer = (int)$st->fetchColumn();
 
     if ($aSupprimer === 0) {
-        flash("Aucune entrée de plus de $jours jours : le journal est déjà à jour.");
+        flash("Aucune entrée de plus de " . anciennete_libelle($jours) . " : le journal est déjà à jour.");
     } else {
         $pdo->prepare("DELETE FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)")->execute([$jours]);
-        journaliser($pdo, 'purge', 'journal', null, $aSupprimer . ' entrée(s) de plus de ' . $jours . ' jours supprimée(s)');
+        journaliser($pdo, 'purge', 'journal', null, $aSupprimer . ' entrée(s) de plus de ' . anciennete_libelle($jours) . ' supprimée(s)');
         flash($aSupprimer . ' entrée' . ($aSupprimer > 1 ? 's supprimées' : ' supprimée') . '.');
     }
     header('Location: journal.php'); exit;
@@ -55,7 +73,7 @@ $clause = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 /* Nombre d'entrées purgeables pour chaque ancienneté proposée */
 $purgeables = [];
-foreach ([30, 90, 180, 365] as $j) {
+foreach (ANCIENNETES as $j) {
     $s = $pdo->prepare("SELECT COUNT(*) FROM journal WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
     $s->execute([$j]);
     $purgeables[$j] = (int)$s->fetchColumn();
@@ -110,36 +128,42 @@ admin_header('Journal des actions', 'journal', $pdo, $settings);
 <?php endif; ?>
 
 <div class="panel glass">
-  <h2>📖 Journal des actions (<?= $total ?>)</h2>
-  <p style="color:var(--ink-faint);font-size:13px;margin:-8px 0 12px">
-    Qui a fait quoi, et quand. Les entrées de plus de 90 jours peuvent être supprimées.</p>
+  <?php /* Deux formulaires distincts, sur deux lignes distinctes. L'ancienne
+           version remontait le second de 42 pixels pour l'aligner sur le
+           premier : dès que la fenêtre rétrécissait, les deux se chevauchaient. */ ?>
+  <div class="jr-tete">
+    <div>
+      <h2 style="margin:0">📖 Journal des actions <span class="cnt"><?= number_format($total, 0, ',', ' ') ?></span></h2>
+      <p class="jr-sous">Qui a fait quoi, et quand.</p>
+    </div>
+    <form method="get" class="jr-filtres">
+      <input class="input" name="q" value="<?= e($q) ?>" placeholder="Rechercher…">
+      <select class="input" name="a">
+        <option value="">Toutes les actions</option>
+        <?php foreach ($LIBELLES as $k => [$ic, $lb]): ?>
+        <option value="<?= $k ?>" <?= $filtre === $k ? 'selected' : '' ?>><?= $ic ?> <?= $lb ?></option>
+        <?php endforeach; ?>
+      </select>
+      <button class="btn btn-gold btn-sm">🔍</button>
+      <?php if ($q !== '' || $filtre !== ''): ?>
+      <a class="btn btn-glass btn-sm" href="journal.php">Effacer</a>
+      <?php endif; ?>
+    </form>
+  </div>
 
-  <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-    <input class="input" name="q" value="<?= e($q) ?>" placeholder="Rechercher…" style="max-width:230px">
-    <select class="input" name="a" style="max-width:180px">
-      <option value="">Toutes les actions</option>
-      <?php foreach ($LIBELLES as $k => [$ic, $lb]): ?>
-      <option value="<?= $k ?>" <?= $filtre === $k ? 'selected' : '' ?>><?= $ic ?> <?= $lb ?></option>
-      <?php endforeach; ?>
-    </select>
-    <button class="btn btn-glass btn-sm">Filtrer</button>
-    <?php if ($q !== '' || $filtre !== ''): ?>
-    <a class="btn btn-glass btn-sm" href="journal.php">Réinitialiser</a>
-    <?php endif; ?>
-  </form>
-  <form method="post" style="margin:-42px 0 14px;display:flex;justify-content:flex-end;gap:7px;align-items:center"
-        onsubmit="return confirm('Supprimer définitivement ces entrées du journal ?')">
+  <form method="post" class="jr-purge"
+        data-confirm="Supprimer définitivement ces entrées du journal ? Elles ne pourront pas être récupérées.">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-    <span style="font-size:12.5px;color:var(--ink-faint)">Supprimer les entrées de plus de</span>
-    <select class="input" name="jours" id="sel-jours" style="max-width:150px;padding:5px 9px;font-size:12.5px">
-      <?php foreach ([30, 90, 180, 365] as $j): ?>
+    <span class="jp-txt">🧹 Supprimer les entrées de plus de</span>
+    <select class="input" name="jours" id="sel-jours">
+      <?php foreach (ANCIENNETES as $j): ?>
       <option value="<?= $j ?>" <?= $j === 90 ? 'selected' : '' ?> data-n="<?= $purgeables[$j] ?>">
-        <?= $j ?> jours (<?= $purgeables[$j] ?>)
+        <?= anciennete_libelle($j) ?> — <?= $purgeables[$j] ?> entrée<?= $purgeables[$j] > 1 ? 's' : '' ?>
       </option>
       <?php endforeach; ?>
     </select>
     <button class="btn btn-glass btn-sm" name="purger" value="1" id="btn-purge"
-            <?= $purgeables[90] === 0 ? 'disabled style="opacity:.45;cursor:not-allowed"' : '' ?>>🧹 Nettoyer</button>
+            <?= $purgeables[90] === 0 ? 'disabled' : '' ?>>Nettoyer</button>
   </form>
   <?php if (array_sum($purgeables) === 0): ?>
   <p style="margin:-6px 0 12px;font-size:12.5px;color:var(--ink-faint)">
@@ -152,21 +176,49 @@ admin_header('Journal des actions', 'journal', $pdo, $settings);
   <?php if (!$lignes): ?>
     <p style="color:var(--ink-faint)">Aucune entrée pour le moment.</p>
   <?php else: ?>
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th>Date</th><th>Action</th><th>Par</th><th>Détail</th><th>Adresse</th></tr></thead>
-      <tbody>
-      <?php foreach ($lignes as $l): $inf = $LIBELLES[$l['action']] ?? ['•', $l['action']]; ?>
-        <tr>
-          <td style="white-space:nowrap"><?= date('d/m/Y H:i', strtotime($l['created_at'])) ?></td>
-          <td><?= $inf[0] ?> <?= e($inf[1]) ?><?= $l['cible'] ? ' <span style="color:var(--ink-faint);font-size:12px">('.e($l['cible']).')</span>' : '' ?></td>
-          <td><?= e($l['acteur'] ?: '—') ?><?= $l['role'] ? ' <span style="font-size:11px;color:var(--ink-faint)">'.e($l['role']).'</span>' : '' ?></td>
-          <td style="font-size:12.5px"><?= e($l['detail']) ?></td>
-          <td style="font-family:monospace;font-size:11px;color:var(--ink-faint)"><?= e($l['ip']) ?></td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
+  <?php
+  /* Cinq colonnes serrées obligeaient à couper les mots et à lire en diagonale.
+     Une ligne par action, groupée par jour, se parcourt bien mieux : on cherche
+     presque toujours « ce qui s'est passé tel jour ». */
+  $moisFr = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+             'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  $jourPrec = '';
+  ?>
+  <div class="jr">
+    <?php foreach ($lignes as $l):
+      $inf = $LIBELLES[$l['action']] ?? ['•', $l['action']];
+      $t = strtotime($l['created_at']);
+      $jour = date('Y-m-d', $t);
+    ?>
+      <?php if ($jour !== $jourPrec): $jourPrec = $jour; ?>
+      <div class="jr-jour">
+        <?php
+          if ($jour === date('Y-m-d'))                          echo "Aujourd'hui";
+          elseif ($jour === date('Y-m-d', strtotime('-1 day'))) echo 'Hier';
+          else echo date('j', $t) . ' ' . $moisFr[(int)date('n', $t)] . ' ' . date('Y', $t);
+        ?>
+      </div>
+      <?php endif; ?>
+
+      <div class="jr-l act-<?= e($l['action']) ?>">
+        <span class="jl-h"><?= date('H:i', $t) ?></span>
+        <span class="jl-ico" title="<?= e($inf[1]) ?>"><?= $inf[0] ?></span>
+
+        <div class="jl-c">
+          <div class="jl-t">
+            <strong><?= e($inf[1]) ?></strong>
+            <?php if ($l['cible']): ?><span class="jl-cible"><?= e($l['cible']) ?></span><?php endif; ?>
+            <span class="jl-par"><?= e($l['acteur'] ?: '—') ?><?php
+              if ($l['role']): ?> <em><?= e($l['role']) ?></em><?php endif; ?></span>
+          </div>
+          <?php if (trim((string)$l['detail']) !== ''): ?>
+          <div class="jl-d"><?= e($l['detail']) ?></div>
+          <?php endif; ?>
+        </div>
+
+        <?php if ($l['ip']): ?><span class="jl-ip"><?= e($l['ip']) ?></span><?php endif; ?>
+      </div>
+    <?php endforeach; ?>
   </div>
 
   <?php if ($pages > 1): ?>

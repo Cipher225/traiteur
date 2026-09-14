@@ -3328,3 +3328,62 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
   font-variant-numeric:tabular-nums;line-height:1.5;word-break:break-word}
 .ol-note{margin:11px 0 0;padding-top:10px;border-top:1px solid var(--glass-border);
   font-size:10.5px;color:var(--ink-faint);line-height:1.55}
+
+/* ============================================================
+   JOURNAL DES ACTIONS
+   ============================================================ */
+.jr-tete{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  flex-wrap:wrap;margin-bottom:12px}
+.jr-sous{margin:4px 0 0;font-size:12.5px;color:var(--ink-faint)}
+/* Les champs se resserrent avant de passer à la ligne : sinon le bouton de
+   recherche se retrouvait seul sur une seconde ligne, ce qui fait désordre. */
+.jr-filtres{display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1 1 380px;
+  justify-content:flex-end}
+.jr-filtres .input{padding:8px 13px}
+.jr-filtres input[name=q]{flex:1 1 150px;min-width:120px;max-width:220px}
+.jr-filtres select{flex:0 1 180px;min-width:140px}
+.jr-filtres .btn{flex-shrink:0}
+
+/* Ligne de nettoyage : sur sa propre ligne, jamais superposée aux filtres. */
+.jr-purge{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  margin:0 0 14px;padding:10px 14px;border-radius:12px;
+  background:rgba(240,180,41,.06);border:1px solid rgba(240,180,41,.2)}
+.jp-txt{font-size:12.5px;color:var(--ink-dim)}
+.jr-purge select{padding:6px 11px;font-size:12.5px;max-width:230px}
+.jr-purge button:disabled{opacity:.4;cursor:not-allowed}
+
+/* Entrées, groupées par jour */
+.jr{display:flex;flex-direction:column}
+.jr-jour{padding:14px 4px 7px;font-size:11px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-faint);
+  border-bottom:1px solid var(--glass-border);margin-bottom:3px}
+.jr-l{display:flex;align-items:flex-start;gap:11px;padding:8px 11px;border-radius:10px;
+  transition:background .14s}
+.jr-l:hover{background:rgba(255,255,255,.04)}
+.jl-h{flex-shrink:0;width:38px;font-size:11.5px;color:var(--ink-faint);
+  font-variant-numeric:tabular-nums;padding-top:2px}
+.jl-ico{flex-shrink:0;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+  font-size:12px;background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+/* Une suppression doit se repérer sans lire. */
+.jr-l.act-suppression .jl-ico{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.3)}
+.jr-l.act-purge .jl-ico{background:rgba(240,180,41,.14);border-color:rgba(240,180,41,.3)}
+.jr-l.act-connexion .jl-ico{background:rgba(125,211,252,.13);border-color:rgba(125,211,252,.28)}
+.jr-l.act-creation .jl-ico{background:rgba(16,185,129,.13);border-color:rgba(16,185,129,.28)}
+
+.jl-c{flex:1;min-width:0}
+.jl-t{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.jl-t strong{font-size:13px;color:var(--ink);font-weight:600}
+.jl-cible{font-size:10.5px;color:var(--ink-faint);padding:1px 8px;border-radius:14px;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.jl-par{font-size:11.5px;color:var(--ink-faint)}
+.jl-par em{font-style:normal;opacity:.65}
+.jl-d{margin-top:3px;font-size:12px;color:var(--ink-faint);line-height:1.5;
+  word-break:break-word}
+.jl-ip{flex-shrink:0;font-size:10.5px;color:var(--ink-faint);font-variant-numeric:tabular-nums;
+  padding-top:4px;opacity:.6}
+
+@media (max-width:760px){
+  .jl-ip{display:none}
+  .jr-filtres input[name=q]{width:100%}
+  .jr-filtres{width:100%}
+}
