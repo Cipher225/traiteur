@@ -993,6 +993,55 @@ function pagination(PDO $pdo, string $sqlCompte, array $args = [], int $parPage 
     ];
 }
 
+/* ----------------------------------------------------------------------------
+   Clause de recherche.
+
+   Construit le filtre SQL à partir des colonnes fournies. Chaque mot saisi
+   doit se retrouver dans au moins une colonne : taper « Traoré mariage »
+   trouve donc les documents du client Traoré portant sur un mariage, sans
+   qu'on ait à saisir la formule exacte.
+
+   Renvoie ['sql' => ' AND (...)', 'args' => [...]] — vide si rien n'est
+   cherché, ce qui permet de concaténer sans condition.
+   ---------------------------------------------------------------------------- */
+function recherche_sql(string $terme, array $colonnes): array {
+    $terme = trim($terme);
+    if ($terme === '' || !$colonnes) return ['sql' => '', 'args' => []];
+
+    /* Au-delà de quatre mots, la requête devient lourde pour un gain nul. */
+    $mots = array_slice(array_filter(preg_split('/\s+/', $terme)), 0, 4);
+    if (!$mots) return ['sql' => '', 'args' => []];
+
+    $blocs = []; $args = [];
+    foreach ($mots as $mot) {
+        $ou = [];
+        foreach ($colonnes as $col) { $ou[] = "$col LIKE ?"; $args[] = '%' . $mot . '%'; }
+        $blocs[] = '(' . implode(' OR ', $ou) . ')';
+    }
+    return ['sql' => ' AND ' . implode(' AND ', $blocs), 'args' => $args];
+}
+
+/* ----------------------------------------------------------------------------
+   Barre de recherche, identique dans tous les modules.
+   $garder : les filtres en cours, conservés lors d'une recherche.
+   ---------------------------------------------------------------------------- */
+function barre_recherche(string $terme, string $exemple = 'Rechercher…', array $garder = []): string {
+    $o = '<form method="get" class="rch">';
+    foreach ($garder as $k => $v) {
+        if ($v === '' || $v === null || $k === 'q' || $k === 'p') continue;
+        $o .= '<input type="hidden" name="' . e($k) . '" value="' . e((string)$v) . '">';
+    }
+    $o .= '<input class="input rch-champ" type="search" name="q" value="' . e($terme) . '"'
+        . ' placeholder="' . e($exemple) . '">'
+        . '<button class="btn btn-gold btn-sm">🔍</button>';
+    if (trim($terme) !== '') {
+        $base = array_filter($garder, fn($v, $k) => $k !== 'q' && $k !== 'p' && $v !== '' && $v !== null,
+                             ARRAY_FILTER_USE_BOTH);
+        $o .= '<a class="btn btn-glass btn-sm" href="?' . e(http_build_query($base)) . '">Effacer</a>';
+    }
+    return $o . '</form>';
+}
+
 /* Rendu de la navigation. $garder : paramètres d'URL à conserver (filtres). */
 function pagination_html(array $p, string $motLibelle = 'élément', array $garder = []): string {
     if ($p['pages'] <= 1) return '';

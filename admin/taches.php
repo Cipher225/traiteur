@@ -55,17 +55,29 @@ if ($admin && isset($_GET['edit'])) { $stmt = $pdo->prepare('SELECT * FROM tache
 
 $employes = $pdo->query("SELECT id, nom FROM users WHERE role='employe' AND actif=1 ORDER BY nom")->fetchAll();
 
-if ($admin) {
-    $fEmp = $_GET['emp'] ?? '';
-    $sql = "SELECT t.*, u.nom AS employe FROM taches t LEFT JOIN users u ON u.id=t.assigne_a";
-    $params = [];
-    if ($fEmp !== '') { $sql .= " WHERE t.assigne_a=?"; $params[] = (int)$fEmp; }
-    $sql .= " ORDER BY FIELD(t.statut,'a_faire','en_cours','termine'), t.date_limite IS NULL, t.date_limite";
-    $stmt = $pdo->prepare($sql); $stmt->execute($params); $taches = $stmt->fetchAll();
-} else {
-    $stmt = $pdo->prepare("SELECT * FROM taches WHERE assigne_a=? ORDER BY FIELD(statut,'a_faire','en_cours','termine'), date_limite IS NULL, date_limite");
-    $stmt->execute([$uid]); $taches = $stmt->fetchAll();
-}
+/* ----------------------------------------------------------------------------
+   Un seul chargement, que l'on soit administrateur ou employé : seul le filtre
+   change. Les tâches terminées s'accumulent vite, d'où la pagination.
+   ---------------------------------------------------------------------------- */
+$q    = trim($_GET['q'] ?? '');
+$fEmp = $admin ? ($_GET['emp'] ?? '') : '';
+
+$jointures = "FROM taches t LEFT JOIN users u ON u.id = t.assigne_a";
+$where = ' WHERE 1=1'; $args = [];
+
+if (!$admin)            { $where .= ' AND t.assigne_a = ?'; $args[] = $uid; }
+elseif ($fEmp !== '')   { $where .= ' AND t.assigne_a = ?'; $args[] = (int)$fEmp; }
+
+$rch = recherche_sql($q, ['t.titre', 't.description', 'u.nom']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+
+$stmt = $pdo->prepare("SELECT t.*, u.nom AS employe $jointures $where
+                       ORDER BY FIELD(t.statut,'a_faire','en_cours','termine'),
+                                t.date_limite IS NULL, t.date_limite" . $pg['limite']);
+$stmt->execute($args);
+$taches = $stmt->fetchAll();
 
 admin_header('Tâches', 'taches', $pdo, $settings);
 ?>
@@ -101,13 +113,15 @@ admin_header('Tâches', 'taches', $pdo, $settings);
 </div>
 
 <div class="panel glass">
-  <h2>✅ Toutes les tâches (<?= count($taches) ?>)
+  <h2>✅ Toutes les tâches (<?= number_format($pg['total'], 0, ',', ' ') ?>)
     <form method="get" style="margin-left:auto">
+      <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= e($q) ?>"><?php endif; ?>
       <select class="input" name="emp" style="padding:8px 12px" onchange="this.form.submit()">
         <option value="">Tous les employés</option>
         <?php foreach ($employes as $em): ?><option value="<?= $em['id'] ?>" <?= ($_GET['emp'] ?? '')==$em['id']?'selected':'' ?>><?= e($em['nom']) ?></option><?php endforeach; ?>
       </select>
     </form>
+    <?= barre_recherche($q, 'Titre, description, employé…', $_GET) ?>
   </h2>
   <div class="tbl-wrap">
     <table>
@@ -134,7 +148,10 @@ admin_header('Tâches', 'taches', $pdo, $settings);
 
 <?php else: /* ===================== VUE EMPLOYÉ ===================== */ ?>
 <div class="panel glass">
-  <h2>✅ Mes tâches (<?= count($taches) ?>)</h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">✅ Mes tâches <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Titre de la tâche…', $_GET) ?>
+  </div>
   <p style="color:var(--ink-faint);font-size:13.5px;margin:-8px 0 4px">Mettez à jour l'avancement de chaque tâche et laissez un commentaire. Faites votre rapport journalier depuis l'onglet <a href="rapports.php" style="color:var(--gold)">Rapports</a>.</p>
 </div>
 
@@ -168,4 +185,6 @@ admin_header('Tâches', 'taches', $pdo, $settings);
 </div>
 <?php endforeach; ?>
 <?php endif; ?>
+<?= pagination_html($pg, 'tâche', $_GET) ?>
+
 <?php admin_footer(); ?>

@@ -83,7 +83,24 @@ $renderDoc = function($f) use ($doc, $devise) {
 </div>
 <?php endif; ?>
 
+<?php
+/* Recherche. Elle porte sur tout l'historique, indépendamment des filtres de
+   période : quand on cherche un numéro, on ne sait plus de quel mois il date. */
+$qRng = trim($_GET['q'] ?? '');
+$gardeRng = [];
+if (!empty($isPro)) $gardeRng['doc'] = 'proforma';
+if (!empty($typeRecu)) $gardeRng['type'] = $typeRecu;
+?>
+<div class="rng-rch">
+  <?= barre_recherche($qRng, $motRecherche ?? 'Numéro, client, activité…', $gardeRng) ?>
+  <?php if ($qRng !== '' && isset($pgDoc) && $pgDoc): ?>
+  <span class="rng-res"><?= number_format($pgDoc['total'], 0, ',', ' ') ?>
+    résultat<?= $pgDoc['total'] > 1 ? 's' : '' ?> dans tout l'historique</span>
+  <?php endif; ?>
+</div>
+
 <!-- Filtres rapides -->
+<?php if ($qRng === ''): ?>
 <form method="get" class="rng-filtres">
   <?php if ($isPro): ?><input type="hidden" name="doc" value="proforma"><?php endif; ?>
   <input type="hidden" name="vue" value="<?= e($vueRng) ?>">
@@ -131,6 +148,7 @@ $renderDoc = function($f) use ($doc, $devise) {
     <a href="<?= $baseUrl ?><?= $sep ?>vue=liste<?= $fRng['client']?'&fc='.$fRng['client']:'' ?><?= $fRng['mois']?'&fm='.$fRng['mois']:'' ?><?= $fRng['annee']?'&fa='.$fRng['annee']:'' ?>" class="<?= $vueRng==='liste'?'on':'' ?>">📋 Liste</a>
   </div>
 </form>
+<?php endif; ?>
 
 <?php if (!$facturesAff): ?>
   <div style="text-align:center;padding:40px;color:var(--ink-faint)">Aucun document ne correspond.</div>
@@ -183,6 +201,10 @@ $renderDoc = function($f) use ($doc, $devise) {
     </details>
     <?php endforeach; ?>
   </div>
+<?php endif; ?>
+
+<?php if ($qRng !== '' && isset($pgDoc) && $pgDoc): ?>
+<?= pagination_html($pgDoc, 'résultat', $_GET) ?>
 <?php endif; ?>
 
 <?php if (!empty($docsTronque)): ?>

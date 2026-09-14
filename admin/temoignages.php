@@ -21,8 +21,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: temoignages.php'); exit;
 }
 
+/* Les avis en attente restent peu nombreux et se traitent d'un bloc : on les
+   affiche tous. Les avis validés s'accumulent en revanche année après année. */
+$q = trim($_GET['q'] ?? '');
 $attente = $pdo->query("SELECT * FROM temoignages WHERE statut='en_attente' ORDER BY id DESC")->fetchAll();
-$valides = $pdo->query("SELECT * FROM temoignages WHERE statut='valide' ORDER BY id DESC")->fetchAll();
+
+$where = " WHERE statut = 'valide'"; $args = [];
+$rch = recherche_sql($q, ['nom', 'texte', 'email']);
+$where .= $rch['sql']; $args = $rch['args'];
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM temoignages $where", $args, 20);
+$st = $pdo->prepare("SELECT * FROM temoignages $where ORDER BY id DESC" . $pg['limite']);
+$st->execute($args);
+$valides = $st->fetchAll();
 $rejetes = $pdo->query("SELECT * FROM temoignages WHERE statut='rejete' ORDER BY id DESC")->fetchAll();
 
 admin_header('Témoignages clients', 'temoignages', $pdo, $settings);
@@ -58,7 +69,11 @@ $csrf = csrf_token();
 </div>
 
 <div class="panel glass">
-  <h2>✅ Publiés sur le site <span class="badge badge-teal"><?= count($valides) ?></span></h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">✅ Publiés sur le site
+      <span class="badge badge-teal"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Nom, message, événement…', $_GET) ?>
+  </div>
   <?php if ($valides): ?>
   <div class="temo-grid">
     <?php foreach ($valides as $t): carte_temo($t,
@@ -87,4 +102,6 @@ $csrf = csrf_token();
     Votre rôle ici est de <strong>décider lesquels publier</strong> — vous ne rédigez pas d'avis vous-même.
   </p>
 </div>
+<?= pagination_html($pg, 'avis', $_GET) ?>
+
 <?php admin_footer(); ?>

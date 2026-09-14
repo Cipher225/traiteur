@@ -96,12 +96,18 @@ if (isset($_GET['edit'])) $edit = $pdo->query("SELECT * FROM badges WHERE id=" .
 
 $filtre = $_GET['type'] ?? '';
 $q = trim($_GET['q'] ?? '');
-$sql = "SELECT * FROM badges WHERE 1";
-$params = [];
-if ($filtre === 'employe' || $filtre === 'externe') { $sql .= " AND type_porteur=?"; $params[] = $filtre; }
-if ($q !== '') { $sql .= " AND (nom LIKE ? OR matricule LIKE ? OR poste LIKE ?)"; $params[] = "%$q%"; $params[] = "%$q%"; $params[] = "%$q%"; }
-$sql .= " ORDER BY id DESC";
-$st = $pdo->prepare($sql); $st->execute($params); $badges = $st->fetchAll();
+/* La recherche passe par l'outil commun : elle accepte plusieurs mots et
+   couvre les mêmes colonnes que partout ailleurs. */
+$where = ' WHERE 1=1'; $params = [];
+if ($filtre === 'employe' || $filtre === 'externe') { $where .= ' AND type_porteur = ?'; $params[] = $filtre; }
+
+$rch = recherche_sql($q, ['nom', 'matricule', 'poste', 'departement']);
+$where .= $rch['sql']; $params = array_merge($params, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM badges $where", $params, 24);
+$st = $pdo->prepare("SELECT * FROM badges $where ORDER BY id DESC" . $pg['limite']);
+$st->execute($params);
+$badges = $st->fetchAll();
 
 $employes = $pdo->query("SELECT id, nom, poste, matricule, telephone, email, departement, groupe_sanguin, date_naissance, date_embauche, photo FROM employes WHERE actif=1 ORDER BY nom")->fetchAll();
 // Membres externes du registre (pour rattacher un badge à une fiche existante)
@@ -223,7 +229,7 @@ admin_header('Badges & cartes', 'badges', $pdo, $settings);
 <!-- Liste des badges -->
 <div class="panel glass">
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
-    <h2 style="border:0;margin:0;padding:0">🗂️ Badges émis (<?= count($badges) ?>)</h2>
+    <h2 style="border:0;margin:0;padding:0">🗂️ Badges émis (<?= number_format($pg['total'], 0, ',', ' ') ?>)</h2>
     <div class="vue-tabs" style="margin:0 0 0 auto">
       <a class="vt <?= $filtre===''?'on':'' ?>" href="badges.php">Tous</a>
       <a class="vt <?= $filtre==='employe'?'on':'' ?>" href="?type=employe">Employés</a>
@@ -316,5 +322,7 @@ function remplirExterne(){
 }
 majType();
 </script>
+
+<?= pagination_html($pg, 'badge', $_GET) ?>
 
 <?php admin_footer(); ?>

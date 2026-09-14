@@ -68,10 +68,17 @@ if (isset($_GET['edit'])) {
 
 $employes = $pdo->query('SELECT id, nom, poste, salaire_base, banque, numero_compte FROM employes WHERE actif=1 AND COALESCE(fiche_perso,0)=0 ORDER BY nom')->fetchAll();
 /* Douze bulletins par employé et par an : la liste grossit vite. */
-$pg = pagination($pdo, "SELECT COUNT(*) FROM fiches_paie", [], 30);
-$fiches = $pdo->query("SELECT fp.*, e.nom AS employe, e.poste FROM fiches_paie fp
-                       LEFT JOIN employes e ON e.id=fp.employe_id
-                       ORDER BY fp.periode DESC, fp.id DESC" . $pg['limite'])->fetchAll();
+$q = trim($_GET['q'] ?? '');
+$jointures = "FROM fiches_paie fp LEFT JOIN employes e ON e.id = fp.employe_id";
+$where = ' WHERE 1=1'; $args = [];
+$rch = recherche_sql($q, ['fp.numero', 'fp.periode', 'e.nom', 'e.poste', 'e.matricule']);
+$where .= $rch['sql']; $args = $rch['args'];
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+$st = $pdo->prepare("SELECT fp.*, e.nom AS employe, e.poste $jointures $where
+                     ORDER BY fp.periode DESC, fp.id DESC" . $pg['limite']);
+$st->execute($args);
+$fiches = $st->fetchAll();
 
 /* Rangement par année → mois (période de paie) */
 require_once __DIR__ . '/includes/rangement.php';
@@ -183,9 +190,12 @@ calc();
 
 <?php else: ?>
 <div class="panel glass">
-  <h2>📄 Bulletins de paie (<?= count($fiches) ?>)
-    <a href="paie.php?edit=new" class="btn btn-gold btn-sm" style="margin-left:auto">➕ Nouveau bulletin</a>
-  </h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">📄 Bulletins de paie
+      <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Numéro, période, employé…', $_GET) ?>
+    <a href="paie.php?edit=new" class="btn btn-gold btn-sm">➕ Nouveau bulletin</a>
+  </div>
   <?php
   $moisFr = fn($m) => rangement_mois_fr((int)$m);
   ?>

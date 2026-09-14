@@ -602,27 +602,11 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .video-frame{position:relative;aspect-ratio:16/9;overflow:hidden;background:#050b16}
 .vf-cadre{position:absolute;inset:0;z-index:3;pointer-events:none;border-radius:22px 22px 0 0;
   box-shadow:inset 0 0 0 1px rgba(240,193,75,.22), inset 0 0 34px rgba(240,193,75,.08)}
-.vf-poster{width:100%;height:100%;object-fit:cover;display:block;
-  transition:transform .8s cubic-bezier(.2,.8,.3,1), filter .4s}
-.video-item:hover .vf-poster{transform:scale(1.06);filter:brightness(.72)}
-.vf-defaut{display:grid;place-items:center;font-size:46px;
-  background:linear-gradient(135deg,#0a1f44,#143264)}
-.vf-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;
-  width:78px;height:78px;border-radius:50%;cursor:pointer;border:none;
-  display:grid;place-items:center;background:transparent}
-.vp-tri{position:relative;z-index:2;width:62px;height:62px;border-radius:50%;
-  display:grid;place-items:center;font-size:21px;color:#0a1020;padding-left:4px;
-  background:linear-gradient(135deg,#f0c14b,#d4a526);
-  box-shadow:0 10px 30px rgba(212,165,38,.5);
-  transition:transform .28s cubic-bezier(.2,.9,.3,1.5)}
-.vf-play:hover .vp-tri{transform:scale(1.12)}
-.vp-onde{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(240,193,75,.55);
-  animation:onde 2.6s cubic-bezier(.3,.6,.4,1) infinite}
-.vp-onde.d2{animation-delay:1.3s}
-@keyframes onde{0%{transform:scale(.72);opacity:.85}100%{transform:scale(1.55);opacity:0}}
-.vf-lecteur{position:absolute;inset:0;z-index:5}
-.video-item.joue .vf-poster,
-.video-item.joue .vf-play{opacity:0;pointer-events:none;transition:opacity .3s}
+/* Le lecteur occupe tout le cadre : c'est lui qui affiche sa vignette et son
+   bouton de lecture. Notre cadre doré se contente de l'entourer. */
+.video-frame iframe,
+.video-frame video{width:100%;height:100%;border:0;display:block;background:#050b16}
+.vf-cadre{border-radius:22px 22px 0 0}
 .video-item figcaption{padding:17px 20px 20px}
 .video-item figcaption h3{margin:0;font-size:16.5px;color:#fff}
 .video-item figcaption p{margin:6px 0 0;font-size:13px;color:rgba(255,255,255,.62);line-height:1.6}
@@ -633,11 +617,6 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   .gal-item{margin-bottom:10px}
   .vi-prec,.vi-suiv{width:42px;height:42px;font-size:22px}
   .vi-prec{left:8px} .vi-suiv{right:8px}
-  .vf-play{width:60px;height:60px}
-  .vp-tri{width:52px;height:52px;font-size:18px}
-}
-@media (prefers-reduced-motion: reduce){
-  .vp-onde{animation:none;opacity:0}
 }
 
 /* ============================================================

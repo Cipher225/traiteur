@@ -115,16 +115,28 @@ $albums = $pdo->query("SELECT a.*, (SELECT COUNT(*) FROM galerie g WHERE g.album
 $sansAlbum = (int)$pdo->query("SELECT COUNT(*) FROM galerie WHERE album_id IS NULL")->fetchColumn();
 $totalPhotos = (int)$pdo->query("SELECT COUNT(*) FROM galerie")->fetchColumn();
 
+/* Une galerie bien fournie compte des centaines de photos. Les afficher toutes
+   fait charger autant de vignettes d'un coup : la page devient très lente. */
 $albumSel = isset($_GET['album']) ? (int)$_GET['album'] : null;
-$sql = "SELECT g.*, a.nom AS album_nom, a.icone AS album_icone, f.numero AS facture_num, f.activite
-        FROM galerie g
-        LEFT JOIN galerie_albums a ON a.id = g.album_id
-        LEFT JOIN factures f ON f.id = g.facture_id";
-$args = [];
-if ($albumSel === 0)      { $sql .= " WHERE g.album_id IS NULL"; }
-elseif ($albumSel)        { $sql .= " WHERE g.album_id = ?"; $args[] = $albumSel; }
-$sql .= " ORDER BY g.ordre, g.id DESC";
-$st = $pdo->prepare($sql); $st->execute($args);
+$q = trim($_GET['q'] ?? '');
+
+$jointures = "FROM galerie g
+              LEFT JOIN galerie_albums a ON a.id = g.album_id
+              LEFT JOIN factures f ON f.id = g.facture_id";
+
+$where = ' WHERE 1=1'; $args = [];
+if ($albumSel === 0)      { $where .= ' AND g.album_id IS NULL'; }
+elseif ($albumSel)        { $where .= ' AND g.album_id = ?'; $args[] = $albumSel; }
+
+$rch = recherche_sql($q, ['g.titre', 'g.description', 'a.nom', 'f.activite', 'f.numero']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 36);
+
+$st = $pdo->prepare("SELECT g.*, a.nom AS album_nom, a.icone AS album_icone,
+                            f.numero AS facture_num, f.activite
+                     $jointures $where ORDER BY g.ordre, g.id DESC" . $pg['limite']);
+$st->execute($args);
 $photos = $st->fetchAll();
 
 $prestations = $pdo->query("SELECT f.id, f.numero, f.activite,
@@ -243,7 +255,8 @@ admin_header('Galerie', 'galerie', $pdo, $settings);
     <input type="hidden" name="retour_album" value="<?= $albumSel !== null ? (int)$albumSel : '' ?>">
 
     <div class="gal-tete">
-      <h2 style="margin:0">🖼️ <?= count($photos) ?> photo<?= count($photos) > 1 ? 's' : '' ?></h2>
+      <h2 style="margin:0">🖼️ <?= number_format($pg['total'], 0, ',', ' ') ?> photo<?= $pg['total'] > 1 ? 's' : '' ?></h2>
+      <?= barre_recherche($q, 'Titre, légende, album, prestation…', $_GET) ?>
       <div class="gal-outils" id="gal-outils" hidden>
         <span class="go-n"><b id="go-nb">0</b> sélectionnée(s)</span>
         <select class="input input-sm" name="lot_album">
@@ -353,5 +366,7 @@ admin_header('Galerie', 'galerie', $pdo, $settings);
   maj();
 })();
 </script>
+
+<?= pagination_html($pg, 'photo', $_GET) ?>
 
 <?php admin_footer(); ?>

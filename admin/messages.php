@@ -347,18 +347,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['purger_historique']))
 
 $clients = $pdo->query("SELECT id, nom, entreprise, email, type_client FROM clients
                         WHERE email <> '' ORDER BY COALESCE(NULLIF(entreprise,''), nom)")->fetchAll();
-/* Un employé ne voit que ses propres messages ; l'administrateur voit tout. */
-if (is_admin()) {
-    $enAttente  = $pdo->query("SELECT * FROM emails_envoyes WHERE statut='en_attente' ORDER BY envoye_le")->fetchAll();
-    $historique = $pdo->query("SELECT * FROM emails_envoyes WHERE statut<>'en_attente'
-                               ORDER BY envoye_le DESC LIMIT 30")->fetchAll();
-} else {
-    $uid = (int)($_SESSION['admin_id'] ?? 0);
-    $st = $pdo->prepare("SELECT * FROM emails_envoyes WHERE envoye_par=? ORDER BY envoye_le DESC LIMIT 30");
-    $st->execute([$uid]);
-    $historique = $st->fetchAll();
-    $enAttente  = [];
+/* Un employé ne voit que ses propres messages ; l'administrateur voit tout.
+   L'historique grossit à chaque envoi : il se parcourt par pages et se
+   cherche par destinataire ou par objet. */
+$q = trim($_GET['q'] ?? '');
+
+$where = " WHERE statut <> 'en_attente'"; $args = [];
+if (!is_admin()) {
+    $where .= ' AND envoye_par = ?'; $args[] = (int)($_SESSION['admin_id'] ?? 0);
 }
+$rch = recherche_sql($q, ['destinataire', 'destinataire_nom', 'sujet', 'reference']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM emails_envoyes $where", $args, 25);
+
+$st = $pdo->prepare("SELECT * FROM emails_envoyes $where ORDER BY envoye_le DESC" . $pg['limite']);
+$st->execute($args);
+$historique = $st->fetchAll();
+
+/* La file d'attente reste entière : on ne lui connaît jamais plus de quelques
+   messages, et l'administrateur doit tous les voir d'un coup. */
+$enAttente = is_admin()
+    ? $pdo->query("SELECT * FROM emails_envoyes WHERE statut='en_attente' ORDER BY envoye_le")->fetchAll()
+    : [];
 
 admin_header('E-mail', 'messages', $pdo, $settings);
 ?>
@@ -640,7 +651,11 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
 
 <?php if ($historique): ?>
 <div class="panel glass" style="margin-top:14px">
-  <h2><?= is_admin() ? '📜 Messages envoyés' : '📜 Mes messages' ?></h2>
+  <div class="mod-tete">
+    <h2 style="margin:0"><?= is_admin() ? '📜 Messages envoyés' : '📜 Mes messages' ?>
+      <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Destinataire, objet, référence…', $_GET) ?>
+  </div>
   <?php if (is_admin()): ?>
   <form method="post" style="margin:-40px 0 12px;display:flex;justify-content:flex-end"
         onsubmit="return confirm('Effacer tout l\'historique des messages envoyés ? Cette action est définitive.')">
@@ -869,5 +884,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
   });
 })();
 </script>
+
+<?= pagination_html($pg, 'message', $_GET) ?>
 
 <?php admin_footer(); ?>

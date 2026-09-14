@@ -51,18 +51,29 @@ $dossiers = $pdo->query("SELECT d.*, (SELECT COUNT(*) FROM coffre_documents WHER
 $totalDocs = (int)$pdo->query("SELECT COUNT(*) FROM coffre_documents")->fetchColumn();
 $totalTaille = (int)$pdo->query("SELECT COALESCE(SUM(taille),0) FROM coffre_documents")->fetchColumn();
 
-$q = trim($_GET['q'] ?? '');
+/* ----------------------------------------------------------------------------
+   Documents du coffre : un seul chemin de chargement, quel que soit le filtre.
+   Les trois requêtes séparées d'avant se ressemblaient à 90 % et l'une d'elles
+   plafonnait silencieusement à 50 documents.
+   ---------------------------------------------------------------------------- */
+$q    = trim($_GET['q'] ?? '');
 $dsel = (int)($_GET['d'] ?? 0);
-if ($q !== '') {
-    $st = $pdo->prepare("SELECT doc.*, dos.nom AS dossier_nom, dos.icone AS dossier_icone FROM coffre_documents doc LEFT JOIN coffre_dossiers dos ON dos.id=doc.dossier_id WHERE doc.titre LIKE ? OR doc.description LIKE ? OR doc.fichier_nom LIKE ? ORDER BY doc.created_at DESC");
-    $st->execute(["%$q%","%$q%","%$q%"]); $documents = $st->fetchAll(); $dsel = 0;
-} elseif ($dsel) {
-    $st = $pdo->prepare("SELECT doc.*, dos.nom AS dossier_nom, dos.icone AS dossier_icone FROM coffre_documents doc LEFT JOIN coffre_dossiers dos ON dos.id=doc.dossier_id WHERE doc.dossier_id=? ORDER BY doc.created_at DESC");
-    $st->execute([$dsel]); $documents = $st->fetchAll();
-} else {
-    $st = $pdo->query("SELECT doc.*, dos.nom AS dossier_nom, dos.icone AS dossier_icone FROM coffre_documents doc LEFT JOIN coffre_dossiers dos ON dos.id=doc.dossier_id ORDER BY doc.created_at DESC LIMIT 50");
-    $documents = $st->fetchAll();
-}
+if ($q !== '') $dsel = 0;          // une recherche porte sur tout le coffre
+
+$jointures = "FROM coffre_documents doc
+              LEFT JOIN coffre_dossiers dos ON dos.id = doc.dossier_id";
+$where = ' WHERE 1=1'; $args = [];
+if ($dsel) { $where .= ' AND doc.dossier_id = ?'; $args[] = $dsel; }
+
+$rch = recherche_sql($q, ['doc.titre', 'doc.description', 'doc.fichier_nom', 'dos.nom']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+
+$st = $pdo->prepare("SELECT doc.*, dos.nom AS dossier_nom, dos.icone AS dossier_icone
+                     $jointures $where ORDER BY doc.created_at DESC" . $pg['limite']);
+$st->execute($args);
+$documents = $st->fetchAll();
 $dossierActif = null; foreach ($dossiers as $d) if ($d['id']==$dsel) $dossierActif = $d;
 
 // ===== Dossiers système : détection automatique des documents de l'application =====
@@ -232,8 +243,8 @@ $csrf = csrf_token();
 
     <div class="panel glass">
       <h2>
-        <?php if ($q!==''): ?>🔍 Résultats pour « <?= e($q) ?> » (<?= count($documents) ?>)
-        <?php elseif ($dossierActif): ?><?= e($dossierActif['icone']) ?> <?= e($dossierActif['nom']) ?> (<?= count($documents) ?>)
+        <?php if ($q!==''): ?>🔍 Résultats pour « <?= e($q) ?> » (<?= number_format($pg['total'], 0, ',', ' ') ?>)
+        <?php elseif ($dossierActif): ?><?= e($dossierActif['icone']) ?> <?= e($dossierActif['nom']) ?> (<?= number_format($pg['total'], 0, ',', ' ') ?>)
         <?php else: ?>🕐 Documents récents<?php endif; ?>
         <?php if ($dossierActif): ?>
         <span style="margin-left:auto;display:flex;gap:6px">
@@ -272,5 +283,7 @@ $csrf = csrf_token();
     </div>
     <?php endif; ?>
   </section>
+
+<?= pagination_html($pg, 'document', $_GET) ?>
 </div>
 <?php admin_footer(); ?>

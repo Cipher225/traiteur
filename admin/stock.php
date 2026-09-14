@@ -60,14 +60,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Filtre par catégorie
+/* Filtre par catégorie, recherche et pagination. Un inventaire de traiteur
+   dépasse vite la centaine de références. */
 $fcat = $_GET['cat'] ?? '';
-$where = ''; $params = [];
-if ($fcat !== '' && in_array($fcat, $categories, true)) { $where = 'WHERE categorie = ?'; $params[] = $fcat; }
+$q    = trim($_GET['q'] ?? '');
 
-$articles = $pdo->prepare("SELECT * FROM stock_articles $where ORDER BY nom");
-$articles->execute($params);
-$articles = $articles->fetchAll();
+$where = ' WHERE 1=1'; $params = [];
+if ($fcat !== '' && in_array($fcat, $categories, true)) { $where .= ' AND categorie = ?'; $params[] = $fcat; }
+
+$rch = recherche_sql($q, ['nom', 'categorie', 'unite', 'notes']);
+$where .= $rch['sql']; $params = array_merge($params, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM stock_articles $where", $params, 30);
+
+$st = $pdo->prepare("SELECT * FROM stock_articles $where ORDER BY nom" . $pg['limite']);
+$st->execute($params);
+$articles = $st->fetchAll();
 
 // Statistiques
 $tous = $pdo->query("SELECT quantite, seuil_alerte, prix_unitaire FROM stock_articles")->fetchAll();
@@ -127,6 +135,10 @@ admin_header('Stock', 'stock', $pdo, $settings);
 
 <!-- Liste des articles -->
 <div class="panel glass">
+  <div class="mod-tete">
+    <h2 style="margin:0">📦 Inventaire <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Nom, catégorie, unité…', $_GET) ?>
+  </div>
   <div class="stock-filtres">
     <a href="stock.php" class="<?= $fcat===''?'on':'' ?>">Tous</a>
     <?php foreach ($categories as $c): ?>
@@ -173,5 +185,7 @@ admin_header('Stock', 'stock', $pdo, $settings);
   </div>
   <?php endif; ?>
 </div>
+
+<?= pagination_html($pg, 'article', $_GET) ?>
 
 <?php admin_footer(); ?>

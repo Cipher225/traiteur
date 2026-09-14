@@ -194,11 +194,25 @@ if (isset($_GET['edit'])) {
     }
 }
 
-$rows = $pdo->query("SELECT e.*, u.id AS uid, u.username, u.actif AS compte_actif, u.permissions, u.acces_exception_until
-                     FROM employes e LEFT JOIN users u ON u.employe_id=e.id AND u.role IN ('employe','admin')
-                     -- les fiches personnelles (créées depuis « Mon profil ») restent hors de cette liste
-                     WHERE COALESCE(e.fiche_perso, 0) = 0
-                     ORDER BY e.actif DESC, e.nom")->fetchAll();
+/* Une équipe grandit, et les anciens employés restent en fiche : la liste se
+   parcourt par pages et se cherche par nom, poste ou matricule. */
+$q = trim($_GET['q'] ?? '');
+
+$jointures = "FROM employes e
+              LEFT JOIN users u ON u.employe_id = e.id AND u.role IN ('employe','admin')";
+/* Les fiches personnelles, créées depuis « Mon profil », restent hors liste. */
+$where = ' WHERE COALESCE(e.fiche_perso, 0) = 0'; $args = [];
+
+$rch = recherche_sql($q, ['e.nom', 'e.poste', 'e.matricule', 'e.telephone', 'u.username']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+
+$st = $pdo->prepare("SELECT e.*, u.id AS uid, u.username, u.actif AS compte_actif,
+                            u.permissions, u.acces_exception_until
+                     $jointures $where ORDER BY e.actif DESC, e.nom" . $pg['limite']);
+$st->execute($args);
+$rows = $st->fetchAll();
 
 admin_header('Employés & accès', 'employes', $pdo, $settings);
 $wJours = array_filter(array_map('intval', explode(',', $settings['work_jours'] ?? '1,2,3,4,5,6')));
@@ -312,7 +326,10 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
 </details>
 
 <div class="panel glass tbl-equipe">
-  <h2>🧑‍🍳 Équipe (<?= count($rows) ?>)</h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">🧑‍🍳 Équipe <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Nom, poste, matricule…', $_GET) ?>
+  </div>
   <div class="tbl-wrap">
     <table>
       <thead><tr><th>Nom</th><th>Poste</th><th>Salaire base</th><th>Accès</th><th>Statut</th><th style="text-align:right">Actions</th></tr></thead>
@@ -394,4 +411,6 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
   sel.addEventListener('change', function(){ av.style.display = (this.value === 'admin') ? 'block' : 'none'; });
 })();
 </script>
+<?= pagination_html($pg, 'employé', $_GET) ?>
+
 <?php admin_footer(); ?>

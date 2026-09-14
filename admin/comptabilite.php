@@ -139,9 +139,15 @@ if (isset($_GET['edit'])) {
 // Filtres période
 $mois = $_GET['mois'] ?? date('Y-m');
 $ftype = $_GET['type'] ?? '';
+$q = trim($_GET['q'] ?? '');
 $where = "WHERE DATE_FORMAT(date_operation,'%Y-%m') = ?";
 $params = [$mois];
 if (in_array($ftype, ['entree','depense'])) { $where .= " AND type = ?"; $params[] = $ftype; }
+
+/* Chercher une opération précise dans un mois chargé : on ne se souvient pas
+   toujours du jour, mais on se souvient du libellé ou du montant. */
+$rch = recherche_sql($q, ['libelle', 'categorie', 'mode_paiement', 'notes']);
+$where .= $rch['sql']; $params = array_merge($params, $rch['args']);
 
 /* ----------------------------------------------------------------------------
    Le journal se lit par pages. Afficher mille écritures d'un coup rend la page
@@ -279,6 +285,7 @@ try {
 <div class="panel glass">
   <h2>💰 Journal des opérations
     <form method="get" style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= e($q) ?>"><?php endif; ?>
       <input class="input" type="month" name="mois" value="<?= e($mois) ?>" style="padding:8px 12px" onchange="this.form.submit()">
       <select class="input" name="type" style="padding:8px 12px" onchange="this.form.submit()">
         <option value="">Tout</option>
@@ -287,6 +294,9 @@ try {
       </select>
     </form>
   </h2>
+  <div class="mod-tete" style="margin-bottom:10px">
+    <?= barre_recherche($q, 'Libellé, catégorie, mode de paiement…', $_GET) ?>
+  </div>
   <?php
   /* Un tableau à sept colonnes devient illisible dès la dixième ligne : les
      colonnes se serrent et le libellé se coupe. On présente donc chaque

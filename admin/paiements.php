@@ -45,15 +45,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $cfg  = wave_config($pdo);
 $filtre = $_GET['f'] ?? 'tous';
-$sql = "SELECT p.*, f.numero AS facture_num, r.numero AS recu_num,
-               COALESCE(NULLIF(c.entreprise,''), c.nom) AS client_nom
-        FROM paiements p
+/* ----------------------------------------------------------------------------
+   Liste des paiements : filtrée, cherchée, paginée.
+   Les jointures sont identiques pour le décompte et pour l'affichage, sinon
+   le nombre de pages ne correspondrait pas au contenu.
+   ---------------------------------------------------------------------------- */
+$q = trim($_GET['q'] ?? '');
+
+$jointures = "FROM paiements p
         LEFT JOIN factures f ON f.id = p.facture_id
         LEFT JOIN recus r ON r.id = p.recu_id
         LEFT JOIN clients c ON c.id = p.client_id";
-if (in_array($filtre, ['en_attente','paye','echoue'], true)) $sql .= " WHERE p.statut = " . $pdo->quote($filtre);
-$sql .= " ORDER BY p.created_at DESC LIMIT 200";
-$paiements = $pdo->query($sql)->fetchAll();
+
+$where = ' WHERE 1=1'; $args = [];
+if (in_array($filtre, ['en_attente','paye','echoue'], true)) {
+    $where .= ' AND p.statut = ?'; $args[] = $filtre;
+}
+$rch = recherche_sql($q, ['p.reference', 'p.transaction_id', 'f.numero', 'r.numero',
+                          'c.nom', 'c.entreprise']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+
+$st = $pdo->prepare("SELECT p.*, f.numero AS facture_num, r.numero AS recu_num,
+               COALESCE(NULLIF(c.entreprise,''), c.nom) AS client_nom
+        $jointures $where
+        ORDER BY p.created_at DESC" . $pg['limite']);
+$st->execute($args);
+$paiements = $st->fetchAll();
 
 $encaisse = (float)$pdo->query("SELECT COALESCE(SUM(montant),0) FROM paiements WHERE statut='paye'")->fetchColumn();
 $mois     = (float)$pdo->query("SELECT COALESCE(SUM(montant),0) FROM paiements WHERE statut='paye'
@@ -105,7 +124,10 @@ $devise = $settings['devise'] ?? 'FCFA';
 </div>
 
 <div class="panel glass">
-  <h2>📜 Historique (<?= count($paiements) ?>)</h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">📜 Historique <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Référence, client, n° de facture…', $_GET) ?>
+  </div>
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
     <?php foreach (['tous'=>'Tous','paye'=>'Payés','en_attente'=>'En attente','echoue'=>'Échoués'] as $k=>$lb): ?>
     <a class="btn btn-sm <?= $filtre===$k ? 'btn-gold' : 'btn-glass' ?>" href="paiements.php?f=<?= $k ?>"><?= $lb ?></a>
@@ -146,6 +168,8 @@ $devise = $settings['devise'] ?? 'FCFA';
     </table>
   </div>
   <?php endif; ?>
+
+<?= pagination_html($pg, 'paiement', $_GET) ?>
 </div>
 
 <?php admin_footer(); ?>

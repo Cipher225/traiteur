@@ -87,17 +87,31 @@ if (!$admin && isset($_GET['edit'])) {
 }
 
 /* ---------- Listes ---------- */
+/* Un rapport par employé et par jour : sur une équipe de dix, la liste dépasse
+   deux mille entrées au bout d'un an. */
+$q     = trim($_GET['q'] ?? '');
+$fType = $admin ? ($_GET['t'] ?? '') : '';
+
+$jointures = "FROM rapports r LEFT JOIN users u ON u.id = r.employe_user_id";
+$where = ' WHERE 1=1'; $args = [];
+
 if ($admin) {
-    $fType = $_GET['t'] ?? '';
-    $sql = "SELECT r.*, u.nom AS auteur FROM rapports r LEFT JOIN users u ON u.id=r.employe_user_id WHERE r.statut='envoye'";
-    $params = [];
-    if ($fType !== '' && array_key_exists($fType, $TYPES)) { $sql .= " AND r.type=?"; $params[] = $fType; }
-    $sql .= " ORDER BY r.envoye_at DESC";
-    $stmt = $pdo->prepare($sql); $stmt->execute($params); $rapports = $stmt->fetchAll();
+    $where .= " AND r.statut = 'envoye'";
+    if ($fType !== '' && array_key_exists($fType, $TYPES)) { $where .= ' AND r.type = ?'; $args[] = $fType; }
 } else {
-    $stmt = $pdo->prepare("SELECT * FROM rapports WHERE employe_user_id=? ORDER BY created_at DESC, id DESC");
-    $stmt->execute([$uid]); $rapports = $stmt->fetchAll();
+    $where .= ' AND r.employe_user_id = ?'; $args[] = $uid;
 }
+
+$rch = recherche_sql($q, ['r.titre', 'r.contenu', 'u.nom']);
+$where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+$pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 25);
+
+$stmt = $pdo->prepare("SELECT r.*, u.nom AS auteur $jointures $where
+                       ORDER BY " . ($admin ? 'r.envoye_at DESC' : 'r.created_at DESC, r.id DESC')
+                       . $pg['limite']);
+$stmt->execute($args);
+$rapports = $stmt->fetchAll();
 
 admin_header($admin ? 'Rapports & demandes reçus' : 'Rapports & demandes', 'rapports', $pdo, $settings);
 
@@ -277,7 +291,10 @@ function fmt_periode($r) {
 </div>
 
 <div class="panel glass">
-  <h2>🗂️ Mes documents (<?= count($rapports) ?>)</h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">🗂️ Mes documents <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Titre ou contenu…', $_GET) ?>
+  </div>
   <?php if (!$rapports): ?>
     <div style="text-align:center;padding:30px;color:var(--ink-faint)">Aucun document pour l'instant.</div>
   <?php else:
@@ -332,13 +349,15 @@ function fmt_periode($r) {
 
 <?php else: /* ===== ADMIN : boîte de réception ===== */ ?>
 <div class="panel glass">
-  <h2>📥 Rapports & demandes reçus (<?= count($rapports) ?>)
+  <h2>📥 Rapports & demandes reçus (<?= number_format($pg['total'], 0, ',', ' ') ?>)
     <form method="get" style="margin-left:auto">
+      <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= e($q) ?>"><?php endif; ?>
       <select class="input" name="t" onchange="this.form.submit()" style="padding:8px 12px">
         <option value="">Tous les types</option>
         <?php foreach ($TYPES as $k=>$info): ?><option value="<?= $k ?>" <?= ($_GET['t']??'')===$k?'selected':'' ?>><?= $info[1] ?> <?= e($info[0]) ?></option><?php endforeach; ?>
       </select>
     </form>
+    <?= barre_recherche($q, 'Titre, contenu, auteur…', $_GET) ?>
   </h2>
   <div class="tbl-wrap">
     <table>
@@ -388,4 +407,6 @@ function fmt_periode($r) {
 </div>
 <?php endif; ?>
 <?php endif; ?>
+<?= pagination_html($pg, 'rapport', $_GET) ?>
+
 <?php admin_footer(); ?>

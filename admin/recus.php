@@ -87,13 +87,43 @@ $facts = $pdo->query("SELECT f.id, f.numero, f.activite,
                       FROM factures f LEFT JOIN clients c ON c.id = f.client_id
                       WHERE f.statut <> 'annulee'
                       ORDER BY f.date_emission DESC, f.id DESC LIMIT 120")->fetchAll();
-$st = $pdo->prepare("SELECT r.*, c.nom AS client, f.numero AS facture FROM recus r LEFT JOIN clients c ON c.id=r.client_id LEFT JOIN factures f ON f.id=r.facture_id WHERE r.type=? ORDER BY r.date_paiement DESC, r.id DESC");
-$st->execute([$TYPE]); $recus = $st->fetchAll();
+/* ----------------------------------------------------------------------------
+   Comme pour les documents : l'arborescence quand on sait QUAND, la recherche
+   paginée quand on sait QUOI. Les bons de caisse s'accumulent plus vite que
+   les factures — plusieurs par jour en pleine saison.
+   ---------------------------------------------------------------------------- */
+$q = trim($_GET['q'] ?? '');
+$typeRecu = $TYPE;
+$motRecherche = 'Numéro, motif, client, catégorie…';
+
+$colonnes  = "r.*, c.nom AS client, f.numero AS facture";
+$jointures = "FROM recus r
+              LEFT JOIN clients c ON c.id = r.client_id
+              LEFT JOIN factures f ON f.id = r.facture_id";
+
+if ($q !== '') {
+    $where = ' WHERE r.type = ?'; $args = [$TYPE];
+    $rch = recherche_sql($q, ['r.numero', 'r.motif', 'r.activite', 'r.lieu', 'r.categorie',
+                              'r.notes', 'c.nom', 'c.entreprise', 'f.numero']);
+    $where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+    $pgDoc = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+    $st = $pdo->prepare("SELECT $colonnes $jointures $where
+                         ORDER BY r.date_paiement DESC, r.id DESC" . $pgDoc['limite']);
+    $st->execute($args);
+} else {
+    $pgDoc = null;
+    $st = $pdo->prepare("SELECT $colonnes $jointures WHERE r.type = ?
+                         ORDER BY r.date_paiement DESC, r.id DESC");
+    $st->execute([$TYPE]);
+}
+$recus = $st->fetchAll();
 
 /* Rangement : filtres + arborescence (Année → Mois → Client / Fournisseur) */
 require_once __DIR__ . '/includes/rangement.php';
-$vueRng = ($_GET['vue'] ?? 'arbre') === 'liste' ? 'liste' : 'arbre';
-$fRng = ['client' => (int)($_GET['fc'] ?? 0), 'mois' => (int)($_GET['fm'] ?? 0), 'annee' => (int)($_GET['fa'] ?? 0)];
+$vueRng = ($q !== '' || ($_GET['vue'] ?? 'arbre') === 'liste') ? 'liste' : 'arbre';
+$fRng = ['client' => (int)($_GET['fc'] ?? 0), 'mois' => (int)($_GET['fm'] ?? 0),
+         'annee'  => $q !== '' ? 0 : (int)($_GET['fa'] ?? 0)];
 $recusAff = rangement_filtrer($recus, $fRng, 'date_paiement', 'client_id');
 $anneesRng = rangement_annees($recus, 'date_paiement');
 $ts = $pdo->prepare("SELECT COALESCE(SUM(montant),0) FROM recus WHERE type=? AND DATE_FORMAT(date_paiement,'%Y-%m')=?");
@@ -182,6 +212,15 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
   $moisFr = fn($m) => rangement_mois_fr((int)$m);
   $libClient = $TYPE === 'entree' ? 'Fournisseur / Émetteur' : 'Client';
   ?>
+  <div class="rng-rch">
+    <?= barre_recherche($q, $motRecherche, ['type' => $TYPE]) ?>
+    <?php if ($q !== '' && $pgDoc): ?>
+    <span class="rng-res"><?= number_format($pgDoc['total'], 0, ',', ' ') ?>
+      résultat<?= $pgDoc['total'] > 1 ? 's' : '' ?> dans tout l'historique</span>
+    <?php endif; ?>
+  </div>
+
+  <?php if ($q === ''): ?>
   <form method="get" class="rng-filtres">
     <input type="hidden" name="type" value="<?= e($TYPE) ?>">
     <input type="hidden" name="vue" value="<?= e($vueRng) ?>">
@@ -208,6 +247,7 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
       <a href="<?= $baseUrl ?>&vue=liste<?= $fRng['client']?'&fc='.$fRng['client']:'' ?><?= $fRng['mois']?'&fm='.$fRng['mois']:'' ?><?= $fRng['annee']?'&fa='.$fRng['annee']:'' ?>" class="<?= $vueRng==='liste'?'on':'' ?>">📋 Liste</a>
     </div>
   </form>
+  <?php endif; ?>
 
   <?php
   /* Rendu d'un bon (ligne compacte réutilisée) */
@@ -230,6 +270,9 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
     <div style="text-align:center;padding:36px;color:var(--ink-faint)">Aucun document ne correspond.</div>
   <?php elseif ($vueRng === 'liste'): ?>
     <div class="rng-docs" style="margin-left:0"><?php foreach ($recusAff as $r) echo $renderRecu($r); ?></div>
+    <?php if ($q !== '' && $pgDoc): ?>
+    <?= pagination_html($pgDoc, 'résultat', $_GET) ?>
+    <?php endif; ?>
   <?php else: ?>
     <?php $arbre = rangement_arbre($recusAff, 'date_paiement', 'client'); ?>
     <div class="rng-tree">

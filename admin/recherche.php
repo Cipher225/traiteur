@@ -68,7 +68,20 @@ if (mb_strlen($q) >= 2) {
             $st->execute(array_fill(0, $nbParams, $like));
             $lignes = $st->fetchAll();
             if ($lignes) {
-                $resultats[$cle] = ['ico' => $ico, 'titre' => $titre, 'lignes' => $lignes];
+                /* Cette page est un aperçu : douze résultats par type. Quand il
+                   y en a davantage, on le dit et on renvoie vers le module
+                   concerné, qui sait paginer et filtrer. */
+                $compte = preg_replace('/^SELECT .*? FROM /s', 'SELECT COUNT(*) FROM ', $sql);
+                $compte = preg_replace('/ ORDER BY .*$/s', '', $compte);
+                $nbTotal = count($lignes);
+                try {
+                    $sc = $pdo->prepare($compte);
+                    $sc->execute(array_fill(0, $nbParams, $like));
+                    $nbTotal = (int)$sc->fetchColumn();
+                } catch (Throwable $e) {}
+
+                $resultats[$cle] = ['ico' => $ico, 'titre' => $titre, 'lignes' => $lignes,
+                                    'total' => $nbTotal, 'module' => $perm];
                 $total += count($lignes);
             }
         } catch (Throwable $e) { /* table absente : on passe */ }
@@ -103,7 +116,23 @@ $devise = $settings['devise'] ?? 'FCFA';
 
 <?php foreach ($resultats as $cle => $bloc): ?>
 <div class="panel glass" style="margin-bottom:12px">
-  <h2><?= $bloc['ico'] ?> <?= e($bloc['titre']) ?> (<?= count($bloc['lignes']) ?>)</h2>
+  <?php
+    /* Vers quel module renvoyer pour voir la suite. */
+    $pages = ['factures' => 'factures.php', 'clients' => 'clients.php',
+              'recus' => 'recus.php?type=entree', 'menu' => 'menu.php',
+              'stock' => 'stock.php', 'commandes_client' => 'commandes-client.php',
+              'employes' => 'employes.php'];
+    $vers = $pages[$cle] ?? '';
+  ?>
+  <div class="mod-tete">
+    <h2 style="margin:0"><?= $bloc['ico'] ?> <?= e($bloc['titre']) ?>
+      <span class="cnt"><?= number_format($bloc['total'], 0, ',', ' ') ?></span></h2>
+    <?php if ($vers && $bloc['total'] > count($bloc['lignes'])): ?>
+    <a class="btn btn-glass btn-sm" style="margin-left:auto"
+       href="<?= e($vers) ?><?= strpos($vers, '?') !== false ? '&' : '?' ?>q=<?= urlencode($q) ?>">
+      Voir les <?= number_format($bloc['total'], 0, ',', ' ') ?> résultats →</a>
+    <?php endif; ?>
+  </div>
   <div class="rech-liste">
     <?php foreach ($bloc['lignes'] as $l): ?>
     <?php

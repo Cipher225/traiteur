@@ -258,11 +258,40 @@ $menuData = [];
 foreach ($catsMenu as $c) $menuData[$c['id']] = ['nom' => $c['nom'], 'icone' => $c['icone'] ?: '🍽️', 'plats' => []];
 foreach ($platsMenu as $p) if (isset($menuData[$p['categorie_id']])) $menuData[$p['categorie_id']]['plats'][] = ['nom' => $p['nom'], 'prix' => (float)$p['prix']];
 
-/* ---------- Liste (filtrée par type) ---------- */
-$stmt = $pdo->prepare("SELECT f.*, c.nom AS client, c.entreprise, c.type_client,
-    (SELECT COALESCE(SUM(quantite * IF(par_jour = 1, GREATEST(1, f.nb_jours), 1) * prix_unitaire),0) FROM facture_lignes WHERE facture_id=f.id) AS ht
-    FROM factures f LEFT JOIN clients c ON c.id=f.client_id WHERE f.type=? ORDER BY f.date_emission DESC, f.id DESC");
-$stmt->execute([$doc]);
+/* ----------------------------------------------------------------------------
+   Liste des documents.
+
+   Deux façons de chercher, selon ce qu'on a en tête :
+
+   — On sait QUAND : l'arborescence par année et mois, avec ses filtres. C'est
+     la vue par défaut, bornée à l'année en cours.
+
+   — On sait QUOI : la recherche. Elle porte sur tout l'historique et bascule
+     en liste paginée — chercher dans un arbre replié n'aurait aucun sens.
+   ---------------------------------------------------------------------------- */
+$q = trim($_GET['q'] ?? '');
+
+$colonnes = "f.*, c.nom AS client, c.entreprise, c.type_client,
+    (SELECT COALESCE(SUM(quantite * IF(par_jour = 1, GREATEST(1, f.nb_jours), 1) * prix_unitaire),0)
+       FROM facture_lignes WHERE facture_id=f.id) AS ht";
+$jointures = "FROM factures f LEFT JOIN clients c ON c.id = f.client_id";
+
+if ($q !== '') {
+    $where = ' WHERE f.type = ?'; $args = [$doc];
+    $rch = recherche_sql($q, ['f.numero', 'f.activite', 'f.lieu', 'f.notes',
+                              'c.nom', 'c.entreprise', 'c.telephone']);
+    $where .= $rch['sql']; $args = array_merge($args, $rch['args']);
+
+    $pgDoc = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
+    $stmt = $pdo->prepare("SELECT $colonnes $jointures $where
+                           ORDER BY f.date_emission DESC, f.id DESC" . $pgDoc['limite']);
+    $stmt->execute($args);
+} else {
+    $pgDoc = null;
+    $stmt = $pdo->prepare("SELECT $colonnes $jointures WHERE f.type = ?
+                           ORDER BY f.date_emission DESC, f.id DESC");
+    $stmt->execute([$doc]);
+}
 $factures = $stmt->fetchAll();
 
 /* Rangement : filtres (client/mois/année) + arborescence repliable */
@@ -276,11 +305,16 @@ foreach ($factures as &$fg) {
 }
 unset($fg);
 
-$vueRng = ($_GET['vue'] ?? 'arbre') === 'liste' ? 'liste' : 'arbre';
+$vueRng = (trim($_GET['q'] ?? '') !== '' || ($_GET['vue'] ?? 'arbre') === 'liste')
+        ? 'liste' : 'arbre';
 /* Par défaut, on n'affiche que l'année en cours. Charger dix ans de documents
    à chaque ouverture ferait une page de plusieurs mégaoctets, alors qu'on
    consulte presque toujours l'année en cours. Le filtre permet de remonter. */
-$anneeParDefaut = isset($_GET['fa']) ? (int)$_GET['fa'] : (int)date('Y');
+/* Une recherche porte sur tout l'historique : les filtres de période la
+   rendraient inopérante. */
+$anneeParDefaut = trim($_GET['q'] ?? '') !== ''
+    ? 0
+    : (isset($_GET['fa']) ? (int)$_GET['fa'] : (int)date('Y'));
 $fRng = ['client' => (int)($_GET['fc'] ?? 0), 'mois' => (int)($_GET['fm'] ?? 0), 'annee' => $anneeParDefaut];
 // Filtre par statut (dont "impayees" = brouillon + envoyée)
 $fStatut = $_GET['fs'] ?? '';
@@ -311,9 +345,11 @@ if ($fStatut !== '' && $doc === 'facture') {
    de documents : les produire tous alourdit la page sans servir personne. On
    affiche les plus récents et on indique combien restent, avec les filtres
    pour aller les chercher. */
-$docsTotal = count($facturesAff);
-$docsMax   = 50;
-$docsTronque = $docsTotal > $docsMax;
+/* En recherche, la pagination borne déjà : un second bornage tronquerait
+   les résultats sans le dire. */
+$docsTotal   = count($facturesAff);
+$docsMax     = 50;
+$docsTronque = ($q === '') && $docsTotal > $docsMax;
 if ($docsTronque) $facturesAff = array_slice($facturesAff, 0, $docsMax);
 
 $anneesRng = rangement_annees($factures, 'date_emission');

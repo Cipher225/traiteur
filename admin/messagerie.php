@@ -85,11 +85,34 @@ if (!in_array($sel, $contactIds, true)) $sel = $contactIds[0] ?? 0;
 // Marquer comme lus les messages reçus de cet interlocuteur
 if ($sel) $pdo->prepare('UPDATE messages SET lu=1 WHERE destinataire_id=? AND expediteur_id=?')->execute([$me, $sel]);
 
-// Fil de discussion
+/* ----------------------------------------------------------------------------
+   Fil de discussion.
+
+   Une conversation ne se découpe pas en pages : on veut voir les derniers
+   messages, pas la « page 3 sur 7 ». On charge donc les plus récents, et un
+   bouton remonte dans le temps — le comportement de toutes les messageries.
+   ---------------------------------------------------------------------------- */
 $thread = [];
+$fenetre = 60;                                  // messages affichés d'emblée
+$plusAnciens = false;
 if ($sel) {
-    $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_sec FROM messages WHERE (expediteur_id=? AND destinataire_id=?) OR (expediteur_id=? AND destinataire_id=?) ORDER BY created_at ASC, id ASC');
-    $st->execute([$me, $sel, $sel, $me]); $thread = $st->fetchAll();
+    $fenetre = max(60, min(600, (int)($_GET['n'] ?? 60)));
+
+    $tot = $pdo->prepare('SELECT COUNT(*) FROM messages
+                          WHERE (expediteur_id=? AND destinataire_id=?)
+                             OR (expediteur_id=? AND destinataire_id=?)');
+    $tot->execute([$me, $sel, $sel, $me]);
+    $plusAnciens = (int)$tot->fetchColumn() > $fenetre;
+
+    /* On prend les derniers par ordre décroissant, puis on remet dans l'ordre
+       de lecture : c'est la seule façon d'obtenir la FIN d'une conversation. */
+    $st = $pdo->prepare('SELECT *, TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age_sec
+                         FROM messages
+                         WHERE (expediteur_id=? AND destinataire_id=?)
+                            OR (expediteur_id=? AND destinataire_id=?)
+                         ORDER BY created_at DESC, id DESC LIMIT ' . (int)$fenetre);
+    $st->execute([$me, $sel, $sel, $me]);
+    $thread = array_reverse($st->fetchAll());
 }
 // Compteur de non-lus par interlocuteur
 $unread = [];
@@ -141,6 +164,11 @@ admin_header('Messagerie', 'messagerie', $pdo, $settings);
     <div class="chat-head"><span class="chat-ava"><?= e(mb_strtoupper(mb_substr($selNom,0,1))) ?></span><strong><?= e($selNom) ?></strong></div>
     <div class="chat-thread" id="thread">
       <?php if (!$thread): ?><div class="chat-empty">Aucun message. Écrivez le premier message ci-dessous 👇</div><?php endif; ?>
+      <?php if ($plusAnciens): ?>
+      <div class="chat-plus">
+        <a href="?u=<?= (int)$sel ?>&n=<?= (int)$fenetre + 120 ?>">↑ Voir les messages plus anciens</a>
+      </div>
+      <?php endif; ?>
       <?php foreach ($thread as $m): $mine = $m['expediteur_id']==$me;
         $supprimable = $mine && ((int)$m['age_sec'] <= 3600);
         $lheure = date('d/m à H:i', strtotime($m['created_at']));

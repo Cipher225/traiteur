@@ -126,9 +126,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Location: menu.php'); exit;
 }
 
-/* ---------- Lecture ---------- */
+/* ----------------------------------------------------------------------------
+   Lecture.
+
+   Le menu se lit par catégorie : paginer couperait une formule en deux, ce qui
+   n'aurait aucun sens. On garde donc le groupement, et la recherche filtre les
+   plats — les catégories concernées s'ouvrent alors d'elles-mêmes.
+   ---------------------------------------------------------------------------- */
+$q = trim($_GET['q'] ?? '');
+
 $cats = $pdo->query('SELECT * FROM categories ORDER BY ordre, id')->fetchAll();
-$arts = $pdo->query('SELECT * FROM plats ORDER BY categorie_id, ordre, id')->fetchAll();
+
+$whereP = ' WHERE 1=1'; $argsP = [];
+$rch = recherche_sql($q, ['nom', 'description']);
+$whereP .= $rch['sql']; $argsP = $rch['args'];
+
+$st = $pdo->prepare("SELECT * FROM plats $whereP ORDER BY categorie_id, ordre, id");
+$st->execute($argsP);
+$arts = $st->fetchAll();
 $parCat = [];
 foreach ($arts as $a) $parCat[$a['categorie_id']][] = $a;
 
@@ -136,6 +151,10 @@ $ouvert = (int)($_GET['c'] ?? 0);          // catégorie dépliée
 $editCat = (int)($_GET['edit_cat'] ?? 0);   // catégorie en cours de modification
 $editArt = (int)($_GET['edit_art'] ?? 0);   // article en cours de modification
 if ($editArt) { foreach ($arts as $a) if ($a['id'] == $editArt) $ouvert = (int)$a['categorie_id']; }
+/* Une recherche n'a d'intérêt que si l'on voit ses résultats : on ouvre toutes
+   les catégories qui en contiennent. */
+$catsOuvertes = [];
+if ($q !== '') foreach ($arts as $a) $catsOuvertes[(int)$a['categorie_id']] = true;
 if ($editCat) $ouvert = $editCat;
 $nbCats = count($cats); $nbArts = count($arts);
 $nbInactifs = 0; foreach ($arts as $a) if (!$a['actif']) $nbInactifs++;
@@ -157,6 +176,14 @@ $devise = $settings['devise'] ?? 'FCFA';
 </div>
 
 <!-- ====== Nouvelle catégorie ====== -->
+<div class="panel glass" style="margin-bottom:12px">
+  <div class="mod-tete" style="margin:0">
+    <h2 style="margin:0">🍽️ Carte
+      <span class="cnt"><?= count($arts) ?> plat<?= count($arts) > 1 ? 's' : '' ?></span></h2>
+    <?= barre_recherche($q, 'Nom du plat ou description…', $_GET) ?>
+  </div>
+</div>
+
 <details class="panel glass newcat" <?= $nbCats ? '' : 'open' ?>>
   <summary><span class="nc-plus">＋</span> Créer une catégorie</summary>
   <form method="post" class="cat-form">
@@ -184,7 +211,9 @@ $devise = $settings['devise'] ?? 'FCFA';
 
 <?php foreach ($cats as $i => $c):
   $items = $parCat[$c['id']] ?? [];
-  $isOpen = ($ouvert === (int)$c['id']) || (!$ouvert && $i === 0);
+  $isOpen = !empty($catsOuvertes[(int)$c['id']])
+         || ($ouvert === (int)$c['id'])
+         || ($q === '' && !$ouvert && $i === 0);
 ?>
 <details class="panel glass cat-block <?= $c['actif'] ? '' : 'is-off' ?>" <?= $isOpen ? 'open' : '' ?> id="cat<?= $c['id'] ?>">
   <summary class="cat-sum">

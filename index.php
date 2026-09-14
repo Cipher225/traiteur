@@ -314,30 +314,53 @@ $f = flash();
       <h2><?= e($s['sec_videos_titre'] ?? 'Nos prestations en action') ?></h2>
       <p><?= e($s['sec_videos_texte'] ?? '') ?></p>
     </div>
-    <?php /* La vidéo ne se charge qu'au clic : la page reste légère, ce qui
-             compte sur une connexion mobile. Avant cela, on n'affiche qu'une
-             vignette dans un cadre lumineux. */ ?>
+    <?php
+    /* Le lecteur est écrit DIRECTEMENT dans la page, sans JavaScript.
+
+       La version précédente n'insérait le cadre qu'au clic, pour alléger la
+       page. C'était plus fin, mais cela ajoutait trois points de rupture — le
+       script, le service worker, le blocage de la lecture automatique — et la
+       vidéo ne démarrait pas.
+
+       « loading=lazy » remplit le même rôle : le navigateur ne télécharge le
+       lecteur que lorsque la vidéo approche de l'écran. C'est lui qui s'en
+       charge, pas nous, et cela ne peut pas échouer. */
+    ?>
     <div class="video-grid">
       <?php foreach ($videos as $v):
-        $estFichier = ($v['type'] === 'fichier' && $v['fichier']);
-        $source = $estFichier ? 'uploads/' . $v['fichier'] : video_embed($v['url'] ?? '');
-        $poster = $v['miniature'] ? 'uploads/' . $v['miniature'] : '';
+        $estFichier = ($v['type'] === 'fichier' && !empty($v['fichier']));
+        $source = $estFichier ? 'uploads/' . $v['fichier'] : video_embed((string)($v['url'] ?? ''));
+        $poster = !empty($v['miniature']) ? 'uploads/' . $v['miniature'] : '';
+
+        /* Un lien non reconnu renverrait vers une page « watch », que YouTube
+           refuse d'afficher dans un cadre. On propose alors le lien direct. */
+        $lisible = $estFichier || ($source !== '' && $source !== ($v['url'] ?? ''));
       ?>
-      <figure class="video-item reveal" data-type="<?= $estFichier ? 'fichier' : 'iframe' ?>"
-              data-src="<?= e($source) ?>" data-lien="<?= e($v['url'] ?? '') ?>"
-              data-titre="<?= e($v['titre']) ?>">
+      <figure class="video-item reveal">
         <div class="video-frame">
           <div class="vf-cadre"></div>
-          <?php if ($poster): ?>
-          <img class="vf-poster" src="<?= e($poster) ?>" alt="<?= e($v['titre']) ?>" loading="lazy">
+
+          <?php if ($estFichier): ?>
+            <video controls preload="none" playsinline
+                   <?= $poster ? 'poster="' . e($poster) . '"' : '' ?>>
+              <source src="<?= e($source) ?>">
+              Votre navigateur ne peut pas lire cette vidéo.
+            </video>
+
+          <?php elseif ($lisible): ?>
+            <iframe src="<?= e($source) ?>"
+                    title="<?= e($v['titre']) ?>"
+                    loading="lazy"
+                    referrerpolicy="strict-origin-when-cross-origin"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                    allowfullscreen></iframe>
+
           <?php else: ?>
-          <div class="vf-poster vf-defaut"><span>🎬</span></div>
+            <div class="vf-secours">
+              <p>Ce lien ne peut pas être lu ici.</p>
+              <a href="<?= e($v['url'] ?? '#') ?>" target="_blank" rel="noopener">Ouvrir la vidéo ↗</a>
+            </div>
           <?php endif; ?>
-          <button type="button" class="vf-play" aria-label="Lire la vidéo">
-            <span class="vp-onde"></span><span class="vp-onde d2"></span>
-            <span class="vp-tri">▶</span>
-          </button>
-          <div class="vf-lecteur"></div>
         </div>
         <figcaption>
           <h3><?= e($v['titre']) ?></h3>
@@ -675,57 +698,6 @@ $f = flash();
     }, { passive: true });
   }
 
-  /* ---------- Vidéos : chargement au clic ---------- */
-  function secours(fig, zone) {
-    var lien = fig.dataset.lien || fig.dataset.src;
-    zone.innerHTML =
-      '<div class="vf-secours">'
-      + '<p>La vidéo ne peut pas être lue ici.</p>'
-      + '<a href="' + lien + '" target="_blank" rel="noopener">Ouvrir sur YouTube ↗</a>'
-      + '</div>';
-  }
-
-  document.querySelectorAll('.video-item').forEach(function (fig) {
-    var bouton = fig.querySelector('.vf-play');
-    if (!bouton) return;
-    bouton.addEventListener('click', function () {
-      var zone = fig.querySelector('.vf-lecteur');
-      if (fig.dataset.type === 'fichier') {
-        zone.innerHTML = '<video controls autoplay playsinline preload="metadata" '
-                       + 'style="width:100%;height:100%;display:block">'
-                       + '<source src="' + fig.dataset.src + '">'
-                       + 'Votre navigateur ne peut pas lire cette vidéo.</video>';
-      } else {
-        var u = fig.dataset.src + (fig.dataset.src.indexOf('?') >= 0 ? '&' : '?') + 'autoplay=1';
-        var cadre = document.createElement('iframe');
-        cadre.src = u;
-        cadre.title = fig.dataset.titre || 'Vidéo';
-        /* « fullscreen » doit figurer dans « allow » : sans lui, le bouton
-           plein écran du lecteur reste inactif dans un cadre intégré. */
-        cadre.setAttribute('allow',
-          'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen');
-        cadre.setAttribute('allowfullscreen', '');
-        cadre.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-        cadre.setAttribute('loading', 'eager');
-        cadre.style.cssText = 'width:100%;height:100%;border:0;display:block';
-
-        /* Si le lecteur ne se charge pas — vidéo privée, lecture intégrée
-           refusée par son propriétaire, réseau coupé — on propose le lien
-           direct plutôt que de laisser un rectangle noir. */
-        var minuteur = setTimeout(function () {
-          if (!fig.dataset.charge) secours(fig, zone);
-        }, 6000);
-        cadre.addEventListener('load', function () {
-          fig.dataset.charge = '1';
-          clearTimeout(minuteur);
-        });
-
-        zone.innerHTML = '';
-        zone.appendChild(cadre);
-      }
-      fig.classList.add('joue');
-    });
-  });
 })();
 </script>
 <script src="<?= asset('assets/js/ui.js') ?>"></script>

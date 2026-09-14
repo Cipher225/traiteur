@@ -25,6 +25,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($titre === '') { flash('Le titre est obligatoire.', 'error'); header('Location: videos.php'); exit; }
 
+    /* Un lien non reconnu produisait un cadre noir sur le site, sans message :
+       YouTube refuse d'afficher une page « watch » dans un cadre intégré. On
+       vérifie donc à l'enregistrement, quand on peut encore corriger. */
+    if ($type === 'youtube') {
+        if ($url === '') {
+            flash('Collez le lien de la vidéo.', 'error');
+            header('Location: videos.php'); exit;
+        }
+        if (video_embed($url) === $url) {
+            flash("Ce lien n'est pas reconnu. Copiez l'adresse depuis la barre du navigateur "
+                . "ou le bouton « Partager » de YouTube, Vimeo ou Dailymotion.", 'error');
+            header('Location: videos.php'); exit;
+        }
+    }
+
     $fichier = null;
     if ($type === 'fichier' && !empty($_FILES['fichier']['name'])) {
         $motifVideo = null;
@@ -56,7 +71,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $edit = null;
 if (isset($_GET['edit'])) { $stmt = $pdo->prepare('SELECT * FROM videos WHERE id=?'); $stmt->execute([(int)$_GET['edit']]); $edit = $stmt->fetch(); }
-$videos = $pdo->query('SELECT * FROM videos ORDER BY ordre, id DESC')->fetchAll();
+/* Les vidéos restent peu nombreuses, mais une page qui charge trente lecteurs
+   met du temps à s'afficher. */
+$q = trim($_GET['q'] ?? '');
+$where = ' WHERE 1=1'; $args = [];
+$rch = recherche_sql($q, ['titre', 'description', 'url']);
+$where .= $rch['sql']; $args = $rch['args'];
+
+$pg = pagination($pdo, "SELECT COUNT(*) FROM videos $where", $args, 20);
+$st = $pdo->prepare("SELECT * FROM videos $where ORDER BY ordre, id DESC" . $pg['limite']);
+$st->execute($args);
+$videos = $st->fetchAll();
 
 admin_header('Vidéos', 'videos', $pdo, $settings);
 ?>
@@ -193,5 +218,7 @@ majType();
   });
 })();
 </script>
+
+<?= pagination_html($pg, 'vidéo', $_GET) ?>
 
 <?php admin_footer(); ?>

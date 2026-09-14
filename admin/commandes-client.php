@@ -74,23 +74,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+/* ----------------------------------------------------------------------------
+   Deux listes cohabitent : les commandes passées depuis l'espace client et les
+   demandes venues du formulaire public. Chacune a sa recherche et sa
+   pagination, car on consulte rarement les deux en même temps.
+   ---------------------------------------------------------------------------- */
 $filtre = $_GET['statut'] ?? '';
-$sql = "SELECT cc.*, c.nom AS client_nom, c.telephone AS client_tel FROM commandes_client cc LEFT JOIN clients c ON c.id=cc.client_id";
-$params = [];
-if ($filtre !== '') { $sql .= " WHERE cc.statut=?"; $params[] = $filtre; }
-$sql .= " ORDER BY FIELD(cc.statut,'nouvelle','en_traitement')=0, cc.created_at DESC";
-$st = $pdo->prepare($sql); $st->execute($params); $cmds = $st->fetchAll();
+$q      = trim($_GET['q'] ?? '');
+
+$jointuresC = "FROM commandes_client cc LEFT JOIN clients c ON c.id = cc.client_id";
+$whereC = ' WHERE 1=1'; $argsC = [];
+if ($filtre !== '') { $whereC .= ' AND cc.statut = ?'; $argsC[] = $filtre; }
+$rchC = recherche_sql($q, ['cc.numero', 'cc.lieu', 'cc.notes', 'c.nom', 'c.entreprise', 'c.telephone']);
+$whereC .= $rchC['sql']; $argsC = array_merge($argsC, $rchC['args']);
+
+$pgC = pagination($pdo, "SELECT COUNT(*) $jointuresC $whereC", $argsC, 25);
+
+$st = $pdo->prepare("SELECT cc.*, COALESCE(NULLIF(c.entreprise,''), c.nom) AS client_nom,
+                            c.telephone AS client_tel
+                     $jointuresC $whereC
+                     ORDER BY FIELD(cc.statut,'nouvelle','en_traitement')=0, cc.created_at DESC"
+                    . $pgC['limite']);
+$st->execute($argsC);
+$cmds = $st->fetchAll();
 $nbNouvelles = (int)$pdo->query("SELECT COUNT(*) FROM commandes_client WHERE statut='nouvelle'")->fetchColumn();
 $vue = ($_GET['vue'] ?? '') === 'devis' ? 'devis' : 'commandes';
 $nbDevis = (int)$pdo->query("SELECT COUNT(*) FROM commandes WHERE statut='nouveau'")->fetchColumn();
 $dFiltre = $_GET['filtre'] ?? '';
 $dLabels = ['nouveau'=>'Nouveau','en_cours'=>'En cours','confirme'=>'Confirmé','termine'=>'Terminé','annule'=>'Annulé'];
 $dBadges = ['nouveau'=>'badge-gold','en_cours'=>'badge-violet','confirme'=>'badge-teal','termine'=>'badge','annule'=>'badge-danger'];
-if ($dFiltre && isset($dLabels[$dFiltre])) {
-    $st = $pdo->prepare('SELECT * FROM commandes WHERE statut=? ORDER BY created_at DESC'); $st->execute([$dFiltre]);
-} else {
-    $st = $pdo->query('SELECT * FROM commandes ORDER BY created_at DESC');
-}
+$whereD = ' WHERE 1=1'; $argsD = [];
+if ($dFiltre && isset($dLabels[$dFiltre])) { $whereD .= ' AND statut = ?'; $argsD[] = $dFiltre; }
+$rchD = recherche_sql($q, ['nom', 'telephone', 'email', 'type_evenement', 'message']);
+$whereD .= $rchD['sql']; $argsD = array_merge($argsD, $rchD['args']);
+
+$pgD = pagination($pdo, "SELECT COUNT(*) FROM commandes $whereD", $argsD, 25);
+
+$st = $pdo->prepare("SELECT * FROM commandes $whereD ORDER BY created_at DESC" . $pgD['limite']);
+$st->execute($argsD);
 $demandes = $st->fetchAll();
 
 $etapes = ['nouvelle'=>'Nouvelle','en_traitement'=>'En traitement','devis_envoye'=>'Devis envoyé','confirmee'=>'Confirmée','terminee'=>'Terminée','annulee'=>'Annulée'];
@@ -109,7 +130,10 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
 <?php if ($vue === 'devis'): ?>
 
 <div class="panel glass">
-  <h2>🎯 Filtrer par statut</h2>
+  <div class="mod-tete">
+    <h2 style="margin:0">📥 Demandes du site <span class="cnt"><?= number_format($pgD['total'], 0, ',', ' ') ?></span></h2>
+    <?= barre_recherche($q, 'Nom, téléphone, type d\'événement…', $_GET) ?>
+  </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a class="btn btn-sm <?= $dFiltre === '' ? 'btn-gold' : 'btn-glass' ?>" href="commandes-client.php?vue=devis">Toutes</a>
     <?php foreach ($dLabels as $k => $l): ?>
@@ -183,11 +207,20 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
 <div class="panel glass" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
   <h2 style="border:0;margin:0;padding:0">📦 Commandes clients<?php if($nbNouvelles): ?> <span class="badge badge-gold"><?= $nbNouvelles ?> nouvelle<?= $nbNouvelles>1?'s':'' ?></span><?php endif; ?></h2>
   <form method="get" style="margin-left:auto">
+    <?php if ($q !== ''): ?><input type="hidden" name="q" value="<?= e($q) ?>"><?php endif; ?>
     <select class="input" name="statut" onchange="this.form.submit()" style="padding:8px 12px">
       <option value="">Tous les statuts</option>
       <?php foreach ($etapes as $k=>$v): ?><option value="<?= $k ?>" <?= $filtre===$k?'selected':'' ?>><?= $v ?></option><?php endforeach; ?>
     </select>
   </form>
+</div>
+
+<div class="panel glass" style="margin-bottom:12px">
+  <div class="mod-tete" style="margin:0">
+    <span style="font-size:12.5px;color:var(--ink-faint)">
+      <?= number_format($pgC['total'], 0, ',', ' ') ?> commande<?= $pgC['total'] > 1 ? 's' : '' ?></span>
+    <?= barre_recherche($q, 'N° de commande, client, lieu…', $_GET) ?>
+  </div>
 </div>
 
 <?php foreach ($cmds as $cmd):
@@ -244,4 +277,7 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
   <div style="font-size:44px">📦</div>Aucune commande client<?= $filtre?' avec ce statut':'' ?> pour l'instant.
 </div>
 <?php endif; ?>
+<?= pagination_html($vue === 'devis' ? $pgD : $pgC,
+                    $vue === 'devis' ? 'demande' : 'commande', $_GET) ?>
+
 <?php admin_footer(); ?>
