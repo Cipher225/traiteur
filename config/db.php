@@ -751,6 +751,8 @@ function all_modules(): array {
         'videos'       => ['Vidéos',         '🎬', 'videos.php',       'site',    false, false],
         'temoignages'  => ['Témoignages',    '💬', 'temoignages.php',  'site',    false, false],
         'parametres'   => ['Paramètres',     '⚙️', 'parametres.php',   'site',    true,  false],
+        /* Réservé à l'administrateur : ces mesures n'intéressent pas un employé. */
+        'systeme'      => ['État du serveur', '📡', 'systeme.php',     'site',    true,  false],
     ];
 }
 
