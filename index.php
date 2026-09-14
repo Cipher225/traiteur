@@ -307,6 +307,10 @@ $f = flash();
       <div class="dp-scene">
         <?php foreach ($vues as $i => $v): ?>
         <figure class="dp-vue <?= $i === 0 ? 'on' : '' ?>" data-i="<?= $i ?>">
+          <?php /* La même image en fond, floutée : elle comble les côtés d'une
+                   photo verticale sans la recadrer, et donne la couleur de
+                   l'ambiance. Un fond noir ferait vide. */ ?>
+          <span class="dp-fond" style="background-image:url('uploads/<?= e($v['img']) ?>')"></span>
           <img src="uploads/<?= e($v['img']) ?>" alt="<?= e($v['titre']) ?>"
                <?= $i > 1 ? 'loading="lazy"' : '' ?>>
           <figcaption>
@@ -336,36 +340,25 @@ $f = flash();
     <?php endif; ?>
 
     <?php if (count($galerieAlbums) > 1): ?>
+    <?php /* Les filtres ne masquent plus une mosaïque : ils amènent le
+             diaporama à la première photo de l'album choisi. Une seule
+             présentation des images, donc, au lieu de deux. */ ?>
     <div class="gal-filtres reveal">
-      <button type="button" class="gf actif" data-album="tous">✨ Tout voir
-        <span><?= count($galerie) ?></span></button>
+      <?php
+        $premierDeLAlbum = [];
+        foreach ($vues as $iv => $v) {
+            if (!isset($premierDeLAlbum[$v['album']])) $premierDeLAlbum[$v['album']] = $iv;
+        }
+      ?>
+      <button type="button" class="gf actif" data-vue="0">✨ Tout voir
+        <span><?= count($vues) ?></span></button>
       <?php foreach ($galerieAlbums as $aid => $al): ?>
-      <button type="button" class="gf" data-album="<?= (int)$aid ?>">
+      <?php $dep = $premierDeLAlbum[$al['nom']] ?? null; if ($dep === null) continue; ?>
+      <button type="button" class="gf" data-vue="<?= (int)$dep ?>">
         <?= e($al['icone']) ?> <?= e($al['nom']) ?> <span><?= (int)$al['n'] ?></span></button>
       <?php endforeach; ?>
     </div>
     <?php endif; ?>
-
-    <div class="gal-grid" id="gal-grid">
-      <?php foreach ($galerie as $i => $g):
-        /* Les photos verticales prennent deux rangées, les larges deux colonnes :
-           la mosaïque respire au lieu d'aligner des vignettes identiques. */
-        /* Chaque photo garde ses proportions : la disposition en colonnes
-           s'adapte d'elle-même, sans classe particulière. */
-        $forme = '';
-      ?>
-      <figure class="gal-item reveal <?= $forme ?>" data-album="<?= (int)($g['aid'] ?? 0) ?>"
-              data-i="<?= $i ?>" data-src="uploads/<?= e($g['image']) ?>"
-              data-titre="<?= e($g['titre']) ?>" data-legende="<?= e($g['description'] ?? '') ?>">
-        <img src="uploads/<?= e($g['image']) ?>" alt="<?= e($g['titre']) ?>" loading="lazy">
-        <figcaption>
-          <?php if ($g['album_nom']): ?><em><?= e($g['album_icone']) ?> <?= e($g['album_nom']) ?></em><?php endif; ?>
-          <?php if ($g['titre']): ?><strong><?= e($g['titre']) ?></strong><?php endif; ?>
-          <?php if (!empty($g['description'])): ?><span><?= e($g['description']) ?></span><?php endif; ?>
-        </figcaption>
-        <span class="gal-loupe">⤢</span>
-      </figure>
-      <?php endforeach; ?>
     </div>
   </div>
 </section>
@@ -758,6 +751,10 @@ $f = flash();
       x0 = null;
     }, { passive: true });
 
+    /* Les filtres par album ont besoin d'amener le diaporama sur une photo
+       précise : on leur ouvre une porte. */
+    window.__diapoAller = function (n) { afficher(n, n > i ? 1 : -1); programmer(); };
+
     /* Rien ne défile tant que le diaporama n'est pas à l'écran : inutile de
        consommer du réseau et de la batterie pour une section non vue. */
     if ('IntersectionObserver' in window) {
@@ -801,27 +798,15 @@ $f = flash();
   })();
 
   /* ---------- Filtres par album ---------- */
-  var filtres = document.querySelectorAll('.gf');
-  var photos  = Array.prototype.slice.call(document.querySelectorAll('.gal-item'));
-
-  filtres.forEach(function (b) {
+  /* Les filtres amènent le diaporama à la première photo de l'album.
+     C'est le diaporama qui présente les images, plus une mosaïque. */
+  document.querySelectorAll('.gf').forEach(function (b) {
     b.addEventListener('click', function () {
-      filtres.forEach(function (x) { x.classList.remove('actif'); });
+      document.querySelectorAll('.gf').forEach(function (x) { x.classList.remove('actif'); });
       this.classList.add('actif');
-      var cible = this.dataset.album;
-      photos.forEach(function (p, i) {
-        var garde = (cible === 'tous') || (p.dataset.album === cible);
-        if (garde) {
-          p.hidden = false;
-          if (doux) {
-            p.style.animation = 'none';
-            void p.offsetWidth;                       // relance l'animation
-            p.style.animation = 'galEntre .5s var(--ease-ios) ' + (i % 12) * .035 + 's both';
-          }
-        } else {
-          p.hidden = true;
-        }
-      });
+      if (window.__diapoAller) window.__diapoAller(parseInt(this.dataset.vue, 10) || 0);
+      var d = document.getElementById('diapo');
+      if (d) d.scrollIntoView({ behavior: doux ? 'smooth' : 'auto', block: 'center' });
     });
   });
 
@@ -834,29 +819,33 @@ $f = flash();
     var vCpt = document.getElementById('vi-compteur');
     var courant = 0;
 
-    function visibles() { return photos.filter(function (p) { return !p.hidden; }); }
+    /* La visionneuse se nourrit désormais du diaporama : cliquer sur une
+       photo l'ouvre en grand, sans la contrainte du cadre. */
+    var photos = Array.prototype.slice.call(document.querySelectorAll('.dp-vue'));
 
     function montrer(i) {
-      var liste = visibles();
-      if (!liste.length) return;
-      courant = (i + liste.length) % liste.length;
-      var p = liste[courant];
+      if (!photos.length) return;
+      courant = (i + photos.length) % photos.length;
+      var p = photos[courant];
+      var img = p.querySelector('img');
+      var lg = p.querySelector('.dp-leg');
+      var ti = p.querySelector('figcaption strong');
+
       vImg.style.opacity = 0;
-      var img = new Image();
-      img.onload = function () {
-        vImg.src = p.dataset.src;
-        vImg.style.opacity = 1;
-      };
-      img.src = p.dataset.src;
-      vTit.textContent = p.dataset.titre || '';
-      vLeg.textContent = p.dataset.legende || '';
-      vCpt.textContent = (courant + 1) + ' / ' + liste.length;
+      var pre = new Image();
+      pre.onload = function () { vImg.src = img.src; vImg.style.opacity = 1; };
+      pre.src = img.src;
+
+      vTit.textContent = ti ? ti.textContent : '';
+      vLeg.textContent = lg ? lg.textContent : '';
+      vCpt.textContent = (courant + 1) + ' / ' + photos.length;
     }
 
-    photos.forEach(function (p) {
-      p.addEventListener('click', function () {
-        var liste = visibles();
-        montrer(liste.indexOf(this));
+    photos.forEach(function (p, n) {
+      p.addEventListener('click', function (e) {
+        /* Les flèches et le bouton pause ne doivent pas ouvrir la visionneuse. */
+        if (e.target.closest('.dp-fl, .dp-pause')) return;
+        montrer(n);
         visio.hidden = false;
         document.body.style.overflow = 'hidden';
       });

@@ -529,42 +529,6 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   background:rgba(0,0,0,.22)}
 .gf.actif span{background:rgba(10,16,32,.2)}
 
-/* Mosaïque en colonnes.
-
-   Une grille à cellules de tailles variées laissait des trous : dès qu'une
-   photo haute ne trouvait pas sa place, un blanc apparaissait, et le mur
-   devenait bancal — surtout en fin de galerie.
-
-   Les colonnes règlent cela définitivement : chaque photo garde ses
-   proportions d'origine et vient se poser sous la précédente. Aucun trou
-   possible, quel que soit le nombre de photos ou leurs formats. */
-.gal-grid{column-count:4;column-gap:12px}
-.gal-item{position:relative;margin:0 0 12px;border-radius:18px;overflow:hidden;cursor:zoom-in;
-  break-inside:avoid;-webkit-column-break-inside:avoid;display:block;
-  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
-.gal-item img{width:100%;height:auto;display:block;
-  transition:transform .7s cubic-bezier(.2,.8,.3,1), filter .4s}
-
-.gal-item:hover img{transform:scale(1.09)}
-.gal-item::after{content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(to top,rgba(4,10,22,.88) 0%,rgba(4,10,22,.15) 45%,transparent 70%);
-  opacity:0;transition:opacity .35s}
-.gal-item:hover::after{opacity:1}
-.gal-item figcaption{position:absolute;left:0;right:0;bottom:0;padding:20px 18px;z-index:2;
-  opacity:0;transform:translateY(14px);transition:all .4s cubic-bezier(.2,.8,.3,1)}
-.gal-item:hover figcaption{opacity:1;transform:translateY(0)}
-.gal-item figcaption em{display:block;font-style:normal;font-size:11px;font-weight:700;
-  letter-spacing:.1em;text-transform:uppercase;color:#f0c14b;margin-bottom:5px}
-.gal-item figcaption strong{display:block;font-size:16px;color:#fff;line-height:1.3}
-.gal-item figcaption span{display:block;font-size:12.5px;color:rgba(255,255,255,.72);margin-top:4px}
-.gal-loupe{position:absolute;top:14px;right:14px;z-index:2;width:38px;height:38px;
-  border-radius:50%;display:grid;place-items:center;font-size:15px;color:#0a1020;
-  background:rgba(240,193,75,.94);opacity:0;transform:scale(.6) rotate(-45deg);
-  transition:all .35s cubic-bezier(.2,.9,.3,1.4)}
-.gal-item:hover .gal-loupe{opacity:1;transform:scale(1) rotate(0)}
-@keyframes galEntre{from{opacity:0;transform:translateY(22px) scale(.94)}
-  to{opacity:1;transform:translateY(0) scale(1)}}
-
 /* Visionneuse */
 /* L'attribut « hidden » doit l'emporter sur l'affichage en flex, sinon la
    visionneuse resterait ouverte en permanence. */
@@ -639,10 +603,7 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden}
 
-@media (max-width:1100px){ .gal-grid{column-count:3} }
 @media (max-width:700px){
-  .gal-grid{column-count:2;column-gap:10px}
-  .gal-item{margin-bottom:10px}
   .vi-prec,.vi-suiv{width:42px;height:42px;font-size:22px}
   .vi-prec{left:8px} .vi-suiv{right:8px}
 }
@@ -736,10 +697,12 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
    c'est ce zoom qui donne l'impression de vie.
    ============================================================ */
 .diapo{position:relative;margin-bottom:30px}
-.dp-scene{position:relative;aspect-ratio:21/9;border-radius:24px;overflow:hidden;
-  background:#050b16;border:1px solid rgba(255,255,255,.1);
-  box-shadow:0 24px 60px rgba(0,0,0,.5)}
-@media (max-width:760px){ .dp-scene{aspect-ratio:4/3;border-radius:18px} }
+/* Carte plus basse qu'auparavant, et surtout limitée en hauteur : sur un grand
+   écran, un rapport 16/9 donnait une scène de 700 px qui remplissait la page. */
+.dp-scene{position:relative;aspect-ratio:16/9;max-height:52vh;border-radius:20px;
+  overflow:hidden;background:#050b16;border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 20px 50px rgba(0,0,0,.46)}
+@media (max-width:760px){ .dp-scene{aspect-ratio:4/3;max-height:none;border-radius:16px} }
 
 .dp-vue{position:absolute;inset:0;margin:0;opacity:0;
   transform:translateX(0) scale(1.06);
@@ -753,10 +716,19 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .dp-vue.sort-gauche{opacity:0;transform:translateX(-4%) scale(1.02)}
 .dp-vue.sort-droite{opacity:0;transform:translateX(4%) scale(1.02)}
 
-.dp-vue img{width:100%;height:100%;object-fit:cover;display:block}
-/* Zoom lent sur l'image visible : l'œil perçoit un mouvement continu. */
+/* L'image s'affiche ENTIÈRE : « contain » l'adapte au cadre sans rien couper.
+   Une pièce montée dont on ne voit pas le sommet ne montre pas grand-chose. */
+.dp-vue img{position:relative;z-index:1;width:100%;height:100%;
+  object-fit:contain;display:block}
+
+/* Fond : la même image, agrandie et floutée, pour habiller les côtés. */
+.dp-fond{position:absolute;inset:0;z-index:0;
+  background-size:cover;background-position:center;
+  filter:blur(26px) brightness(.5) saturate(1.2);transform:scale(1.15)}
+
+/* Zoom très léger : l'image doit rester entière, on se contente d'un souffle. */
 .dp-vue.on img{animation:dpZoom 9s ease-out forwards}
-@keyframes dpZoom{from{transform:scale(1)}to{transform:scale(1.09)}}
+@keyframes dpZoom{from{transform:scale(1)}to{transform:scale(1.03)}}
 .diapo.en-pause .dp-vue.on img{animation-play-state:paused}
 
 .dp-vue figcaption{position:absolute;left:0;right:0;bottom:0;z-index:2;

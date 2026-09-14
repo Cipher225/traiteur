@@ -250,13 +250,20 @@ admin_header('Galerie', 'galerie', $pdo, $settings);
 
 <!-- ---------- Les photos ---------- -->
 <div class="panel glass" style="margin-top:14px">
+  <?php /* La recherche est SON PROPRE formulaire : l'imbriquer dans celui de
+           la sélection détachait les cases à cocher, et la suppression ne
+           recevait plus aucune photo. Un formulaire dans un formulaire est
+           invalide — le navigateur ferme le premier sans rien dire. */ ?>
+  <div class="gal-tete">
+    <h2 style="margin:0">🖼️ <?= number_format($pg['total'], 0, ',', ' ') ?> photo<?= $pg['total'] > 1 ? 's' : '' ?></h2>
+    <?= barre_recherche($q, 'Titre, légende, album, prestation…', $_GET) ?>
+  </div>
+
   <form method="post" id="form-lot">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
     <input type="hidden" name="retour_album" value="<?= $albumSel !== null ? (int)$albumSel : '' ?>">
 
     <div class="gal-tete">
-      <h2 style="margin:0">🖼️ <?= number_format($pg['total'], 0, ',', ' ') ?> photo<?= $pg['total'] > 1 ? 's' : '' ?></h2>
-      <?= barre_recherche($q, 'Titre, légende, album, prestation…', $_GET) ?>
       <div class="gal-outils" id="gal-outils" hidden>
         <span class="go-n"><b id="go-nb">0</b> sélectionnée(s)</span>
         <select class="input input-sm" name="lot_album">
