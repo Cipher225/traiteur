@@ -183,10 +183,20 @@ $labels = ['nouveau'=>'Nouveau','en_cours'=>'En cours','confirme'=>'Confirmé',
 admin_header('Tableau de bord', 'dashboard', $pdo, $settings);
 
 /* Comptes actuellement en ligne (activité dans les 5 dernières minutes) */
-$enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_activity
-    FROM users
-    WHERE last_activity IS NOT NULL AND last_activity >= (NOW() - INTERVAL 5 MINUTE)
-    ORDER BY last_activity DESC")->fetchAll();
+try {
+    $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_region,
+                                   last_pays, last_lat, last_lon, last_operateur, last_mobile,
+                                   last_activity
+        FROM users
+        WHERE last_activity IS NOT NULL AND last_activity >= (NOW() - INTERVAL 5 MINUTE)
+        ORDER BY last_activity DESC")->fetchAll();
+} catch (Throwable $e) {
+    /* Migration non passée : on se contente des colonnes d'origine. */
+    $enLigne = $pdo->query("SELECT nom, username, role, last_ip, last_ville, last_activity
+        FROM users
+        WHERE last_activity IS NOT NULL AND last_activity >= (NOW() - INTERVAL 5 MINUTE)
+        ORDER BY last_activity DESC")->fetchAll();
+}
 
 /* ============================================================================
    POINTS D'ATTENTION
@@ -490,20 +500,56 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
         </div>
         <div class="online-list">
           <?php foreach ($enLigne as $u): ?>
+          <?php
+            /* Lieu affiché : ville, puis région et pays s'ils apportent
+               quelque chose. La région qui répète la ville est écartée. */
+            $lieu = array_values(array_unique(array_filter([
+                $u['last_ville'] ?? '', $u['last_region'] ?? '', $u['last_pays'] ?? ''
+            ])));
+            $lieuTexte = implode(', ', $lieu);
+            $lat = $u['last_lat'] ?? null;
+            $lon = $u['last_lon'] ?? null;
+            $situe = $lat !== null && $lon !== null;
+            /* Le zoom 11 correspond à l'échelle d'une agglomération : c'est la
+               précision réelle d'une adresse IP, inutile de zoomer davantage. */
+            $carte = $situe
+                   ? 'https://www.openstreetmap.org/?mlat=' . rawurlencode((string)$lat)
+                     . '&mlon=' . rawurlencode((string)$lon) . '#map=11/' . $lat . '/' . $lon
+                   : ($lieuTexte !== '' && $lieuTexte !== 'Réseau local'
+                      ? 'https://www.openstreetmap.org/search?query=' . urlencode($lieuTexte) : '');
+          ?>
           <div class="online-row">
             <span class="online-ava <?= $u['role']==='client'?'ava-client':($u['role']==='admin'?'ava-admin':'ava-emp') ?>"><?= e(mb_strtoupper(mb_substr($u['nom'],0,1))) ?></span>
             <div class="online-info">
               <strong><?= e($u['nom']) ?></strong>
-              <small><?= $u['role']==='client'?'Client':($u['role']==='admin'?'Administrateur':'Employé') ?><?= $u['last_ip']?' · '.e($u['last_ip']):'' ?></small>
+              <small>
+                <?= $u['role']==='client'?'Client':($u['role']==='admin'?'Administrateur':'Employé') ?>
+                <?php if ($lieuTexte !== ''): ?> · <span class="ol-lieu"><?= e($lieuTexte) ?></span><?php endif; ?>
+                <?php if (!empty($u['last_mobile'])): ?> <span class="ol-tag">📱 mobile</span><?php endif; ?>
+              </small>
+              <?php if (!empty($u['last_operateur']) || $u['last_ip']): ?>
+              <small class="ol-tech">
+                <?php if (!empty($u['last_operateur'])): ?><?= e($u['last_operateur']) ?><?php endif; ?>
+                <?php if ($u['last_ip']): ?> · <?= e($u['last_ip']) ?><?php endif; ?>
+                <?php if ($situe): ?> · <?= number_format((float)$lat, 4, ',', '') ?>,
+                  <?= number_format((float)$lon, 4, ',', '') ?><?php endif; ?>
+              </small>
+              <?php endif; ?>
             </div>
-            <?php if ($u['last_ville'] && $u['last_ville']!=='Réseau local'): ?>
-            <a class="online-map" href="https://www.openstreetmap.org/search?query=<?= urlencode($u['last_ville']) ?>" target="_blank" rel="noopener" title="Localiser : <?= e($u['last_ville']) ?>">📍</a>
+            <?php if ($carte !== ''): ?>
+            <a class="online-map" href="<?= e($carte) ?>" target="_blank" rel="noopener"
+               title="Voir sur la carte — position approximative, déduite de l'adresse IP">📍</a>
             <?php else: ?>
             <span class="online-map off" title="Localisation indisponible">📍</span>
             <?php endif; ?>
           </div>
           <?php endforeach; ?>
         </div>
+        <p class="ol-note">
+          Le lieu est déduit de l'adresse IP : il situe le point de sortie du
+          réseau, pas la personne. Comptez quelques kilomètres en ville, bien
+          davantage sur un abonnement mobile.
+        </p>
       </div>
       <script>
       (function(){

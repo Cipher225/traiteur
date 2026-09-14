@@ -1056,3 +1056,36 @@ ALTER TABLE facture_lignes ADD COLUMN IF NOT EXISTS par_jour TINYINT(1) DEFAULT 
 ALTER TABLE services ADD COLUMN IF NOT EXISTS prix_indicatif VARCHAR(80) DEFAULT '';
 ALTER TABLE services ADD COLUMN IF NOT EXISTS details TEXT;
 ALTER TABLE services ADD COLUMN IF NOT EXISTS image VARCHAR(255) DEFAULT '';
+
+-- =====================================================================
+--  LOCALISATION DES CONNEXIONS
+--
+--  La position est déduite de l'adresse IP. Elle situe la ville, pas la
+--  personne : la précision va de quelques kilomètres en ville à plusieurs
+--  dizaines en zone rurale. Ce n'est PAS une position GPS.
+--
+--  Le cache évite d'interroger le service de géolocalisation à chaque
+--  connexion — il est limité à 45 appels par minute, et une attente de
+--  trois secondes à chaque ouverture de session serait pénible.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS geo_cache (
+  ip VARCHAR(45) NOT NULL PRIMARY KEY,
+  ville VARCHAR(120) DEFAULT '',
+  region VARCHAR(120) DEFAULT '',
+  pays VARCHAR(80) DEFAULT '',
+  code_pays VARCHAR(4) DEFAULT '',
+  latitude DECIMAL(10,6) NULL,
+  longitude DECIMAL(10,6) NULL,
+  operateur VARCHAR(160) DEFAULT '',
+  fuseau VARCHAR(64) DEFAULT '',
+  mobile TINYINT(1) DEFAULT 0,
+  proxy TINYINT(1) DEFAULT 0,
+  maj DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_region VARCHAR(120) DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_pays VARCHAR(80) DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_lat DECIMAL(10,6) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_lon DECIMAL(10,6) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_operateur VARCHAR(160) DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_mobile TINYINT(1) DEFAULT 0;

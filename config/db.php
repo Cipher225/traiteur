@@ -1400,25 +1400,114 @@ function ip_reelle(): string {
     return $_SERVER['REMOTE_ADDR'] ?? '';
 }
 
-/* Ville approximative à partir de l'IP (géolocalisation, best-effort). */
-function ville_depuis_ip(string $ip): string {
-    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) return '';
-    // IP locale / privée : pas de géolocalisation possible
-    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return 'Réseau local';
-    $ctx = stream_context_create(['http' => ['timeout' => 3]]);
-    $url = 'http://ip-api.com/json/' . urlencode($ip) . '?fields=status,city,country&lang=fr';
+/* ----------------------------------------------------------------------------
+   Localisation d'une adresse IP.
+
+   ATTENTION À CE QUE CELA SIGNIFIE : le service situe le POINT DE SORTIE du
+   réseau, pas la personne. En ville la précision est de quelques kilomètres ;
+   sur un abonnement mobile, elle peut désigner le central de l'opérateur, à
+   des dizaines de kilomètres. Ce n'est pas une position GPS, et l'afficher
+   comme telle serait trompeur.
+
+   Le résultat est mis en cache trente jours : le service gratuit est limité à
+   45 appels par minute, et trois secondes d'attente à chaque connexion
+   rendraient l'ouverture de session pénible.
+   ---------------------------------------------------------------------------- */
+function geo_depuis_ip(PDO $pdo, string $ip): array {
+    $vide = ['ville' => '', 'region' => '', 'pays' => '', 'code_pays' => '',
+             'latitude' => null, 'longitude' => null, 'operateur' => '',
+             'fuseau' => '', 'mobile' => 0, 'proxy' => 0];
+
+    if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) return $vide;
+
+    /* Adresse privée : la machine est sur le même réseau que le serveur. */
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+        return array_merge($vide, ['ville' => 'Réseau local']);
+    }
+
+    try {
+        $st = $pdo->prepare("SELECT * FROM geo_cache WHERE ip = ? AND maj > DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        $st->execute([$ip]);
+        if ($d = $st->fetch()) {
+            return ['ville' => $d['ville'], 'region' => $d['region'], 'pays' => $d['pays'],
+                    'code_pays' => $d['code_pays'],
+                    'latitude' => $d['latitude'] !== null ? (float)$d['latitude'] : null,
+                    'longitude' => $d['longitude'] !== null ? (float)$d['longitude'] : null,
+                    'operateur' => $d['operateur'], 'fuseau' => $d['fuseau'],
+                    'mobile' => (int)$d['mobile'], 'proxy' => (int)$d['proxy']];
+        }
+    } catch (Throwable $e) { /* table absente : on interroge directement */ }
+
+    $ctx = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true]]);
+    $champs = 'status,city,regionName,country,countryCode,lat,lon,isp,timezone,mobile,proxy';
+    $url = 'http://ip-api.com/json/' . urlencode($ip) . '?fields=' . $champs . '&lang=fr';
     $raw = @file_get_contents($url, false, $ctx);
-    if ($raw === false) return '';
+    if ($raw === false) return $vide;
+
     $d = json_decode($raw, true);
-    if (($d['status'] ?? '') !== 'success') return '';
-    $ville = trim(($d['city'] ?? '') . (isset($d['country']) ? ', ' . $d['country'] : ''), ', ');
-    return mb_substr($ville, 0, 120);
+    if (($d['status'] ?? '') !== 'success') return $vide;
+
+    $geo = [
+        'ville'     => mb_substr((string)($d['city'] ?? ''), 0, 120),
+        'region'    => mb_substr((string)($d['regionName'] ?? ''), 0, 120),
+        'pays'      => mb_substr((string)($d['country'] ?? ''), 0, 80),
+        'code_pays' => mb_substr((string)($d['countryCode'] ?? ''), 0, 4),
+        'latitude'  => isset($d['lat']) ? (float)$d['lat'] : null,
+        'longitude' => isset($d['lon']) ? (float)$d['lon'] : null,
+        'operateur' => mb_substr((string)($d['isp'] ?? ''), 0, 160),
+        'fuseau'    => mb_substr((string)($d['timezone'] ?? ''), 0, 64),
+        'mobile'    => !empty($d['mobile']) ? 1 : 0,
+        'proxy'     => !empty($d['proxy']) ? 1 : 0,
+    ];
+
+    try {
+        $pdo->prepare("INSERT INTO geo_cache
+                       (ip, ville, region, pays, code_pays, latitude, longitude,
+                        operateur, fuseau, mobile, proxy, maj)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())
+                       ON DUPLICATE KEY UPDATE
+                        ville=VALUES(ville), region=VALUES(region), pays=VALUES(pays),
+                        code_pays=VALUES(code_pays), latitude=VALUES(latitude),
+                        longitude=VALUES(longitude), operateur=VALUES(operateur),
+                        fuseau=VALUES(fuseau), mobile=VALUES(mobile), proxy=VALUES(proxy),
+                        maj=NOW()")
+            ->execute([$ip, $geo['ville'], $geo['region'], $geo['pays'], $geo['code_pays'],
+                       $geo['latitude'], $geo['longitude'], $geo['operateur'],
+                       $geo['fuseau'], $geo['mobile'], $geo['proxy']]);
+    } catch (Throwable $e) {}
+
+    return $geo;
 }
 
-/* Enregistre l'IP et la ville de connexion d'un utilisateur. */
+/* Libellé court, tel qu'on l'affiche dans les listes. */
+function geo_libelle(array $g): string {
+    $b = array_filter([$g['ville'] ?? '', $g['region'] ?? '', $g['pays'] ?? '']);
+    /* Une région qui porte le nom de la ville n'apporte rien : « Abidjan,
+       Abidjan, Côte d'Ivoire » se lit mal. */
+    $b = array_values(array_unique($b));
+    return implode(', ', $b);
+}
+
+/* Conservée pour les appels existants. */
+function ville_depuis_ip(string $ip): string {
+    global $pdo;
+    if (!($pdo instanceof PDO)) return '';
+    return geo_libelle(geo_depuis_ip($pdo, $ip));
+}
+
+/* Enregistre l'IP et la localisation de connexion d'un utilisateur. */
 function capturer_connexion(PDO $pdo, int $userId): void {
-    $ip = ip_reelle();
-    $ville = ville_depuis_ip($ip);
-    $pdo->prepare("UPDATE users SET last_ip=?, last_ville=? WHERE id=?")
-        ->execute([mb_substr($ip,0,45), $ville, $userId]);
+    $ip  = ip_reelle();
+    $geo = geo_depuis_ip($pdo, $ip);
+    try {
+        $pdo->prepare("UPDATE users SET last_ip=?, last_ville=?, last_region=?, last_pays=?,
+                       last_lat=?, last_lon=?, last_operateur=?, last_mobile=? WHERE id=?")
+            ->execute([mb_substr($ip, 0, 45), $geo['ville'], $geo['region'], $geo['pays'],
+                       $geo['latitude'], $geo['longitude'], $geo['operateur'],
+                       $geo['mobile'], $userId]);
+    } catch (Throwable $e) {
+        /* Colonnes absentes (migration non passée) : on garde au moins l'essentiel. */
+        $pdo->prepare("UPDATE users SET last_ip=?, last_ville=? WHERE id=?")
+            ->execute([mb_substr($ip, 0, 45), geo_libelle($geo), $userId]);
+    }
 }
