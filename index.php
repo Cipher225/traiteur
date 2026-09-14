@@ -269,6 +269,72 @@ $f = flash();
       <span class="eyebrow" style="justify-content:center"><?= e($s['sec_galerie_eyebrow'] ?? 'En images') ?></span>
       <h2><?= e($s['sec_galerie_titre'] ?? 'Nos plus belles réalisations') ?></h2>
     </div>
+    <?php
+    /* ------------------------------------------------------------------
+       DIAPORAMA
+
+       Une mosaïque montre TOUT ; un diaporama RACONTE. Les photos d'une
+       même prestation défilent ensemble, annoncées par le nom de l'album :
+       le visiteur comprend qu'il regarde un mariage, puis un séminaire,
+       et non un assortiment sans lien.
+
+       On limite à six photos par album : au-delà, on tourne en rond avant
+       d'avoir montré les autres prestations.
+       ------------------------------------------------------------------ */
+    $diapo = [];
+    foreach ($galerie as $g) {
+        $cle = !empty($g['aid']) ? (int)$g['aid'] : 0;
+        if (count($diapo[$cle]['photos'] ?? []) >= 6) continue;
+        if (!isset($diapo[$cle])) {
+            $diapo[$cle] = ['nom'   => $g['album_nom'] ?: 'Nos réalisations',
+                            'icone' => $g['album_icone'] ?: '📸',
+                            'photos' => []];
+        }
+        $diapo[$cle]['photos'][] = $g;
+    }
+    $vues = [];
+    foreach ($diapo as $bloc) foreach ($bloc['photos'] as $ph) {
+        $vues[] = ['img' => $ph['image'], 'titre' => $ph['titre'],
+                   'legende' => $ph['description'] ?? '',
+                   'album' => $bloc['nom'], 'icone' => $bloc['icone']];
+    }
+    $logoDiapo = !empty($s['logo']) && is_file(__DIR__ . '/uploads/' . $s['logo'])
+               ? 'uploads/' . $s['logo'] : '';
+    ?>
+
+    <?php if (count($vues) > 1): ?>
+    <div class="diapo reveal" id="diapo" data-duree="4500">
+      <div class="dp-scene">
+        <?php foreach ($vues as $i => $v): ?>
+        <figure class="dp-vue <?= $i === 0 ? 'on' : '' ?>" data-i="<?= $i ?>">
+          <img src="uploads/<?= e($v['img']) ?>" alt="<?= e($v['titre']) ?>"
+               <?= $i > 1 ? 'loading="lazy"' : '' ?>>
+          <figcaption>
+            <span class="dp-album"><?= e($v['icone']) ?> <?= e($v['album']) ?></span>
+            <strong><?= e($v['titre']) ?></strong>
+            <?php if ($v['legende']): ?><span class="dp-leg"><?= e($v['legende']) ?></span><?php endif; ?>
+          </figcaption>
+        </figure>
+        <?php endforeach; ?>
+
+        <?php if ($logoDiapo): ?>
+        <img class="dp-logo" src="<?= e($logoDiapo) ?>" alt="<?= e($s['nom_entreprise'] ?? '') ?>">
+        <?php endif; ?>
+
+        <button type="button" class="dp-fl dp-prec" aria-label="Photo précédente">‹</button>
+        <button type="button" class="dp-fl dp-suiv" aria-label="Photo suivante">›</button>
+        <button type="button" class="dp-pause" aria-label="Mettre en pause">❚❚</button>
+      </div>
+
+      <div class="dp-jauges">
+        <?php foreach ($vues as $i => $v): ?>
+        <button type="button" class="dp-j <?= $i === 0 ? 'on' : '' ?>" data-i="<?= $i ?>"
+                aria-label="Photo <?= $i + 1 ?>"><span></span></button>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
     <?php if (count($galerieAlbums) > 1): ?>
     <div class="gal-filtres reveal">
       <button type="button" class="gf actif" data-album="tous">✨ Tout voir
@@ -369,6 +435,8 @@ $f = flash();
           <?php /* Le visiteur doit comprendre pourquoi il n'entend rien : sans
                    ce repère, il croit que la vidéo est muette à la source. */ ?>
           <span class="vf-muet">🔇 Son coupé — activez-le dans le lecteur</span>
+          <?php /* Le repère s'efface dès que le visiteur touche le lecteur, ou
+                   au bout de dix secondes : passé ce délai, il a compris. */ ?>
           <?php endif; ?>
         </div>
         <figcaption>
@@ -621,6 +689,116 @@ $f = flash();
    ============================================================================ */
 (function () {
   var doux = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Diaporama ---------- */
+  (function () {
+    var scene = document.getElementById('diapo');
+    if (!scene) return;
+
+    var vues   = Array.prototype.slice.call(scene.querySelectorAll('.dp-vue'));
+    var jauges = Array.prototype.slice.call(scene.querySelectorAll('.dp-j'));
+    var duree  = parseInt(scene.dataset.duree, 10) || 4500;
+    if (vues.length < 2) return;
+
+    var i = 0, minuteur = null, enPause = false;
+
+    function afficher(n, sens) {
+      n = (n + vues.length) % vues.length;
+      if (n === i) return;
+
+      var sortante = vues[i], entrante = vues[n];
+
+      /* Le sens du glissement suit celui de la navigation : revenir en
+         arrière doit se voir, sinon on croit avoir avancé. */
+      sortante.className = 'dp-vue ' + (sens < 0 ? 'sort-droite' : 'sort-gauche');
+      entrante.className = 'dp-vue ' + (sens < 0 ? 'entre-gauche' : 'entre-droite');
+
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { entrante.className = 'dp-vue on'; });
+      });
+
+      jauges[i].classList.remove('on');
+      jauges[n].classList.add('on');
+      i = n;
+    }
+
+    function programmer() {
+      clearTimeout(minuteur);
+      if (enPause) return;
+      minuteur = setTimeout(function () { afficher(i + 1, 1); programmer(); }, duree);
+    }
+
+    scene.querySelector('.dp-suiv').addEventListener('click', function () { afficher(i + 1, 1); programmer(); });
+    scene.querySelector('.dp-prec').addEventListener('click', function () { afficher(i - 1, -1); programmer(); });
+    jauges.forEach(function (j, n) {
+      j.addEventListener('click', function () { afficher(n, n > i ? 1 : -1); programmer(); });
+    });
+
+    var btnPause = scene.querySelector('.dp-pause');
+    btnPause.addEventListener('click', function () {
+      enPause = !enPause;
+      this.innerHTML = enPause ? '▶' : '❚❚';
+      this.setAttribute('aria-label', enPause ? 'Reprendre' : 'Mettre en pause');
+      scene.classList.toggle('en-pause', enPause);
+      programmer();
+    });
+
+    /* On suspend au survol : personne n'aime qu'une image change au moment
+       où on la regarde. */
+    scene.addEventListener('mouseenter', function () { clearTimeout(minuteur); });
+    scene.addEventListener('mouseleave', function () { programmer(); });
+
+    /* Balayage tactile, geste attendu sur un téléphone. */
+    var x0 = null;
+    scene.addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    scene.addEventListener('touchend', function (e) {
+      if (x0 === null) return;
+      var d = e.changedTouches[0].clientX - x0;
+      if (Math.abs(d) > 45) { afficher(i + (d < 0 ? 1 : -1), d < 0 ? 1 : -1); programmer(); }
+      x0 = null;
+    }, { passive: true });
+
+    /* Rien ne défile tant que le diaporama n'est pas à l'écran : inutile de
+       consommer du réseau et de la batterie pour une section non vue. */
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(function (ents) {
+        ents.forEach(function (en) { en.isIntersecting ? programmer() : clearTimeout(minuteur); });
+      }, { threshold: .25 }).observe(scene);
+    } else { programmer(); }
+  })();
+
+  /* ---------- Repère « son coupé » ---------- */
+  (function () {
+    var reperes = document.querySelectorAll('.vf-muet');
+    if (!reperes.length) return;
+
+    function effacer(fig) {
+      var r = fig ? fig.querySelector('.vf-muet') : null;
+      if (r) r.classList.add('parti');
+    }
+
+    /* Le lecteur appartient à YouTube : on ne peut pas lire son état de son.
+       En revanche, cliquer dedans donne le focus à son cadre et le retire à
+       la page — c'est ce signal qu'on écoute. */
+    window.addEventListener('blur', function () {
+      setTimeout(function () {
+        var actif = document.activeElement;
+        if (actif && actif.tagName === 'IFRAME') effacer(actif.closest('.video-item'));
+      }, 0);
+    });
+
+    /* Une vidéo hébergée sur le site est lisible directement. */
+    document.querySelectorAll('.video-frame video').forEach(function (v) {
+      v.addEventListener('volumechange', function () {
+        if (!v.muted && v.volume > 0) effacer(v.closest('.video-item'));
+      });
+    });
+
+    /* Dix secondes suffisent à lire le message. */
+    setTimeout(function () {
+      reperes.forEach(function (r) { r.classList.add('parti'); });
+    }, 10000);
+  })();
 
   /* ---------- Filtres par album ---------- */
   var filtres = document.querySelectorAll('.gf');

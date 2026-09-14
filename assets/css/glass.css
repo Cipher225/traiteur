@@ -630,6 +630,9 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   border:1px solid rgba(255,255,255,.14);
   opacity:.9;transition:opacity .25s}
 .video-item:hover .vf-muet{opacity:0}
+/* Une fois le son rétabli — ou le message lu — le repère disparaît pour de bon. */
+.vf-muet.parti{opacity:0 !important;transform:translateY(-6px);
+  transition:opacity .4s ease, transform .4s ease}
 .video-item figcaption{padding:13px 16px 15px}
 .video-item figcaption h3{margin:0;font-size:14.5px;color:#fff;line-height:1.35}
 .video-item figcaption p{margin:4px 0 0;font-size:12.5px;color:rgba(255,255,255,.6);
@@ -724,3 +727,89 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .vf-secours p{margin:0;font-size:13.5px;color:rgba(255,255,255,.7)}
 .vf-secours a{padding:10px 20px;border-radius:12px;text-decoration:none;font-size:13.5px;
   font-weight:700;color:#0a1020;background:linear-gradient(135deg,#e9c15c,#d4a526)}
+
+/* ============================================================
+   DIAPORAMA
+   Les photos d'une même prestation défilent ensemble, annoncées
+   par le nom de l'album. Trois effets se superposent : un fondu,
+   un léger glissement, et un zoom lent sur l'image affichée —
+   c'est ce zoom qui donne l'impression de vie.
+   ============================================================ */
+.diapo{position:relative;margin-bottom:30px}
+.dp-scene{position:relative;aspect-ratio:21/9;border-radius:24px;overflow:hidden;
+  background:#050b16;border:1px solid rgba(255,255,255,.1);
+  box-shadow:0 24px 60px rgba(0,0,0,.5)}
+@media (max-width:760px){ .dp-scene{aspect-ratio:4/3;border-radius:18px} }
+
+.dp-vue{position:absolute;inset:0;margin:0;opacity:0;
+  transform:translateX(0) scale(1.06);
+  transition:opacity .9s cubic-bezier(.4,0,.2,1), transform .9s cubic-bezier(.4,0,.2,1);
+  pointer-events:none}
+.dp-vue.on{opacity:1;transform:translateX(0) scale(1);pointer-events:auto}
+
+/* Positions de départ et d'arrivée du glissement */
+.dp-vue.entre-droite{opacity:0;transform:translateX(6%) scale(1.08)}
+.dp-vue.entre-gauche{opacity:0;transform:translateX(-6%) scale(1.08)}
+.dp-vue.sort-gauche{opacity:0;transform:translateX(-4%) scale(1.02)}
+.dp-vue.sort-droite{opacity:0;transform:translateX(4%) scale(1.02)}
+
+.dp-vue img{width:100%;height:100%;object-fit:cover;display:block}
+/* Zoom lent sur l'image visible : l'œil perçoit un mouvement continu. */
+.dp-vue.on img{animation:dpZoom 9s ease-out forwards}
+@keyframes dpZoom{from{transform:scale(1)}to{transform:scale(1.09)}}
+.diapo.en-pause .dp-vue.on img{animation-play-state:paused}
+
+.dp-vue figcaption{position:absolute;left:0;right:0;bottom:0;z-index:2;
+  padding:56px 30px 26px;
+  background:linear-gradient(to top,rgba(4,10,22,.92) 10%,rgba(4,10,22,.45) 55%,transparent)}
+.dp-album{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:#0a1020;padding:4px 13px;border-radius:16px;
+  background:linear-gradient(135deg,#e9c15c,#d4a526);margin-bottom:9px}
+.dp-vue figcaption strong{display:block;font-family:var(--font-display,inherit);
+  font-size:26px;color:#fff;line-height:1.2;letter-spacing:-.02em}
+.dp-leg{display:block;font-size:13.5px;color:rgba(255,255,255,.72);margin-top:6px;max-width:56ch}
+@media (max-width:760px){
+  .dp-vue figcaption{padding:40px 18px 18px}
+  .dp-vue figcaption strong{font-size:18px}
+  .dp-leg{display:none}
+}
+
+/* Logo : une signature, pas un bandeau publicitaire. */
+.dp-logo{position:absolute;top:20px;right:22px;z-index:3;height:46px;width:auto;
+  padding:8px 12px;border-radius:14px;background:rgba(255,255,255,.94);
+  box-shadow:0 6px 20px rgba(0,0,0,.34)}
+@media (max-width:760px){ .dp-logo{height:34px;top:12px;right:12px;padding:6px 9px} }
+
+/* Commandes */
+.dp-fl,.dp-pause{position:absolute;z-index:4;cursor:pointer;color:#fff;
+  background:rgba(6,12,26,.5);border:1px solid rgba(255,255,255,.18);
+  border-radius:50%;display:grid;place-items:center;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  opacity:0;transition:opacity .3s, background .2s, transform .2s}
+.diapo:hover .dp-fl,.diapo:hover .dp-pause{opacity:1}
+.dp-fl:hover,.dp-pause:hover{background:rgba(240,193,75,.92);color:#0a1020;border-color:transparent}
+.dp-fl{top:50%;transform:translateY(-50%);width:46px;height:46px;font-size:26px;line-height:1}
+.dp-prec{left:18px} .dp-suiv{right:18px}
+.dp-fl:hover{transform:translateY(-50%) scale(1.08)}
+.dp-pause{left:18px;bottom:18px;width:36px;height:36px;font-size:12px}
+@media (max-width:760px){
+  .dp-fl,.dp-pause{opacity:.85}
+  .dp-fl{width:38px;height:38px;font-size:21px}
+  .dp-prec{left:8px} .dp-suiv{right:8px}
+}
+
+/* Jauges : chacune se remplit pendant que sa photo est affichée. */
+.dp-jauges{display:flex;gap:6px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+.dp-j{width:34px;height:4px;padding:0;border:0;border-radius:3px;cursor:pointer;
+  background:rgba(255,255,255,.16);overflow:hidden;transition:width .3s}
+.dp-j span{display:block;height:100%;width:0;border-radius:3px;
+  background:linear-gradient(90deg,#e9c15c,#d4a526)}
+.dp-j.on{width:56px}
+.dp-j.on span{animation:dpJauge 4.5s linear forwards}
+.diapo.en-pause .dp-j.on span{animation-play-state:paused}
+@keyframes dpJauge{from{width:0}to{width:100%}}
+
+@media (prefers-reduced-motion: reduce){
+  .dp-vue,.dp-vue.on img,.dp-j.on span{transition:none;animation:none}
+  .dp-j.on span{width:100%}
+}
