@@ -122,6 +122,13 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
             <?php endforeach; endif; ?>
           </div>
         </div>
+        <?php if (is_admin()): ?>
+        <?php /* Accès direct à l'état du serveur : au bas d'un menu de trente
+                 entrées, la page était introuvable. */ ?>
+        <a class="theme-toggle sys-acces<?= ($actif ?? '') === 'systeme' ? ' on' : '' ?>"
+           href="<?= (basename(dirname($_SERVER['SCRIPT_NAME'] ?? '')) === 'admin') ? '' : 'admin/' ?>systeme.php"
+           title="État du serveur">📡</a>
+        <?php endif; ?>
         <button class="theme-toggle" onclick="toggleTheme()" title="Changer de thème"><span data-theme-icon>☀️</span></button>
         <button class="btn btn-glass btn-sm menu-btn" data-toggle-side aria-label="Menu">☰</button>
       </div>

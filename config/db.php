@@ -361,6 +361,9 @@ function groupes_modules(): array {
         'docs'       => 'Documents',
         'echange'    => 'Échanges',
         'site'       => 'Site vitrine',
+        /* Un groupe à part : l'état du serveur n'a rien à voir avec le site
+           vitrine, et perdu au bout de trente entrées il était introuvable. */
+        'technique'  => 'Système',
     ];
 }
 
@@ -752,7 +755,7 @@ function all_modules(): array {
         'temoignages'  => ['Témoignages',    '💬', 'temoignages.php',  'site',    false, false],
         'parametres'   => ['Paramètres',     '⚙️', 'parametres.php',   'site',    true,  false],
         /* Réservé à l'administrateur : ces mesures n'intéressent pas un employé. */
-        'systeme'      => ['État du serveur', '📡', 'systeme.php',     'site',    true,  false],
+        'systeme'      => ['État du serveur', '📡', 'systeme.php',     'technique', true, false],
     ];
 }
 
