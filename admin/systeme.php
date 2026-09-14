@@ -45,6 +45,11 @@ admin_header('État du serveur', 'systeme', $pdo, $settings);
 
 <div class="sys" id="sys">
 
+  <?php /* Pluie de caractères : elle occupe le fond, derrière tout le reste.
+           Très atténuée — un décor doit rester lisible sous les chiffres. */ ?>
+  <canvas id="pluie" class="sys-pluie" aria-hidden="true"></canvas>
+  <div class="sys-lignes" aria-hidden="true"></div>
+
   <!-- Bandeau de tête -->
   <div class="sys-tete">
     <div class="st-gauche">
@@ -195,6 +200,16 @@ admin_header('État du serveur', 'systeme', $pdo, $settings);
     </div>
   </div>
 
+  <!-- Terminal : le journal des relevés, en clair -->
+  <div class="sys-bloc term">
+    <div class="tm-barre">
+      <span class="tm-pt r"></span><span class="tm-pt j"></span><span class="tm-pt v"></span>
+      <span class="tm-titre">releve@<?= e(parse_url($_SERVER['HTTP_HOST'] ?? 'serveur', PHP_URL_HOST) ?: ($_SERVER['HTTP_HOST'] ?? 'serveur')) ?> — surveillance</span>
+      <span class="tm-etat" id="tm-etat">● ACTIF</span>
+    </div>
+    <div class="tm-corps" id="terminal"></div>
+  </div>
+
   <p class="sys-pied">
     Les mesures proviennent directement du serveur. Celles que votre hébergeur
     ne rend pas accessibles sont signalées, jamais estimées en silence.
@@ -250,23 +265,106 @@ admin_header('État du serveur', 'systeme', $pdo, $settings);
     svg.innerHTML =
       '<defs>'
       + '<linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">'
-      + '<stop offset="0%" stop-color="#38bdf8" stop-opacity=".45"/>'
-      + '<stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/></linearGradient>'
+      + '<stop offset="0%" stop-color="#2dd48c" stop-opacity=".42"/>'
+      + '<stop offset="100%" stop-color="#2dd48c" stop-opacity="0"/></linearGradient>'
       + '<filter id="cl"><feGaussianBlur stdDeviation="3" result="f"/>'
       + '<feMerge><feMergeNode in="f"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
       + '</defs>'
       + [25, 50, 75].map(function (p) {
           var y = 12 + (200 - 24) * (1 - p / 100);
           return '<line x1="0" y1="' + y + '" x2="900" y2="' + y
-               + '" stroke="rgba(255,255,255,.06)"/>';
+               + '" stroke="rgba(45,212,140,.1)"/>';
         }).join('')
       + '<path d="' + d + sol + '" fill="url(#cg)"/>'
-      + '<path d="' + d + '" fill="none" stroke="#38bdf8" stroke-width="2.2" '
+      + '<path d="' + d + '" fill="none" stroke="#2dd48c" stroke-width="2.2" '
       + 'stroke-linecap="round" filter="url(#cl)"/>'
-      + '<circle cx="' + dernier[0] + '" cy="' + dernier[1] + '" r="4.5" fill="#7dd3fc"/>'
+      + '<circle cx="' + dernier[0] + '" cy="' + dernier[1] + '" r="4.5" fill="#7cf0b8"/>'
       + '<circle cx="' + dernier[0] + '" cy="' + dernier[1] + '" r="4.5" fill="none" '
-      + 'stroke="#7dd3fc" stroke-width="1.5" class="cc-onde"/>';
+      + 'stroke="#7cf0b8" stroke-width="1.5" class="cc-onde"/>';
   }
+
+  /* ---- Pluie de caractères ---- */
+  (function () {
+    var toile = document.getElementById('pluie');
+    if (!toile || !doux) return;
+
+    var ctx = toile.getContext('2d');
+    /* Katakana, chiffres et lettres : l'alphabet d'origine. */
+    var signes = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    var taille = 15, colonnes = 0, gouttes = [];
+
+    function dimensionner() {
+      var b = toile.parentElement.getBoundingClientRect();
+      toile.width = b.width; toile.height = b.height;
+      colonnes = Math.floor(b.width / taille);
+      gouttes = [];
+      for (var i = 0; i < colonnes; i++) gouttes[i] = Math.random() * -60;
+    }
+
+    var dernier = 0;
+    function peindre(t) {
+      /* Vingt images par seconde suffisent : au-delà, on consomme de la
+         batterie pour un effet que l'œil ne distingue pas. */
+      if (t - dernier > 50) {
+        dernier = t;
+
+        /* Voile translucide au lieu d'un effacement : c'est lui qui laisse
+           la traînée derrière chaque caractère. */
+        ctx.fillStyle = 'rgba(4, 10, 20, 0.09)';
+        ctx.fillRect(0, 0, toile.width, toile.height);
+        ctx.font = taille + 'px monospace';
+
+        for (var i = 0; i < gouttes.length; i++) {
+          var s = signes[Math.floor(Math.random() * signes.length)];
+          var y = gouttes[i] * taille;
+
+          /* La tête de la colonne est plus claire que sa traîne. */
+          ctx.fillStyle = Math.random() > 0.97 ? 'rgba(190,255,220,.55)' : 'rgba(45,212,140,.28)';
+          ctx.fillText(s, i * taille, y);
+
+          if (y > toile.height && Math.random() > 0.975) gouttes[i] = 0;
+          gouttes[i]++;
+        }
+      }
+      image = requestAnimationFrame(peindre);
+    }
+
+    var image = null;
+    dimensionner();
+    image = requestAnimationFrame(peindre);
+
+    var t = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(t); t = setTimeout(dimensionner, 200);
+    });
+
+    /* Onglet en arrière-plan : on arrête tout. */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { cancelAnimationFrame(image); }
+      else { image = requestAnimationFrame(peindre); }
+    });
+  })();
+
+  /* ---- Terminal ---- */
+  var terminal = document.getElementById('terminal');
+  var LIGNES_MAX = 14;
+
+  function tracer(niveau, texte) {
+    if (!terminal) return;
+    var l = document.createElement('div');
+    l.className = 'tm-l ' + niveau;
+    l.innerHTML = '<span class="tm-h">' + new Date().toTimeString().slice(0, 8) + '</span>'
+                + '<span class="tm-n">' + niveau.toUpperCase().padEnd(4, ' ') + '</span>'
+                + '<span class="tm-t"></span>';
+    l.querySelector('.tm-t').textContent = texte;
+    terminal.appendChild(l);
+    while (terminal.children.length > LIGNES_MAX) terminal.removeChild(terminal.firstChild);
+    terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  tracer('ok', 'Liaison établie avec le serveur');
+  tracer('info', 'Relevé automatique toutes les 3 secondes');
+  tracer('info', 'Seuils de surveillance : 70 % attention · 90 % critique');
 
   /* ---- Relevé ---- */
   function relever() {
@@ -305,11 +403,37 @@ admin_header('État du serveur', 'systeme', $pdo, $settings);
           if (el) el.textContent = maj[id];
         });
 
+        /* Le terminal ne recopie pas chaque relevé — ce serait du bruit. Il
+           signale ce qui mérite l'attention : franchissement de seuil,
+           retour à la normale, mesure fermée. */
+        surveiller('processeur', d.processeur.pct, d.processeur.dispo);
+        surveiller('mémoire vive', d.memoire.pct, d.memoire.dispo);
+        surveiller('disque', d.disque.pct, d.disque.dispo);
+
         histo.push(d.processeur.dispo ? d.processeur.pct : 0);
         while (histo.length > MAX) histo.shift();
         tracerCourbe();
       })
       .catch(function () { /* une mesure ratée n'interrompt pas les suivantes */ });
+  }
+
+  /* Mémoire des seuils déjà signalés, pour ne pas répéter la même alerte
+     toutes les trois secondes. */
+  var seuils = {};
+  function surveiller(nom, pct, dispo) {
+    if (!dispo) {
+      if (seuils[nom] !== 'muet') { seuils[nom] = 'muet'; tracer('warn', nom + ' : mesure fermée par l\'hébergeur'); }
+      return;
+    }
+    var e = etatDe(pct);
+    if (seuils[nom] === e) return;
+    var avant = seuils[nom];
+    seuils[nom] = e;
+    if (avant === undefined) return;          // premier relevé : rien à signaler
+
+    if (e === 'critique')   tracer('err',  nom + ' à ' + Math.round(pct) + ' % — seuil critique franchi');
+    else if (e === 'chaud') tracer('warn', nom + ' à ' + Math.round(pct) + ' % — charge soutenue');
+    else                    tracer('ok',   nom + ' revenu à ' + Math.round(pct) + ' % — situation normale');
   }
 
   /* Historique de départ : une ligne plate vaut mieux qu'un graphique vide. */

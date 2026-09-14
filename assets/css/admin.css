@@ -3106,47 +3106,81 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
    Les couleurs portent une information — bleu au repos, ambre
    sous charge, rouge à la limite.
    ============================================================ */
-.sys{--calme:#38bdf8;--chaud:#f0b429;--critique:#f87171;--muet:#64748b}
+/* Palette de salle de contrôle : vert phosphore au repos, ambre sous charge,
+   rouge à la limite. Le fond s'assombrit pour que la pluie de caractères
+   reste lisible sans écraser les chiffres. */
+.sys{--calme:#2dd48c;--chaud:#f0b429;--critique:#ff4d5e;--muet:#475569;
+  position:relative;isolation:isolate;
+  padding:16px;border-radius:22px;
+  background:radial-gradient(120% 90% at 50% 0%,rgba(45,212,140,.07),transparent 60%),#040a14;
+  border:1px solid rgba(45,212,140,.18);
+  font-feature-settings:'tnum' 1}
+
+/* Pluie de caractères : tout au fond, derrière le contenu. */
+.sys-pluie{position:absolute;inset:0;z-index:0;width:100%;height:100%;
+  opacity:.5;pointer-events:none;border-radius:22px}
+
+/* Lignes de balayage, comme sur un moniteur cathodique. */
+.sys-lignes{position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:22px;
+  background:repeating-linear-gradient(to bottom,
+    rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px,
+    rgba(0,0,0,.16) 3px, rgba(0,0,0,.16) 4px);
+  mix-blend-mode:multiply;opacity:.6}
+
+/* Tout le contenu passe au-dessus du décor. */
+.sys > *:not(.sys-pluie):not(.sys-lignes){position:relative;z-index:2}
 
 .sys-tete{display:flex;align-items:center;justify-content:space-between;gap:18px;
-  flex-wrap:wrap;padding:18px 22px;margin-bottom:16px;border-radius:18px;
-  background:linear-gradient(120deg,rgba(56,189,248,.09),rgba(10,31,68,.5));
-  border:1px solid rgba(56,189,248,.2)}
+  flex-wrap:wrap;padding:16px 20px;margin-bottom:14px;border-radius:16px;
+  background:linear-gradient(120deg,rgba(45,212,140,.1),rgba(4,16,28,.75));
+  border:1px solid rgba(45,212,140,.24);
+  box-shadow:inset 0 0 40px rgba(45,212,140,.05)}
 .st-gauche{display:flex;align-items:center;gap:15px}
-.st-gauche h1{margin:0;font-size:21px;color:var(--ink);letter-spacing:-.02em}
-.st-gauche p{margin:3px 0 0;font-size:12px;color:var(--ink-faint);
-  font-variant-numeric:tabular-nums}
+.st-gauche h1{margin:0;font-size:19px;color:#d8ffe9;letter-spacing:.06em;
+  text-transform:uppercase;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;
+  text-shadow:0 0 18px rgba(45,212,140,.4)}
+.st-gauche p{margin:4px 0 0;font-size:11.5px;color:rgba(45,212,140,.7);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;letter-spacing:.04em}
 /* Pastille qui bat : elle signale que le relevé est vivant. */
-.st-pastille{width:11px;height:11px;border-radius:50%;flex-shrink:0;
-  background:#10b981;box-shadow:0 0 0 0 rgba(16,185,129,.6);
+.st-pastille{width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  background:#2dd48c;box-shadow:0 0 12px rgba(45,212,140,.9);
   animation:stBat 2s ease-out infinite}
 @keyframes stBat{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}
   70%{box-shadow:0 0 0 12px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 .st-droite{display:flex;gap:7px;flex-wrap:wrap}
-.st-info{font-size:11px;color:var(--ink-dim);padding:4px 11px;border-radius:16px;
-  background:rgba(0,0,0,.24);border:1px solid var(--glass-border)}
+.st-info{font-size:10.5px;color:rgba(45,212,140,.82);padding:4px 11px;border-radius:5px;
+  background:rgba(45,212,140,.08);border:1px solid rgba(45,212,140,.25);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;letter-spacing:.04em}
 
 /* ---- Cadrans ---- */
 .sys-cadrans{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
   gap:14px;margin-bottom:16px}
-.cad{position:relative;overflow:hidden;padding:20px;border-radius:20px;text-align:center;
-  background:linear-gradient(160deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
-  border:1px solid var(--glass-border);transition:border-color .4s}
-.cad.chaud{border-color:rgba(240,180,41,.3)}
-.cad.critique{border-color:rgba(248,113,113,.36)}
+.cad{position:relative;overflow:hidden;padding:18px;border-radius:14px;text-align:center;
+  background:linear-gradient(160deg,rgba(45,212,140,.06),rgba(4,14,26,.82));
+  border:1px solid rgba(45,212,140,.22);transition:border-color .4s, box-shadow .4s}
+/* Coins marqués, comme une cible de visée. */
+.cad::before,.cad::after{content:'';position:absolute;width:16px;height:16px;
+  border-color:rgba(45,212,140,.55);pointer-events:none}
+.cad::before{top:8px;left:8px;border-top:2px solid;border-left:2px solid}
+.cad::after{bottom:8px;right:8px;border-bottom:2px solid;border-right:2px solid}
+.cad.chaud{border-color:rgba(240,180,41,.4)}
+.cad.chaud::before,.cad.chaud::after{border-color:rgba(240,180,41,.7)}
+.cad.critique{border-color:rgba(255,77,94,.5);box-shadow:0 0 26px rgba(255,77,94,.16)}
+.cad.critique::before,.cad.critique::after{border-color:rgba(255,77,94,.85)}
 
 /* Halo de fond : il change de teinte avec l'état, sans clignoter. */
 .cad-halo{position:absolute;left:50%;top:-40%;width:220px;height:220px;
   transform:translateX(-50%);border-radius:50%;pointer-events:none;
-  background:radial-gradient(circle,rgba(56,189,248,.16),transparent 70%);
+  background:radial-gradient(circle,rgba(45,212,140,.2),transparent 70%);
   transition:background .6s}
-.cad.chaud .cad-halo{background:radial-gradient(circle,rgba(240,180,41,.18),transparent 70%)}
-.cad.critique .cad-halo{background:radial-gradient(circle,rgba(248,113,113,.2),transparent 70%)}
+.cad.chaud .cad-halo{background:radial-gradient(circle,rgba(240,180,41,.22),transparent 70%)}
+.cad.critique .cad-halo{background:radial-gradient(circle,rgba(255,77,94,.26),transparent 70%)}
 .cad.muet .cad-halo{background:none}
 
 .cad-tete{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;
-  font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--ink-faint);margin-bottom:12px}
+  font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:rgba(45,212,140,.8);margin-bottom:10px;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 .cad-ico{font-size:15px}
 
 .cad-anneau{position:relative;width:170px;height:170px;margin:0 auto}
@@ -3154,11 +3188,11 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .an-fond{fill:none;stroke:rgba(255,255,255,.07);stroke-width:9}
 .an-arc{fill:none;stroke:var(--calme);stroke-width:9;stroke-linecap:round;
   transition:stroke-dashoffset 1.1s cubic-bezier(.4,0,.2,1), stroke .6s;
-  filter:drop-shadow(0 0 7px rgba(56,189,248,.5))}
-.cad.chaud .an-arc{stroke:var(--chaud);filter:drop-shadow(0 0 7px rgba(240,180,41,.5))}
-.cad.critique .an-arc{stroke:var(--critique);filter:drop-shadow(0 0 9px rgba(248,113,113,.6))}
+  filter:drop-shadow(0 0 10px rgba(45,212,140,.8))}
+.cad.chaud .an-arc{stroke:var(--chaud);filter:drop-shadow(0 0 10px rgba(240,180,41,.75))}
+.cad.critique .an-arc{stroke:var(--critique);filter:drop-shadow(0 0 14px rgba(255,77,94,.85))}
 .cad.muet .an-arc{stroke:var(--muet);filter:none}
-.an-grad line{stroke:rgba(255,255,255,.5);stroke-width:1.5;transform-origin:center}
+.an-grad line{stroke:rgba(45,212,140,.55);stroke-width:1.5}
 
 /* Le pourcentage se pose sur la même ligne de base que le chiffre :
    « align-self » le renvoyait en haut du cadran, détaché du nombre. */
@@ -3171,57 +3205,71 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .cad-val{position:absolute;inset:0;display:grid;grid-auto-flow:column;
   place-content:center;align-items:baseline;gap:3px;
   font-family:var(--font-display,inherit)}
-.cad-val strong{font-size:44px;font-weight:800;color:var(--ink);letter-spacing:-.04em;
-  font-variant-numeric:tabular-nums;line-height:1}
-.cad-val i{font-style:normal;font-size:18px;font-weight:700;color:var(--ink-faint)}
+.cad-val strong{font-size:42px;font-weight:700;color:#e8fff3;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;line-height:1;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;
+  text-shadow:0 0 22px rgba(45,212,140,.55)}
+.cad-val i{font-style:normal;font-size:16px;font-weight:700;color:rgba(45,212,140,.7);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 .cad-muet{font-size:36px;color:var(--muet)}
-.cad-detail{position:relative;margin-top:12px;font-size:12px;color:var(--ink-faint);
-  min-height:18px}
+.cad-detail{position:relative;margin-top:10px;font-size:11px;color:rgba(45,212,140,.62);
+  min-height:18px;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 
 /* ---- Courbe ---- */
-.sys-bloc{padding:18px 20px;border-radius:18px;margin-bottom:14px;
-  background:var(--glass-bg,rgba(255,255,255,.03));border:1px solid var(--glass-border)}
+.sys-bloc{padding:16px 18px;border-radius:14px;margin-bottom:12px;
+  background:rgba(4,14,26,.78);border:1px solid rgba(45,212,140,.2)}
 .sb-tete{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
   flex-wrap:wrap;margin-bottom:14px}
-.sb-tete h2{margin:0;font-size:15px;color:var(--ink)}
-.sb-note{font-size:11px;color:var(--ink-faint)}
-.sb-aide{margin:12px 0 0;font-size:11.5px;color:var(--ink-faint);line-height:1.6}
+.sb-tete h2{margin:0;font-size:12px;color:rgba(45,212,140,.88);letter-spacing:.14em;
+  text-transform:uppercase;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
+.sb-note{font-size:10.5px;color:rgba(45,212,140,.5);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
+.sb-aide{margin:12px 0 0;font-size:11.5px;color:rgba(200,230,215,.5);line-height:1.6}
 .sb-muet{margin:0;font-size:12.5px;color:var(--ink-faint);font-style:italic}
 
-.sys-courbe{position:relative;height:200px;border-radius:14px;overflow:hidden;
-  background:rgba(0,0,0,.26);border:1px solid var(--glass-border)}
+.sys-courbe{position:relative;height:190px;border-radius:10px;overflow:hidden;
+  background:rgba(0,0,0,.45);border:1px solid rgba(45,212,140,.16);
+  background-image:linear-gradient(rgba(45,212,140,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(45,212,140,.05) 1px,transparent 1px);
+  background-size:34px 34px}
 .sys-courbe svg{width:100%;height:100%;display:block}
 .cc-onde{animation:ccOnde 1.8s ease-out infinite}
 @keyframes ccOnde{0%{r:4.5;opacity:.9}100%{r:16;opacity:0}}
 /* Balayage lumineux : le signe qu'une mesure est en cours. */
 .sc-balayage{position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(90deg,transparent,rgba(56,189,248,.07) 48%,transparent);
-  animation:scBal 6s linear infinite}
+  background:linear-gradient(90deg,transparent,rgba(45,212,140,.1) 48%,transparent);
+  animation:scBal 5s linear infinite}
 @keyframes scBal{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 
 /* ---- Jauges de charge ---- */
 .sys-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}
 .jauges{display:flex;flex-direction:column;gap:13px}
 .jg-tete{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
-.jg-tete span{font-size:12px;color:var(--ink-faint)}
-.jg-tete b{font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+.jg-tete span{font-size:11px;color:rgba(45,212,140,.62);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;letter-spacing:.05em}
+.jg-tete b{font-size:14px;color:#d8ffe9;font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 .jg-piste{height:7px;border-radius:5px;background:rgba(0,0,0,.3);overflow:hidden}
 .jg-barre{display:block;height:100%;border-radius:5px;
-  background:linear-gradient(90deg,#38bdf8,#7dd3fc);
+  background:linear-gradient(90deg,#2dd48c,#7cf0b8);
+  box-shadow:0 0 12px rgba(45,212,140,.55);
   transition:width 1s cubic-bezier(.4,0,.2,1)}
 
 /* ---- Compteurs ---- */
 .cpt{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
-.cp{padding:13px 15px;border-radius:13px;background:rgba(0,0,0,.2);
-  border:1px solid var(--glass-border)}
-.cp span{display:block;font-size:10.5px;color:var(--ink-faint);letter-spacing:.04em}
-.cp b{display:block;font-size:19px;font-weight:800;color:var(--ink);margin-top:3px;
-  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.cp em{display:block;font-style:normal;font-size:10.5px;color:var(--ink-faint);margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp{padding:12px 14px;border-radius:10px;background:rgba(0,0,0,.34);
+  border:1px solid rgba(45,212,140,.18)}
+.cp span{display:block;font-size:9.5px;color:rgba(45,212,140,.6);letter-spacing:.12em;
+  text-transform:uppercase;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
+.cp b{display:block;font-size:18px;font-weight:700;color:#e8fff3;margin-top:4px;
+  font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
+.cp em{display:block;font-style:normal;font-size:10px;color:rgba(45,212,140,.5);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 
-.sys-pied{margin:14px 0 0;font-size:11.5px;color:var(--ink-faint);line-height:1.6;
-  text-align:center}
+.sys-pied{margin:12px 0 4px;font-size:11px;color:rgba(45,212,140,.42);line-height:1.6;
+  text-align:center;font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
 
 @media (prefers-reduced-motion: reduce){
   .st-pastille,.cc-onde,.sc-balayage{animation:none}
@@ -3231,3 +3279,41 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 /* Accès direct à l'état du serveur, depuis la barre supérieure */
 .sys-acces{text-decoration:none;display:grid;place-items:center;font-size:15px}
 .sys-acces.on{border-color:rgba(56,189,248,.5);background:rgba(56,189,248,.14)}
+
+/* ---- Terminal de surveillance ---- */
+.sys-bloc.term{padding:0;overflow:hidden;background:rgba(0,0,0,.6)}
+.tm-barre{display:flex;align-items:center;gap:7px;padding:8px 13px;
+  background:rgba(45,212,140,.07);border-bottom:1px solid rgba(45,212,140,.2)}
+.tm-pt{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.tm-pt.r{background:#ff5f57} .tm-pt.j{background:#febc2e} .tm-pt.v{background:#28c840}
+.tm-titre{margin-left:7px;font-size:10.5px;color:rgba(45,212,140,.62);
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tm-etat{margin-left:auto;font-size:9.5px;letter-spacing:.14em;color:#2dd48c;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;flex-shrink:0;
+  animation:tmBat 2.4s ease-in-out infinite}
+@keyframes tmBat{0%,100%{opacity:1}50%{opacity:.42}}
+
+.tm-corps{height:210px;overflow-y:auto;padding:11px 13px;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace;font-size:11.5px;line-height:1.85}
+.tm-corps::-webkit-scrollbar{width:6px}
+.tm-corps::-webkit-scrollbar-thumb{background:rgba(45,212,140,.28);border-radius:3px}
+
+/* Chaque ligne arrive par la gauche, comme frappée au clavier. */
+.tm-l{display:flex;gap:10px;white-space:pre-wrap;word-break:break-word;
+  animation:tmLigne .3s ease both}
+@keyframes tmLigne{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.tm-h{color:rgba(45,212,140,.42);flex-shrink:0}
+.tm-n{flex-shrink:0;font-weight:700}
+.tm-l.ok   .tm-n{color:#2dd48c}
+.tm-l.info .tm-n{color:#7dd3fc}
+.tm-l.warn .tm-n{color:#f0b429}
+.tm-l.err  .tm-n{color:#ff4d5e}
+.tm-t{color:rgba(216,255,233,.82)}
+.tm-l.err .tm-t{color:#ffc2c8}
+.tm-l.warn .tm-t{color:#ffe2a8}
+
+@media (prefers-reduced-motion: reduce){
+  .tm-etat,.tm-l{animation:none}
+  .sys-pluie{display:none}
+}
