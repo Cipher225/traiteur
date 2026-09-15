@@ -487,3 +487,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_lat DECIMAL(10,6) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_lon DECIMAL(10,6) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_operateur VARCHAR(160) DEFAULT '';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_mobile TINYINT(1) DEFAULT 0;
+
+-- =====================================================================
+--  LIEN AVEC GOOGLE DRIVE
+--  On retient l'identifiant du fichier distant et son lien de partage,
+--  pour pouvoir l'ouvrir ou le supprimer depuis l'application.
+-- =====================================================================
+ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_id VARCHAR(80) DEFAULT '';
+ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_lien VARCHAR(255) DEFAULT '';
+ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_le DATETIME NULL;

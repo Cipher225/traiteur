@@ -1,5 +1,74 @@
 <?php
 require __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../config/gdrive.php';
+
+/* ----------------------------------------------------------------------------
+   Google Drive : enregistrement des identifiants, connexion, déconnexion.
+   Traité avant tout affichage, car chaque action se termine par une
+   redirection.
+   ---------------------------------------------------------------------------- */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['drive_action'])) {
+    csrf_check();
+    if (!is_admin()) { header('Location: index.php'); exit; }
+
+    $action = (string)$_POST['drive_action'];
+
+    if ($action === 'identifiants') {
+        gdrive_enregistrer($pdo, [
+            'gdrive_client_id'     => trim((string)($_POST['gdrive_client_id'] ?? '')),
+            'gdrive_client_secret' => trim((string)($_POST['gdrive_client_secret'] ?? '')),
+            'gdrive_dossier_nom'   => mb_substr(trim((string)($_POST['gdrive_dossier_nom'] ?? '')), 0, 120)
+                                      ?: 'Coffre — documents',
+            'gdrive_auto'          => empty($_POST['gdrive_auto']) ? '0' : '1',
+        ]);
+        flash('Réglages Google Drive enregistrés.');
+
+    } elseif ($action === 'connecter') {
+        $r = gdrive_reglages($pdo);
+        if ($r['client_id'] === '' || $r['client_secret'] === '') {
+            flash('Renseignez d\'abord l\'identifiant et le secret de votre application Google.', 'error');
+        } else {
+            $_SESSION['gdrive_etat'] = bin2hex(random_bytes(16));
+            header('Location: ' . gdrive_url_autorisation($pdo, $_SESSION['gdrive_etat']));
+            exit;
+        }
+
+    } elseif ($action === 'deconnecter') {
+        gdrive_enregistrer($pdo, ['gdrive_refresh_token' => '', 'gdrive_acces' => '',
+                                  'gdrive_acces_fin' => 0, 'gdrive_compte' => '',
+                                  'gdrive_dossier_id' => '']);
+        flash('Compte Google déconnecté. Les fichiers déjà envoyés restent sur votre Drive.');
+
+    } elseif ($action === 'tester') {
+        $err = null;
+        $jeton = gdrive_jeton_acces($pdo, $err);
+        if (!$jeton) {
+            flash('Test échoué : ' . e((string)$err), 'error');
+        } else {
+            $dossier = gdrive_dossier($pdo, $err);
+            $espace  = gdrive_espace($pdo);
+            if (!$dossier) {
+                flash('Connexion établie, mais le dossier n\'a pas pu être créé : ' . e((string)$err), 'error');
+            } else {
+                $m = 'Connexion à Google Drive opérationnelle.';
+                if ($espace && $espace['total']) {
+                    $m .= ' Espace utilisé : ' . sys_octets_simple($espace['utilise'])
+                        . ' sur ' . sys_octets_simple($espace['total']) . '.';
+                }
+                flash($m);
+            }
+        }
+    }
+    header('Location: parametres.php#drive');
+    exit;
+}
+
+/* Poids lisible, sans dépendre du module de surveillance. */
+function sys_octets_simple(float $o): string {
+    $u = ['o', 'Ko', 'Mo', 'Go', 'To']; $i = 0;
+    while ($o >= 1024 && $i < 4) { $o /= 1024; $i++; }
+    return number_format($o, $i === 0 ? 0 : 1, ',', ' ') . ' ' . $u[$i];
+}
 require __DIR__ . '/includes/layout.php';
 
 // Contenu du site regroupé par thème (tout est éditable ici)
@@ -564,5 +633,97 @@ function majApercuMatricule(){
 }
 majApercuMatricule();
 </script>
+
+<?php $drv = gdrive_reglages($pdo); $drvOk = gdrive_connecte($pdo); ?>
+<div class="panel glass" id="drive">
+  <h2>☁️ Google Drive</h2>
+  <p class="drv-intro">
+    Envoyez une copie de vos documents du coffre vers votre propre Google Drive.
+    L'application n'accède <strong>qu'aux fichiers qu'elle y dépose</strong> :
+    le reste de votre Drive lui reste fermé.
+  </p>
+
+  <?php if ($drvOk): ?>
+  <div class="drv-etat ok">
+    <span class="drv-pt"></span>
+    <div>
+      <strong>Connecté<?= $drv['compte'] !== '' ? ' — ' . e($drv['compte']) : '' ?></strong>
+      <span>Les documents sont déposés dans le dossier « <?= e($drv['dossier_nom']) ?> »</span>
+    </div>
+    <div class="drv-btns">
+      <form method="post" style="display:inline">
+        <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+        <button class="btn btn-glass btn-sm" name="drive_action" value="tester">Tester</button>
+      </form>
+      <form method="post" style="display:inline"
+            data-confirm="Déconnecter le compte Google ? Les fichiers déjà envoyés resteront sur votre Drive.">
+        <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+        <button class="btn btn-glass btn-sm" name="drive_action" value="deconnecter">Déconnecter</button>
+      </form>
+    </div>
+  </div>
+  <?php else: ?>
+  <div class="drv-etat off">
+    <span class="drv-pt"></span>
+    <div><strong>Non connecté</strong><span>Suivez les trois étapes ci-dessous</span></div>
+  </div>
+  <?php endif; ?>
+
+  <?php /* Les identifiants viennent de la console Google : je ne peux pas les
+           créer à votre place, ils sont liés à votre compte. */ ?>
+  <details class="drv-guide" <?= $drvOk ? '' : 'open' ?>>
+    <summary>Comment obtenir les identifiants Google</summary>
+    <ol>
+      <li>Ouvrez <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>
+          et créez un projet (son nom n'a pas d'importance).</li>
+      <li>Dans « API et services », activez <strong>Google Drive API</strong>.</li>
+      <li>Dans « Écran de consentement », choisissez <strong>Externe</strong>,
+          renseignez le nom de votre entreprise et votre email, puis publiez
+          l'application. La permission demandée n'étant pas classée sensible,
+          aucune vérification de Google n'est nécessaire.</li>
+      <li>Dans « Identifiants », créez un <strong>ID client OAuth</strong> de
+          type « Application Web ».</li>
+      <li>Ajoutez cette adresse de retour, <strong>exactement</strong> telle
+          qu'elle s'affiche ici :
+          <code class="drv-uri"><?= e(gdrive_retour()) ?></code></li>
+      <li>Copiez l'identifiant et le secret dans les champs ci-dessous.</li>
+    </ol>
+  </details>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+    <div class="field">
+      <label>Identifiant client</label>
+      <input class="input" name="gdrive_client_id" value="<?= e($drv['client_id']) ?>"
+             placeholder="000000-xxxxx.apps.googleusercontent.com" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Secret client</label>
+      <input class="input" type="password" name="gdrive_client_secret"
+             value="<?= e($drv['client_secret']) ?>" placeholder="GOCSPX-…" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Nom du dossier sur Drive</label>
+      <input class="input" name="gdrive_dossier_nom" value="<?= e($drv['dossier_nom']) ?>"
+             placeholder="Coffre — documents">
+    </div>
+    <div class="field">
+      <label>Envoi automatique</label>
+      <label class="check">
+        <input type="checkbox" name="gdrive_auto" value="1" <?= $drv['auto'] ? 'checked' : '' ?>>
+        <span>Déposer chaque nouveau document du coffre sur Drive</span>
+      </label>
+      <span class="drv-aide">
+        Sinon, l'envoi se fait document par document depuis le coffre.
+      </span>
+    </div>
+    <div class="full drv-actions">
+      <button class="btn btn-gold" name="drive_action" value="identifiants">Enregistrer</button>
+      <?php if (!$drvOk): ?>
+      <button class="btn btn-glass" name="drive_action" value="connecter">🔗 Connecter mon compte Google</button>
+      <?php endif; ?>
+    </div>
+  </form>
+</div>
 
 <?php admin_footer(); ?>

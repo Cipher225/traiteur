@@ -1,5 +1,6 @@
 <?php
 require __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/../config/gdrive.php';
 require __DIR__ . '/includes/layout.php';
 require_once __DIR__ . '/includes/icones.php';
 $me = (int)$_SESSION['admin_id'];
@@ -31,9 +32,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     // Documents
     if (isset($_POST['supprimer_doc'])) {
-        $doc = $pdo->prepare('SELECT fichier, dossier_id FROM coffre_documents WHERE id=?'); $doc->execute([(int)$_POST['supprimer_doc']]); $doc = $doc->fetch();
-        if ($doc) { @unlink($COFFRE.'/'.$doc['fichier']); $pdo->prepare('DELETE FROM coffre_documents WHERE id=?')->execute([(int)$_POST['supprimer_doc']]); }
+        $doc = $pdo->prepare('SELECT fichier, dossier_id, drive_id FROM coffre_documents WHERE id=?');
+        $doc->execute([(int)$_POST['supprimer_doc']]); $doc = $doc->fetch();
+        if ($doc) {
+            @unlink($COFFRE.'/'.$doc['fichier']);
+            /* La copie sur Drive part avec l'original : garder un fichier
+               orphelin là-bas serait pire que de ne rien y envoyer. */
+            if (!empty($doc['drive_id']) && gdrive_connecte($pdo)) {
+                @gdrive_supprimer($pdo, (string)$doc['drive_id']);
+            }
+            $pdo->prepare('DELETE FROM coffre_documents WHERE id=?')->execute([(int)$_POST['supprimer_doc']]);
+        }
         flash('Document supprimé.'); header('Location: coffre.php?d='.(int)($doc['dossier_id'] ?? 0)); exit;
+    }
+
+    /* Envoi manuel d'un document vers Drive. */
+    if (isset($_POST['vers_drive'])) {
+        $id = (int)$_POST['vers_drive'];
+        $st = $pdo->prepare('SELECT fichier, fichier_nom, titre, dossier_id FROM coffre_documents WHERE id=?');
+        $st->execute([$id]); $doc = $st->fetch();
+        if (!$doc) { flash('Document introuvable.', 'error'); header('Location: coffre.php'); exit; }
+
+        $err = null;
+        $res = gdrive_envoyer($pdo, $COFFRE . '/' . $doc['fichier'], $doc['fichier_nom'], $err);
+        if ($res) {
+            $pdo->prepare('UPDATE coffre_documents SET drive_id=?, drive_lien=?, drive_le=NOW() WHERE id=?')
+                ->execute([$res['id'], $res['lien'], $id]);
+            flash('« ' . e($doc['titre']) . ' » déposé sur votre Google Drive.');
+            if (function_exists('journaliser')) {
+                journaliser($pdo, 'envoi', 'Google Drive', $id, $doc['fichier_nom'] . ' déposé sur Drive');
+            }
+        } else {
+            flash("Envoi vers Drive impossible : " . e((string)$err), 'error');
+        }
+        header('Location: coffre.php?d=' . (int)($doc['dossier_id'] ?? 0)); exit;
     }
     if (isset($_POST['uploader'])) {
         $titre = trim($_POST['titre'] ?? '');
@@ -43,7 +75,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($titre === '') $titre = $up['nom'];
         $pdo->prepare('INSERT INTO coffre_documents (dossier_id, titre, description, fichier, fichier_nom, taille, uploaded_by) VALUES (?,?,?,?,?,?,?)')
             ->execute([$did, mb_substr($titre,0,200), mb_substr(trim($_POST['description'] ?? ''),0,1000), $up['fichier'], $up['nom'], $up['taille'], $me]);
-        flash('Document ajouté au coffre. 🔐'); header('Location: coffre.php?d='.(int)($did ?? 0)); exit;
+        $message = 'Document ajouté au coffre. 🔐';
+
+        /* Envoi automatique, si le réglage est actif. Un échec ne doit pas
+           faire perdre le document : il reste dans le coffre, et le bouton
+           d'envoi manuel permet de réessayer. */
+        $drv = gdrive_reglages($pdo);
+        if ($drv['auto'] && gdrive_connecte($pdo)) {
+            $idDoc = (int)$pdo->lastInsertId();
+            $err = null;
+            $res = gdrive_envoyer($pdo, $COFFRE . '/' . $up['fichier'], $up['nom'], $err);
+            if ($res) {
+                $pdo->prepare('UPDATE coffre_documents SET drive_id=?, drive_lien=?, drive_le=NOW() WHERE id=?')
+                    ->execute([$res['id'], $res['lien'], $idDoc]);
+                $message .= ' Copie déposée sur Google Drive.';
+            } else {
+                $message .= " La copie vers Drive a échoué (" . e((string)$err)
+                          . ") — le document reste dans le coffre.";
+            }
+        }
+        flash($message); header('Location: coffre.php?d='.(int)($did ?? 0)); exit;
     }
 }
 
@@ -75,6 +126,10 @@ $st = $pdo->prepare("SELECT doc.*, dos.nom AS dossier_nom, dos.icone AS dossier_
 $st->execute($args);
 $documents = $st->fetchAll();
 $dossierActif = null; foreach ($dossiers as $d) if ($d['id']==$dsel) $dossierActif = $d;
+
+/* Calculé une fois : interroger la connexion Drive à chaque document ferait
+   autant de lectures inutiles. */
+$driveOk = gdrive_connecte($pdo);
 
 // ===== Dossiers système : détection automatique des documents de l'application =====
 /* Le coffre ne montre QUE les documents qu'un administrateur a déjà authentifiés
@@ -270,11 +325,22 @@ $csrf = csrf_token();
             <div class="doc-meta">
               <?php if ($q!=='' && $doc['dossier_nom']): ?><?= e($doc['dossier_icone']) ?> <?= e($doc['dossier_nom']) ?> · <?php endif; ?>
               <?= taille_lisible((int)$doc['taille']) ?> · <?= date('d/m/Y', strtotime($doc['created_at'])) ?>
+              <?php if (!empty($doc['drive_id'])): ?>
+              <a class="doc-drive" href="<?= e($doc['drive_lien']) ?>" target="_blank" rel="noopener"
+                 title="Déposé sur Drive<?= !empty($doc['drive_le']) ? ' le ' . date('d/m/Y', strtotime($doc['drive_le'])) : '' ?>">☁️ sur Drive</a>
+              <?php endif; ?>
             </div>
           </div>
           <div class="doc-act">
             <a class="btn btn-glass btn-sm" href="../uploads/coffre/<?= e($doc['fichier']) ?>" target="_blank" download="<?= e($doc['fichier_nom']) ?>" title="Télécharger">⬇️</a>
-            <form method="post" data-confirm="Supprimer ce document ?"><input type="hidden" name="csrf" value="<?= $csrf ?>"><button class="btn btn-danger btn-sm" name="supprimer_doc" value="<?= $doc['id'] ?>">✕</button></form>
+            <?php if ($driveOk && empty($doc['drive_id'])): ?>
+            <form method="post" style="display:inline">
+              <input type="hidden" name="csrf" value="<?= $csrf ?>">
+              <button class="btn btn-glass btn-sm" name="vers_drive" value="<?= $doc['id'] ?>"
+                      title="Envoyer une copie sur Google Drive">☁️</button>
+            </form>
+            <?php endif; ?>
+            <form method="post" data-confirm="Supprimer ce document ?<?= !empty($doc['drive_id']) ? ' La copie sur Google Drive sera supprimée aussi.' : '' ?>"><input type="hidden" name="csrf" value="<?= $csrf ?>"><button class="btn btn-danger btn-sm" name="supprimer_doc" value="<?= $doc['id'] ?>">✕</button></form>
           </div>
         </div>
         <?php endforeach; ?>
