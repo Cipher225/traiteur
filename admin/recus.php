@@ -42,7 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $date_evt = ($_POST['date_evenement'] ?? '') ?: null;
     $nb_jours = max(1, min(60, (int)($_POST['nb_jours'] ?? 1)));
     /* Une sortie porte une nature de dépense ; elle n'a pas de client. */
-    $categorie = $TYPE === 'sortie' ? mb_substr(trim($_POST['categorie'] ?? 'Divers'), 0, 80) : '';
+    /* Nature de la dépense : celle de la liste, ou celle saisie à la main. */
+    $categorie = '';
+    if ($TYPE === 'sortie') {
+        $categorie = trim((string)($_POST['categorie'] ?? 'Divers'));
+        if ($categorie === '__autre') {
+            $categorie = trim((string)($_POST['categorie_libre'] ?? ''));
+            /* Une nature vide rendrait le bilan par poste inutilisable. */
+            if ($categorie === '') $categorie = 'Divers';
+        }
+        $categorie = mb_substr($categorie, 0, 80);
+    }
     if ($TYPE === 'sortie') {
         $client_id = null;
         /* Une charge de structure ne s'impute pas à une prestation : le loyer
@@ -153,14 +163,42 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
              salaires, approvisionnement…) et, éventuellement, une activité à
              laquelle elle se rattache. C'est ce rattachement qui permettra de
              connaître le bénéfice réel de chaque prestation. */ ?>
+    <?php
+      /* La liste couvre les dépenses courantes, mais aucune liste n'est
+         complète : une nature absente peut être saisie à la main. On la
+         retrouve ensuite parmi les choix, pour éviter d'avoir à la retaper. */
+      $catsBase = categories_depense();
+      $catActuelle = (string)($edit['categorie'] ?? '');
+      $catsSaisies = [];
+      try {
+          $st = $pdo->query("SELECT DISTINCT categorie FROM recus
+                             WHERE type='sortie' AND categorie <> '' ORDER BY categorie");
+          foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $cc) {
+              if (!isset($catsBase[$cc])) $catsSaisies[] = $cc;
+          }
+      } catch (Throwable $e) {}
+    ?>
     <div class="field"><label>Nature de la dépense *</label>
       <select class="input" name="categorie" id="cat-depense" required
               data-generales="<?= e(implode('|', charges_structurelles())) ?>">
-        <?php foreach (categories_depense() as $nom => $ico): ?>
-        <option value="<?= e($nom) ?>" <?= ($edit['categorie'] ?? '') === $nom ? 'selected' : '' ?>>
+        <?php foreach ($catsBase as $nom => $ico): ?>
+        <option value="<?= e($nom) ?>" <?= $catActuelle === $nom ? 'selected' : '' ?>>
           <?= $ico ?> <?= e($nom) ?></option>
         <?php endforeach; ?>
+        <?php if ($catsSaisies): ?>
+        <optgroup label="Vos natures personnalisées">
+          <?php foreach ($catsSaisies as $cc): ?>
+          <option value="<?= e($cc) ?>" <?= $catActuelle === $cc ? 'selected' : '' ?>>✏️ <?= e($cc) ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+        <?php endif; ?>
+        <option value="__autre">➕ Autre nature — à saisir…</option>
       </select>
+      <input class="input" type="text" name="categorie_libre" id="cat-libre" hidden
+             maxlength="60" placeholder="ex : Frais de douane" style="margin-top:7px">
+      <span class="cat-aide" id="cat-aide" hidden>
+        Une nature saisie ici sera proposée dans la liste la prochaine fois.
+      </span>
     </div>
     <?php endif; ?>
     <div class="field"><label>Montant (<?= e($devise) ?>) *</label><input class="input" type="number" name="montant" min="0" step="100" required value="<?= e($edit['montant'] ?? '') ?>"></div>
@@ -325,6 +363,26 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
 
   cat.addEventListener('change', majRattachement);
   majRattachement();
+})();
+</script>
+
+<script>
+(function () {
+  /* Le champ de saisie libre n'apparaît que si l'on choisit « Autre ». */
+  var sel = document.getElementById('cat-depense');
+  var libre = document.getElementById('cat-libre');
+  var aide = document.getElementById('cat-aide');
+  if (!sel || !libre) return;
+
+  function basculer() {
+    var autre = sel.value === '__autre';
+    libre.hidden = !autre;
+    if (aide) aide.hidden = !autre;
+    libre.required = autre;
+    if (autre) libre.focus();
+  }
+  sel.addEventListener('change', basculer);
+  basculer();
 })();
 </script>
 

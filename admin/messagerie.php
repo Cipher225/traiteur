@@ -50,14 +50,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $q->execute([$mid]);
         $msg = $q->fetch();
         $retour = 'messagerie.php?u=' . (int)($_POST['to'] ?? 0);
-        if (!$msg || (int)$msg['expediteur_id'] !== $me) {
+        /* ----------------------------------------------------------------
+           Qui peut supprimer quoi.
+
+           Le délai d'une heure protège la conversation : personne ne réécrit
+           l'histoire une semaine après. Mais l'administrateur répond de ce qui
+           circule dans l'entreprise — il doit pouvoir retirer un message
+           déplacé, une pièce jointe envoyée par erreur, quelle qu'en soit la
+           date et quel qu'en soit l'auteur.
+
+           La suppression reste tracée dans le journal : un pouvoir sans trace
+           serait un angle mort.
+           ---------------------------------------------------------------- */
+        $estAdmin  = is_admin();
+        $estSien   = $msg && (int)$msg['expediteur_id'] === $me;
+        $dansDelai = $msg && (int)$msg['age_sec'] <= 3600;
+
+        if (!$msg) {
+            flash('Message introuvable.', 'error');
+        } elseif (!$estAdmin && !$estSien) {
             flash('Vous ne pouvez supprimer que vos propres messages.', 'error');
-        } elseif ((int)$msg['age_sec'] > 3600) {
+        } elseif (!$estAdmin && !$dansDelai) {
             flash('Trop tard : un message ne peut être supprimé que dans l\'heure suivant son envoi.', 'error');
         } else {
             // Supprimer le fichier joint éventuel du disque
             if (!empty($msg['fichier']) && is_file(UP . '/' . $msg['fichier'])) @unlink(UP . '/' . $msg['fichier']);
             $pdo->prepare('DELETE FROM messages WHERE id=?')->execute([$mid]);
+
+            /* Un message supprimé par l'administrateur alors qu'il ne lui
+               appartient pas laisse une trace : c'est la contrepartie du
+               pouvoir de modération. */
+            if ($estAdmin && !$estSien && function_exists('journaliser')) {
+                journaliser($pdo, 'suppression', 'message interne', $mid,
+                            'Message d\'un autre utilisateur supprimé par l\'administrateur');
+            }
             flash('Message supprimé.');
         }
         header('Location: ' . $retour . '#bas'); exit;
@@ -170,7 +196,9 @@ admin_header('Messagerie', 'messagerie', $pdo, $settings);
       </div>
       <?php endif; ?>
       <?php foreach ($thread as $m): $mine = $m['expediteur_id']==$me;
-        $supprimable = $mine && ((int)$m['age_sec'] <= 3600);
+        /* Le bouton suit la même règle que le contrôle serveur : l'auteur
+           dans l'heure, l'administrateur sans limite. */
+        $supprimable = is_admin() || ($mine && (int)$m['age_sec'] <= 3600);
         $lheure = date('d/m à H:i', strtotime($m['created_at']));
         // Le bloc heure + menu (réutilisé dans le cadre média ou sous le texte)
         ob_start(); ?>

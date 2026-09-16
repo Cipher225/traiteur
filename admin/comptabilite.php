@@ -8,6 +8,18 @@ $devise = $settings['devise'] ?? 'FCFA';
    « Loyer » ici et « Achats » là produiraient des états incohérents. */
 $cats_entree  = array_keys(categories_recette());
 $cats_depense = array_keys(categories_depense());
+
+/* On ajoute les catégories déjà saisies à la main : les retaper à chaque fois
+   serait fastidieux, et deux orthographes différentes couperaient le bilan
+   par poste en deux. */
+try {
+    $st = $pdo->query("SELECT DISTINCT categorie, type FROM transactions WHERE categorie <> ''");
+    foreach ($st->fetchAll() as $r) {
+        $liste = $r['type'] === 'entree' ? 'cats_entree' : 'cats_depense';
+        if (!in_array($r['categorie'], $$liste, true)) $$liste[] = $r['categorie'];
+    }
+    sort($cats_depense); sort($cats_entree);
+} catch (Throwable $e) {}
 $modes = modes_paiement();   // liste commune à toute l'application
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -84,9 +96,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $montant = max(0, (float)($_POST['montant'] ?? 0));
         if ($libelle === '' || $montant <= 0) { flash('Libellé et montant (> 0) obligatoires.', 'error'); }
         else {
+            /* Catégorie : celle de la liste, ou celle saisie à la main. */
+            $categorie = trim((string)($_POST['categorie'] ?? 'Autre'));
+            if ($categorie === '__autre') {
+                $categorie = trim((string)($_POST['categorie_libre'] ?? ''));
+                if ($categorie === '') $categorie = 'Divers';
+            }
+
             $data = [
                 $type,
-                mb_substr(trim($_POST['categorie'] ?? 'Autre'), 0, 80),
+                mb_substr($categorie, 0, 80),
                 mb_substr($libelle, 0, 200),
                 $montant,
                 mb_substr(trim($_POST['mode_paiement'] ?? 'Espèces'), 0, 40),
@@ -261,7 +280,14 @@ try {
         <option value="depense" <?= ($edit['type'] ?? 'depense')==='depense'?'selected':'' ?>>❤️ Dépense (argent sorti)</option>
       </select>
     </div>
-    <div class="field"><label>Catégorie</label><select class="input" name="categorie" id="catSel"></select></div>
+    <div class="field"><label>Catégorie</label>
+      <select class="input" name="categorie" id="catSel"></select>
+      <input class="input" type="text" name="categorie_libre" id="catLibre" hidden
+             maxlength="60" placeholder="ex : Frais de douane" style="margin-top:7px">
+      <span class="cat-aide" id="catAide" hidden>
+        Cette catégorie sera proposée dans la liste la prochaine fois.
+      </span>
+    </div>
     <div class="field"><label>Montant (<?= e($devise) ?>) *</label><input class="input" type="number" name="montant" min="0" step="100" required value="<?= e($edit['montant'] ?? '') ?>"></div>
     <div class="field"><label>Date</label><input class="input" type="date" name="date_operation" value="<?= e($edit['date_operation'] ?? date('Y-m-d')) ?>"></div>
     <div class="field"><label>Mode de paiement</label>
@@ -407,7 +433,30 @@ function majCats() {
     if (c === currentCat) o.selected = true;
     sel.appendChild(o);
   });
+
+  /* Aucune liste ne couvre tout : on laisse toujours la porte ouverte à une
+     catégorie que nous n'avons pas prévue. */
+  const autre = document.createElement('option');
+  autre.value = '__autre';
+  autre.textContent = '➕ Autre catégorie — à saisir…';
+  sel.appendChild(autre);
+
+  basculerLibre();
 }
+
+function basculerLibre() {
+  const sel = document.getElementById('catSel');
+  const libre = document.getElementById('catLibre');
+  const aide = document.getElementById('catAide');
+  if (!sel || !libre) return;
+  const autre = sel.value === '__autre';
+  libre.hidden = !autre;
+  if (aide) aide.hidden = !autre;
+  libre.required = autre;
+  if (autre) libre.focus();
+}
+
+document.getElementById('catSel').addEventListener('change', basculerLibre);
 majCats();
 </script>
 <!-- ================= CHARGES RÉCURRENTES ================= -->

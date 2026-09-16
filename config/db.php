@@ -410,19 +410,46 @@ function ecriture_pour_recu(PDO $pdo, int $recuId, string $type, string $numero,
    le loyer, les salaires ou le carburant sont des charges de l'entreprise.
    ---------------------------------------------------------------------------- */
 function categories_depense(): array {
+    /* Les catégories suivent les métiers de la maison : restauration et
+       traiteur, évènementiel, mais aussi fournitures de bureau, matériel
+       informatique et produits d'hygiène.
+
+       Une catégorie trop large oblige à tout ranger dans « Divers » et le
+       bilan par poste ne dit plus rien. Une catégorie trop fine n'est jamais
+       utilisée. Celles-ci correspondent aux dépenses réelles d'un traiteur. */
     return [
-        'Approvisionnement' => '🛒',   // denrées, boissons, consommables
-        'Salaires'          => '👥',
-        'Prestataires'      => '🤝',   // extras, serveurs, cuisiniers ponctuels
-        'Location matériel' => '🎪',
-        'Transport'         => '🚚',
-        'Loyer'             => '🏠',
-        'Électricité & eau' => '💡',
-        'Téléphone & Internet' => '📶',
-        'Entretien'         => '🧽',
-        'Impôts & taxes'    => '🏛️',
-        'Banque & frais'    => '🏦',
-        'Divers'            => '📌',
+        /* — Cuisine et prestations — */
+        'Denrées alimentaires'  => '🥘',   // matières premières
+        'Boissons'              => '🥤',
+        'Emballages & jetable'  => '🥡',   // barquettes, gobelets, couverts
+        'Prestataires & extras' => '🤝',   // serveurs, cuisiniers ponctuels
+        'Location matériel'     => '🎪',   // tentes, tables, sono, vaisselle
+        'Décoration & fleurs'   => '💐',
+        'Gaz & charbon'         => '🔥',
+
+        /* — Négoce : fournitures, informatique, hygiène — */
+        'Fournitures de bureau' => '📎',
+        'Matériel informatique' => '💻',
+        'Mobilier de bureau'    => '🪑',
+        'Produits d\'entretien' => '🧴',
+        'Marchandises revendues' => '📦',   // achats destinés à la revente
+
+        /* — Moyens de l'entreprise — */
+        'Salaires'              => '👥',
+        'Transport & carburant' => '🚚',
+        'Véhicule & entretien'  => '🔧',
+        'Loyer'                 => '🏠',
+        'Électricité & eau'     => '💡',
+        'Téléphone & Internet'  => '📶',
+        'Entretien des locaux'  => '🧽',
+        'Petit équipement'      => '🍳',   // ustensiles, petit matériel de cuisine
+        'Publicité & marketing' => '📣',
+        'Assurances'            => '🛡️',
+        'Frais de mission'      => '🧳',
+        'Honoraires'            => '📋',   // comptable, avocat, conseil
+        'Impôts & taxes'        => '🏛️',
+        'Banque & frais'        => '🏦',
+        'Divers'                => '📌',
     ];
 }
 
@@ -435,9 +462,15 @@ function categories_depense(): array {
    À l'inverse, l'approvisionnement, les extras ou la location de matériel
    sont engagés POUR une prestation précise : ceux-là restent rattachables.
    ---------------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------------
+   Charges structurelles : elles font tourner l'entreprise, pas une prestation
+   en particulier. Les rattacher à une facture fausserait sa rentabilité — le
+   loyer du mois ne dépend pas du mariage de samedi.
+   ---------------------------------------------------------------------------- */
 function charges_structurelles(): array {
     return ['Salaires', 'Loyer', 'Électricité & eau', 'Téléphone & Internet',
-            'Impôts & taxes', 'Banque & frais'];
+            'Entretien des locaux', 'Assurances', 'Honoraires',
+            'Publicité & marketing', 'Impôts & taxes', 'Banque & frais'];
 }
 
 function charge_rattachable(string $categorie): bool {
