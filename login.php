@@ -37,19 +37,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                quand, pour que l'utilisateur comprenne au lieu de croire à une
                panne.
                ---------------------------------------------------------------- */
-            $depuis = $dejaOuverte['minutes'] <= 1
-                    ? "il y a moins d'une minute"
-                    : 'il y a ' . $dejaOuverte['minutes'] . ' minute' . ($dejaOuverte['minutes'] > 1 ? 's' : '');
-            $ou = $dejaOuverte['lieu'] !== '' ? ' depuis ' . e($dejaOuverte['lieu']) : '';
-
-            $erreur = 'Ce compte est déjà connecté' . $ou . ' (dernière activité ' . $depuis . ').'
-                    . ' Fermez cette session, ou patientez '
-                    . max(1, (int)ceil((INACTIVITE_MAX - $dejaOuverte['secondes']) / 60))
-                    . ' minute(s) : une session inactive se libère d\'elle-même.';
+            /* Message court : l'utilisateur a besoin de savoir que le compte
+               est pris, pas depuis quelle ville ni pour combien de temps.
+               Le détail reste au journal, pour l'administrateur. */
+            $erreur = 'Ce compte est déjà connecté.';
 
             enregistrer_tentative($pdo, $identifiantSaisi, false);
+            $ou = $dejaOuverte['lieu'] !== '' ? ' depuis ' . $dejaOuverte['lieu'] : '';
             journaliser($pdo, 'connexion', 'utilisateur', (int)$user['id'],
-                        'Connexion refusée : compte déjà connecté ailleurs');
+                        'Connexion refusée : session déjà ouverte' . $ou
+                        . ' (dernière activité il y a ' . $dejaOuverte['minutes'] . ' min)');
 
         } elseif ($user && password_verify($_POST['password'] ?? '', $user['password'])) {
             session_regenerate_id(true);

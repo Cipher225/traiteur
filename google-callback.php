@@ -150,11 +150,7 @@ if ((int)$user['actif'] !== 1) stop('Votre compte est désactivé. Contactez l\'
    sans ce contrôle, il suffisait de passer par Google pour contourner le
    verrou et ouvrir une seconde session. */
 if (session_deja_ouverte($pdo, (int)$user['id']) === null) {
-    $d = session_ouverte_detail($pdo, (int)$user['id']);
-    $ou = $d['lieu'] !== '' ? ' depuis ' . $d['lieu'] : '';
-    stop('Ce compte est déjà connecté' . $ou . '. Fermez cette session, ou patientez '
-       . max(1, (int)ceil((INACTIVITE_MAX - $d['secondes']) / 60))
-       . ' minute(s) : une session inactive se libère d\'elle-même.');
+    stop('Ce compte est déjà connecté.');
 }
 
 /* 4. Ouverture de session */

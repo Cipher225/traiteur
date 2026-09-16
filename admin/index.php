@@ -853,14 +853,20 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
       <?php if ($poulsTop): ?>
       <div class="pb-podium">
         <?php foreach ($poulsTop as $rang => $a): ?>
-        <a class="pp" href="finances.php" title="<?= e($a['activite'] ?: $a['numero']) ?>">
+        <?php /* Nom sur une seule ligne, montant à droite : un intitulé long
+                 passait sur deux ou trois lignes et étirait toute la rangée,
+                 les trois blocs s'alignant sur le plus haut. */ ?>
+        <a class="pp" href="finances.php"
+           title="<?= e($a['activite'] ?: $a['numero']) ?> — <?= e($a['client'] ?: 'Client de passage') ?>">
           <span class="pp-r"><?= ['🥇','🥈','🥉'][$rang] ?></span>
           <div class="pp-t">
             <strong><?= e($a['activite'] ?: $a['numero']) ?></strong>
-            <span><?= e($a['client'] ?: 'Client de passage') ?></span>
+            <?php /* Le client n'apparaît pas ici : dans un bloc étroit, il se
+                     réduisait à « Yao… », ce qui n'apprend rien. Le nom complet
+                     de la prestation ET du client restent au survol. */ ?>
             <div class="pp-m">
               <b><?= money($a['marge'], $devise) ?></b>
-              <span><?= number_format($a['taux'], 0) ?> %</span>
+              <span class="pp-tx"><?= number_format($a['taux'], 0) ?> % de marge</span>
             </div>
           </div>
         </a>

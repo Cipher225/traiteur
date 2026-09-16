@@ -2200,19 +2200,26 @@ a.stat:hover{transform:translateY(-2px);border-color:var(--gold)}
 
 /* Podium des prestations */
 .pb-podium{display:flex;flex-direction:column;gap:8px}
-/* Podium : le nom d'une prestation peut être long. Il occupe donc sa propre
-   ligne, et le montant passe dessous — plutôt que d'être tronqué à trois mots. */
-.pp{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;border-radius:12px;
-  text-decoration:none;background:rgba(0,0,0,.18);border:1px solid transparent;transition:all .18s}
+/* Podium.
+
+   Chaque ligne tient sur une hauteur fixe : nom à gauche sur UNE ligne,
+   montant à droite. Un intitulé long est coupé proprement — le titre complet
+   reste au survol. Sans cela, « Mariage Kouassi-Traoré au Sofitel Abidjan »
+   passait sur trois lignes, étirait la carte, et les deux blocs voisins
+   s'alignaient sur elle : toute la rangée doublait de hauteur. */
+.pp{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:11px;
+  text-decoration:none;background:rgba(0,0,0,.18);border:1px solid transparent;
+  transition:all .18s}
 .pp:hover{border-color:rgba(212,165,38,.35);transform:translateX(2px)}
-.pp-r{font-size:19px;flex-shrink:0;line-height:1.2}
+.pp-r{font-size:17px;flex-shrink:0;line-height:1}
 .pp-t{flex:1;min-width:0}
-.pp-t strong{display:block;font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.35}
-.pp-t span{display:block;font-size:11px;color:var(--ink-faint);margin-top:1px;
+/* Le nom occupe toute la largeur disponible ; le client, le montant et le taux
+   se partagent la ligne du dessous. Deux lignes, jamais trois. */
+.pp-t strong{display:block;font-size:12.5px;color:var(--ink);font-weight:600;line-height:1.3;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pp-m{display:flex;align-items:baseline;gap:7px;margin-top:5px}
-.pp-m b{font-size:13px;color:#10b981;font-weight:800;white-space:nowrap}
-.pp-m span{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;flex-shrink:0;
+.pp-m{display:flex;align-items:baseline;gap:7px;margin-top:2px}
+.pp-m b{flex-shrink:0;font-size:12.5px;color:#10b981;font-weight:800;white-space:nowrap}
+.pp-tx{flex-shrink:0;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;
   color:#10b981;background:rgba(16,185,129,.13);white-space:nowrap}
 
 @media (max-width:760px){
@@ -2979,7 +2986,25 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .cla:hover{color:var(--ink);border-color:var(--glass-border)}
 .cla.on{color:var(--gold);background:rgba(212,165,38,.16);border-color:rgba(212,165,38,.4)}
 
+/* La liste défile dans son propre cadre : vingt-quatre fiches allongeaient la
+   page au point de perdre la barre de recherche et les filtres, restés tout
+   en haut. Avec un cadre à hauteur fixe, ils demeurent visibles.
+
+   Sur téléphone, on laisse la page défiler normalement : un cadre qui défile
+   à l'intérieur d'une page qui défile aussi est pénible à manipuler au doigt. */
 .cl-liste{display:flex;flex-direction:column;gap:7px}
+
+@media (min-width:641px){
+  .cl-liste{max-height:62vh;overflow-y:auto;padding-right:6px;
+    /* Un léger dégradé en bas signale qu'il reste des fiches en dessous. */
+    -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
+    mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
+  .cl-liste::-webkit-scrollbar{width:7px}
+  .cl-liste::-webkit-scrollbar-track{background:rgba(0,0,0,.2);border-radius:4px}
+  .cl-liste::-webkit-scrollbar-thumb{background:rgba(212,165,38,.32);border-radius:4px}
+  .cl-liste::-webkit-scrollbar-thumb:hover{background:rgba(212,165,38,.55)}
+  .cl-liste{scrollbar-width:thin;scrollbar-color:rgba(212,165,38,.32) rgba(0,0,0,.2)}
+}
 .cl{display:flex;align-items:center;gap:13px;padding:11px 13px;border-radius:14px;
   background:var(--glass-border-soft);border:1px solid var(--glass-border);
   transition:transform .16s var(--ease-ios), border-color .16s}
