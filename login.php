@@ -22,6 +22,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
         if ($user && !$user['actif']) {
             $erreur = 'Ce compte a été désactivé. Contactez l\'administrateur.';
+        } elseif ($user && password_verify($_POST['password'] ?? '', $user['password'])
+                  && session_deja_ouverte($pdo, (int)$user['id']) === null) {
+            $dejaOuverte = session_ouverte_detail($pdo, (int)$user['id']);
+            /* ----------------------------------------------------------------
+               Un compte, une session.
+
+               Jusqu'ici la dernière connexion chassait la précédente : deux
+               personnes pouvaient se relayer sans s'en apercevoir, et celle
+               qui travaillait perdait sa saisie en cours.
+
+               Désormais c'est l'inverse — la session déjà ouverte est
+               protégée, la nouvelle est refusée. On dit depuis où et depuis
+               quand, pour que l'utilisateur comprenne au lieu de croire à une
+               panne.
+               ---------------------------------------------------------------- */
+            $depuis = $dejaOuverte['minutes'] <= 1
+                    ? "il y a moins d'une minute"
+                    : 'il y a ' . $dejaOuverte['minutes'] . ' minute' . ($dejaOuverte['minutes'] > 1 ? 's' : '');
+            $ou = $dejaOuverte['lieu'] !== '' ? ' depuis ' . e($dejaOuverte['lieu']) : '';
+
+            $erreur = 'Ce compte est déjà connecté' . $ou . ' (dernière activité ' . $depuis . ').'
+                    . ' Fermez cette session, ou patientez '
+                    . max(1, (int)ceil((INACTIVITE_MAX - $dejaOuverte['secondes']) / 60))
+                    . ' minute(s) : une session inactive se libère d\'elle-même.';
+
+            enregistrer_tentative($pdo, $identifiantSaisi, false);
+            journaliser($pdo, 'connexion', 'utilisateur', (int)$user['id'],
+                        'Connexion refusée : compte déjà connecté ailleurs');
+
         } elseif ($user && password_verify($_POST['password'] ?? '', $user['password'])) {
             session_regenerate_id(true);
             $_SESSION['admin_id'] = $user['id'];

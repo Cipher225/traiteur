@@ -9,12 +9,12 @@ if (empty($_SESSION['admin_id']) || ($_SESSION['admin_role'] ?? '') !== 'client'
 $CLIENT_UID = (int)$_SESSION['admin_id'];
 
 /* ---- Sécurité de session : session unique + déconnexion sur inactivité ---- */
-if (!defined('INACTIVITE_MAX')) define('INACTIVITE_MAX', 10 * 60);
+/* Délai défini dans config/db.php — ne pas le redéclarer ici. */
 (function() use ($pdo, $CLIENT_UID) {
     $maintenant = time();
     if (isset($_SESSION['derniere_activite'])
         && ($maintenant - (int)$_SESSION['derniere_activite']) > INACTIVITE_MAX) {
-        $pdo->prepare("UPDATE users SET session_id=NULL WHERE id=?")->execute([$CLIENT_UID]);
+        session_liberer($pdo, $CLIENT_UID);
         session_unset(); session_destroy();
         header('Location: ../login.php?inactif=1'); exit;
     }

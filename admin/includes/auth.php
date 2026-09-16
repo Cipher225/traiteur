@@ -5,8 +5,9 @@ if (empty($_SESSION['admin_id'])) {
     exit;
 }
 
-/* ---- Sécurité de session : session unique + déconnexion sur inactivité ---- */
-define('INACTIVITE_MAX', 10 * 60);   // 10 minutes sans activité => déconnexion
+/* ---- Sécurité de session : session unique + déconnexion sur inactivité ----
+   Le délai vient de config/db.php : une seule valeur pour toute
+   l'application, administration et espace client compris. */
 (function() use ($pdo) {
     $uid = (int)$_SESSION['admin_id'];
 
@@ -16,7 +17,7 @@ define('INACTIVITE_MAX', 10 * 60);   // 10 minutes sans activité => déconnexio
     $maintenant = time();
     if (isset($_SESSION['derniere_activite'])
         && ($maintenant - (int)$_SESSION['derniere_activite']) > INACTIVITE_MAX) {
-        $pdo->prepare("UPDATE users SET session_id=NULL WHERE id=?")->execute([$uid]);
+        session_liberer($pdo, $uid);
         session_unset(); session_destroy();
         header('Location: ../login.php?inactif=1'); exit;
     }

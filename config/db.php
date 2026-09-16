@@ -1434,6 +1434,86 @@ function ip_reelle(): string {
 }
 
 /* ----------------------------------------------------------------------------
+   SESSIONS : UN COMPTE, UNE SEULE CONNEXION
+
+   Le délai est défini ICI, une seule fois. Il était auparavant déclaré dans
+   l'espace d'administration ET dans l'espace client : deux valeurs à tenir
+   d'accord, donc deux valeurs qui finissent par diverger.
+   ---------------------------------------------------------------------------- */
+if (!defined('INACTIVITE_MAX')) define('INACTIVITE_MAX', 10 * 60);   // 10 minutes
+
+/* ----------------------------------------------------------------------------
+   Une session est-elle déjà ouverte pour ce compte ?
+
+   Renvoie null si oui — la connexion doit alors être refusée. Sinon un
+   tableau vide de description, ce qui permet d'écrire le contrôle en une
+   condition.
+
+   Une session est considérée comme ouverte tant qu'elle a montré de
+   l'activité dans le délai. Au-delà, elle est réputée abandonnée : sans cela,
+   fermer son navigateur sans se déconnecter bloquerait le compte jusqu'au
+   lendemain.
+   ---------------------------------------------------------------------------- */
+function session_deja_ouverte(PDO $pdo, int $userId): ?array {
+    try {
+        $st = $pdo->prepare("SELECT session_id, last_ville, last_pays, last_ip,
+                                    TIMESTAMPDIFF(SECOND, last_activity, NOW()) AS age
+                             FROM users WHERE id = ?");
+        $st->execute([$userId]);
+        $u = $st->fetch();
+    } catch (Throwable $e) {
+        return [];                      // en cas de doute, on laisse passer
+    }
+    if (!$u) return [];
+
+    $sid = (string)($u['session_id'] ?? '');
+    $age = $u['age'] === null ? PHP_INT_MAX : (int)$u['age'];
+
+    /* Aucune session enregistrée, ou session inactive depuis trop longtemps. */
+    if ($sid === '' || $age > INACTIVITE_MAX) return [];
+
+    /* La même session qui se reconnecte n'est pas un doublon : cela arrive
+       quand on revient sur la page de connexion sans s'être déconnecté. */
+    if (session_id() !== '' && $sid === session_id()) return [];
+
+    /* Une session est bien en cours ailleurs : on décrit où et depuis quand. */
+    $lieu = trim(implode(', ', array_filter(array_unique([
+        (string)($u['last_ville'] ?? ''), (string)($u['last_pays'] ?? '')
+    ]))));
+    if ($lieu === '' || $lieu === 'Réseau local') $lieu = (string)($u['last_ip'] ?? '');
+
+    return null;
+}
+
+/* Détail de la session en cours, pour composer le message de refus. */
+function session_ouverte_detail(PDO $pdo, int $userId): array {
+    $vide = ['lieu' => '', 'secondes' => 0, 'minutes' => 0];
+    try {
+        $st = $pdo->prepare("SELECT last_ville, last_pays, last_ip,
+                                    TIMESTAMPDIFF(SECOND, last_activity, NOW()) AS age
+                             FROM users WHERE id = ?");
+        $st->execute([$userId]);
+        $u = $st->fetch();
+    } catch (Throwable $e) { return $vide; }
+    if (!$u) return $vide;
+
+    $lieu = trim(implode(', ', array_filter(array_unique([
+        (string)($u['last_ville'] ?? ''), (string)($u['last_pays'] ?? '')
+    ]))));
+    if ($lieu === '' || $lieu === 'Réseau local') $lieu = (string)($u['last_ip'] ?? '');
+
+    $age = (int)($u['age'] ?? 0);
+    return ['lieu' => $lieu, 'secondes' => $age, 'minutes' => (int)floor($age / 60)];
+}
+
+/* Libère la session d'un compte : à la déconnexion, et lors d'une expiration. */
+function session_liberer(PDO $pdo, int $userId): void {
+    try {
+        $pdo->prepare("UPDATE users SET session_id = NULL WHERE id = ?")->execute([$userId]);
+    } catch (Throwable $e) {}
+}
+
+/* ----------------------------------------------------------------------------
    Localisation d'une adresse IP.
 
    ATTENTION À CE QUE CELA SIGNIFIE : le service situe le POINT DE SORTIE du
