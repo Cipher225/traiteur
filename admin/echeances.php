@@ -136,7 +136,7 @@ $annee = (int)($_GET['a'] ?? date('Y'));
 if ($annee < 2000 || $annee > 2100) $annee = (int)date('Y');
 
 $toutes   = ech_annee($pdo, $annee, false);
-$aTraiter = ech_a_traiter($pdo);
+$aTraiter = ech_a_traiter($pdo, null, true);   // avec ce qui vient d'être coché
 $compteur = ech_compteur($pdo);
 
 $edit = null;
@@ -544,7 +544,12 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
           <input type="hidden" name="periode" value="<?= e($o['periode']) ?>">
           <input type="hidden" name="echue_le" value="<?= e($o['date']) ?>">
+          <?php if ($o['etat'] === ECH_FAIT): ?>
+          <button class="eo-b" name="annuler" value="<?= (int)$o['id'] ?>"
+                  title="Annuler le marquage">↩︎</button>
+          <?php else: ?>
           <button class="eo-b" name="marquer" value="<?= (int)$o['id'] ?>" title="Marquer comme fait">✓</button>
+          <?php endif; ?>
         </form>
       </div>
       <?php endforeach; ?>
@@ -584,6 +589,7 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
       }
       $faites = count(array_filter($e['occurrences'], fn($o) => $o['etat'] === ECH_FAIT));
     ?>
+    <div class="ee-bloc">
     <div class="ee <?= empty($e['actif']) ? 'inactive' : '' ?>">
       <span class="ee-ico" title="<?= e($lbl) ?>"><?= $ic ?></span>
       <div class="ee-c">
@@ -623,10 +629,53 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
         <form method="post" style="display:inline"
               data-confirm="Supprimer « <?= e($e['libelle']) ?> » ? L'historique des accomplissements sera effacé aussi.">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-          <button class="eo-b sup" name="supprimer" value="<?= (int)$e['id'] ?>" title="Supprimer">✕</button>
+          <button class="eo-b sup" name="supprimer" value="<?= (int)$e['id'] ?>" title="Supprimer définitivement">✕</button>
         </form>
         <?php endif; ?>
       </div>
+    </div>
+
+    <?php /* ------------------------------------------------------------------
+             Les dates de l'année, et leur statut.
+
+             Le bouton ✓ de « À traiter » ne rendait service qu'une fois : coché
+             par erreur, rien ne permettait de revenir en arrière, et la
+             déclaration passait pour faite. On liste donc chaque date avec son
+             état, et chacune se coche et se décoche.
+             ------------------------------------------------------------------ */ ?>
+    <?php if ($e['occurrences']): ?>
+    <details class="ee-dates">
+      <summary><?= count($e['occurrences']) ?> date<?= count($e['occurrences']) > 1 ? 's' : '' ?>
+        en <?= $annee ?><?= $faites ? ' · ' . $faites . ' accomplie' . ($faites > 1 ? 's' : '') : '' ?></summary>
+      <div class="ed-grille">
+        <?php foreach ($e['occurrences'] as $o):
+          $estFait = ($o['etat'] === ECH_FAIT); ?>
+        <div class="ed <?= e($o['etat']) ?>">
+          <span class="ed-d"><?= date('d/m', strtotime($o['date'])) ?></span>
+          <span class="ed-e">
+            <?php if ($estFait): ?>
+              Accomplie<?= $o['fait_le'] ? ' le ' . date('d/m', strtotime((string)$o['fait_le'])) : '' ?>
+            <?php else: ?>
+              <?= e(ech_delai((int)$o['jours'])) ?>
+            <?php endif; ?>
+          </span>
+          <form method="post">
+            <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+            <input type="hidden" name="periode" value="<?= e($o['periode']) ?>">
+            <input type="hidden" name="echue_le" value="<?= e($o['date']) ?>">
+            <?php if ($estFait): ?>
+            <button class="ed-b annul" name="annuler" value="<?= (int)$e['id'] ?>"
+                    title="Annuler : l'échéance redevient à traiter">↩︎</button>
+            <?php else: ?>
+            <button class="ed-b fait" name="marquer" value="<?= (int)$e['id'] ?>"
+                    title="Marquer comme accomplie">✓</button>
+            <?php endif; ?>
+          </form>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </details>
+    <?php endif; ?>
     </div>
     <?php endforeach; ?>
   </div>

@@ -260,7 +260,7 @@ function ech_annee(PDO $pdo, int $annee, bool $actifSeulement = true): array {
    Trié du plus urgent au moins urgent. C'est cette liste qui alimente les
    alertes du tableau de bord.
    ---------------------------------------------------------------------------- */
-function ech_a_traiter(PDO $pdo, ?int $annee = null): array {
+function ech_a_traiter(PDO $pdo, ?int $annee = null, bool $avecRecentes = false): array {
     $annee = $annee ?: (int)date('Y');
     $urgentes = [];
 
@@ -269,7 +269,18 @@ function ech_a_traiter(PDO $pdo, ?int $annee = null): array {
     foreach ([$annee - 1, $annee, $annee + 1] as $a) {
         foreach (ech_annee($pdo, $a) as $e) {
             foreach ($e['occurrences'] as $o) {
-                if ($o['etat'] === ECH_FAIT || $o['etat'] === ECH_A_VENIR) continue;
+                /* Ce qui vient d'être coché reste visible quelques jours.
+                   Sans cela, une case cochée par erreur fait disparaître la
+                   ligne, et plus rien n'indique où la retrouver. Le décompte
+                   des alertes n'en tient pas compte : il ne compte que les
+                   états « retard », « aujourd'hui » et « proche ». */
+                if ($o['etat'] === ECH_FAIT) {
+                    if (!$avecRecentes || empty($o['fait_le'])) continue;
+                    if (strtotime((string)$o['fait_le']) < time() - 7 * 86400) continue;
+                    $urgentes[] = $e + $o;
+                    continue;
+                }
+                if ($o['etat'] === ECH_A_VENIR) continue;
                 /* On ne remonte pas indéfiniment : au-delà de 120 jours de
                    retard, l'information n'est plus actionnable. */
                 if ($o['jours'] < -120) continue;
