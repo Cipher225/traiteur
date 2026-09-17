@@ -43,6 +43,107 @@ function signature_reference(PDO $pdo): string
     return $ref;
 }
 
+/* ----------------------------------------------------------------------------
+   Mise en forme d'un numéro ivoirien.
+
+   Le champ Téléphone et le champ WhatsApp sont saisis par des mains
+   différentes, à des moments différents : l'un devient « +225 07 00 00 00 00 »,
+   l'autre « +2250700000000 ». Côte à côte dans la signature, le second a l'air
+   d'une erreur. On les présente donc de la même façon, quelle que soit la
+   manière dont ils ont été tapés.
+
+   Un numéro étranger ou d'un format inattendu est laissé tel quel : mieux vaut
+   afficher ce qui a été saisi que de le réécrire de travers.
+   ---------------------------------------------------------------------------- */
+function signature_numero(string $brut): string
+{
+    $brut = trim($brut);
+    if ($brut === '') return '';
+
+    $n = preg_replace('/[^0-9+]/', '', $brut);
+    if (str_starts_with($n, '00')) $n = '+' . substr($n, 2);
+
+    if (preg_match('/^(?:\+225)?(\d{10})$/', $n, $m)) {
+        return '+225 ' . implode(' ', str_split($m[1], 2));
+    }
+    return $brut;
+}
+
+/* Le champ Téléphone peut en contenir plusieurs : « 07 … / 05 … ». On les
+   sépare pour les mettre en forme un à un. */
+function signature_numeros(string $brut): array
+{
+    $parts = preg_split('#\s*[/;,·|]\s*#u', trim($brut), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    return array_values(array_filter(array_map('signature_numero', $parts), fn($x) => $x !== ''));
+}
+
+/* Deux numéros écrits différemment peuvent être le même. */
+function signature_meme_numero(string $a, string $b): bool
+{
+    $net = fn($x) => ltrim(preg_replace('/[^0-9]/', '', $x), '0');
+    $na = $net($a); $nb = $net($b);
+    if ($na === '' || $nb === '') return false;
+    /* « 225 07 00 … » et « 07 00 … » désignent la même ligne. */
+    return $na === $nb || str_ends_with($na, $nb) || str_ends_with($nb, $na);
+}
+
+/* ----------------------------------------------------------------------------
+   Le logo WhatsApp, dessiné.
+
+   Pas de fichier à charger ni d'emoji : les polices du serveur n'en contiennent
+   pas, et un caractère manquant se dessine en carré vide. On le trace donc à la
+   main — bulle verte, combiné blanc — à quatre fois la taille finale, puis on
+   réduit : GD ne lisse pas les cercles, et un logo de vingt pixels tracé
+   directement a les bords en escalier.
+   ---------------------------------------------------------------------------- */
+function signature_logo_whatsapp($im, int $x, int $y, int $taille): void
+{
+    if (!function_exists('imagecreatetruecolor')) return;
+
+    $f = 4;
+    $d = $taille * $f;
+    $tmp = imagecreatetruecolor($d, $d);
+    imagealphablending($tmp, false);
+    imagesavealpha($tmp, true);
+    imagefilledrectangle($tmp, 0, 0, $d, $d, imagecolorallocatealpha($tmp, 0, 0, 0, 127));
+    imagealphablending($tmp, true);
+
+    $vert  = imagecolorallocate($tmp, 37, 211, 102);      // le vert de la marque
+    $blanc = imagecolorallocate($tmp, 255, 255, 255);
+
+    $r = $d / 2;
+
+    /* La bulle : un disque, et la petite pointe en bas à gauche qui la
+       distingue d'un simple rond vert. */
+    imagefilledellipse($tmp, (int)$r, (int)$r, (int)($d * .96), (int)($d * .96), $vert);
+    imagefilledpolygon($tmp, [
+        (int)($r * 0.30), (int)($d * 0.99),
+        (int)($r * 0.72), (int)($r * 1.34),
+        (int)($r * 1.05), (int)($d * 0.96),
+    ], $vert);
+
+    /* Le combiné : une bande courbe ouverte vers le haut à droite, terminée
+       par deux pavillons. On la peint par petits disques le long de l'arc —
+       un arc épaissi laisse des trous dans le tracé. */
+    $rc = $r * 0.34;                 // rayon de la courbe
+    $ep = $r * 0.135;                // demi-épaisseur de la bande
+    for ($a = 35; $a <= 235; $a += 2) {
+        $rad = deg2rad($a);
+        imagefilledellipse($tmp,
+            (int)round($r + $rc * cos($rad)), (int)round($r + $rc * sin($rad)),
+            (int)round($ep * 2), (int)round($ep * 2), $blanc);
+    }
+    foreach ([35, 235] as $a) {      // les pavillons, plus larges que la bande
+        $rad = deg2rad($a);
+        imagefilledellipse($tmp,
+            (int)round($r + $rc * cos($rad)), (int)round($r + $rc * sin($rad)),
+            (int)round($ep * 3.1), (int)round($ep * 3.1), $blanc);
+    }
+
+    imagecopyresampled($im, $tmp, $x, $y, 0, 0, $taille, $taille, $d, $d);
+    imagedestroy($tmp);
+}
+
 /* ---------------------------------------------------------------------------
    Fabrique l'image de signature. Tout est dessiné par le serveur : le
    destinataire reçoit une image, pas du texte modifiable.
@@ -107,18 +208,67 @@ function signature_image(array $s, string $reference, string $empreinte, string 
     /* Filet de séparation */
     imagefilledrectangle($im, 46, 118, $L - ($avecAuth ? 260 : 46), 119, $trait);
 
-    /* Coordonnées */
+    /* Largeur d'un texte, pour poser ce qui vient après lui. */
+    $largeur = function (string $txt, float $taille) use ($police, $dispo): int {
+        if ($txt === '') return 0;
+        if (!$dispo) return (int)round(mb_strlen($txt) * $taille * 0.62);
+        $b = imagettfbbox($taille, 0, $police, $txt);
+        return (int)abs($b[2] - $b[0]);
+    };
+
+    /* ---- Coordonnées ----
+       Les numéros viennent des champs Téléphone et WhatsApp des paramètres
+       (Contact & réseaux) : la signature n'en garde aucune copie, changer le
+       numéro là-bas suffit. */
+    $tels = signature_numeros((string)($s['telephone'] ?? ''));
+    $wa   = signature_numero((string)($s['whatsapp'] ?? ''));
+
+    /* Une seule ligne pour deux usages, c'est courant : on affiche alors le
+       numéro une fois, marqué WhatsApp, plutôt que deux fois à l'identique. */
+    $waSurLigneFixe = false;
+    foreach ($tels as $t) {
+        if ($wa !== '' && signature_meme_numero($t, $wa)) { $waSurLigneFixe = true; break; }
+    }
+
     $lignes = array_values(array_filter([
         trim((string)($s['adresse'] ?? '')),
-        trim((string)($s['telephone'] ?? '')) . (trim((string)($s['whatsapp'] ?? '')) ? '   ·   ' . $s['whatsapp'] : ''),
+        ($tels || $wa !== '') ? ['tels' => $tels, 'wa' => $wa, 'fusion' => $waSurLigneFixe] : '',
         trim((string)($s['email'] ?? '')) . (trim((string)($s['site_url'] ?? '')) ? '   ·   ' . preg_replace('#^https?://#', '', (string)$s['site_url']) : ''),
         (trim((string)($s['rccm'] ?? '')) ? 'RCCM : ' . $s['rccm'] : '')
             . (trim((string)($s['ncc'] ?? '')) ? '   ·   N° CC : ' . $s['ncc'] : ''),
     ]));
+
     $yl = 150;
     foreach ($lignes as $ligne) {
         imagefilledellipse($im, 52, $yl - 5, 7, 7, $orClair);
-        $ecrire($ligne, 66, $yl, 11, $gris);
+
+        if (!is_array($ligne)) {
+            $ecrire($ligne, 66, $yl, 11, $gris);
+            $yl += 26;
+            continue;
+        }
+
+        /* La ligne des numéros se compose morceau par morceau : le logo doit
+           tomber juste avant le numéro WhatsApp, pas quelque part au milieu. */
+        $xc = 66;
+        foreach ($ligne['tels'] as $i => $t) {
+            if ($i > 0) { $ecrire('·', $xc, $yl, 11, $orClair); $xc += 14; }
+            $ecrire($t, $xc, $yl, 11, $gris);
+            $xc += $largeur($t, 11) + 10;
+
+            /* Ce numéro est aussi celui de WhatsApp : le logo le suit. */
+            if ($ligne['fusion'] && signature_meme_numero($t, $ligne['wa'])) {
+                signature_logo_whatsapp($im, $xc, $yl - 13, 16);
+                $xc += 16 + 10;
+            }
+        }
+
+        if ($ligne['wa'] !== '' && !$ligne['fusion']) {
+            if ($ligne['tels']) $xc += 8;     // pas d'écart si le logo ouvre la ligne
+            signature_logo_whatsapp($im, $xc, $yl - 13, 16);
+            $xc += 16 + 7;
+            $ecrire($ligne['wa'], $xc, $yl, 11, $gris);
+        }
         $yl += 26;
     }
 
