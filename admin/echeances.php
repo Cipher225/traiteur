@@ -26,12 +26,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rec = in_array($_POST['recurrence'] ?? '', array_keys($RECS), true)
              ? $_POST['recurrence'] : 'mensuelle';
 
+        /* Catégorie : une de la liste, ou celle que l'on vient d'écrire.
+           Le champ libre l'emporte, car on ne le remplit que pour l'utiliser. */
+        $catBrute = (string)($_POST['categorie'] ?? '');
+        $catLibre = trim((string)($_POST['categorie_libre'] ?? ''));
+        if ($catBrute === '__libre' || ($catLibre !== '' && !isset($CATS[$catBrute]))) {
+            $cat = mb_substr($catLibre, 0, 40);
+        } else {
+            $cat = isset($CATS[$catBrute]) ? $catBrute : 'fiscal';
+        }
+        if ($cat === '') $cat = 'fiscal';
+
         if ($lib === '') {
             flash('Le libellé est obligatoire.', 'error');
         } else {
             $data = [
                 mb_substr($lib, 0, 160),
-                in_array($_POST['categorie'] ?? '', array_keys($CATS), true) ? $_POST['categorie'] : 'autre',
+                $cat,
                 mb_substr(trim((string)($_POST['description'] ?? '')), 0, 800),
                 mb_substr(trim((string)($_POST['organisme'] ?? '')), 0, 120),
                 $rec,
@@ -78,8 +89,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: echeances.php'); exit;
     }
 
+    /* Mettre en sommeil ou réveiller : réversible, donc ouvert à l'employé. */
+    if (isset($_POST['basculer'])) {
+        $pdo->prepare('UPDATE echeances SET actif = 1 - actif WHERE id=?')
+            ->execute([(int)$_POST['basculer']]);
+        flash('Échéance mise à jour.');
+        header('Location: echeances.php'); exit;
+    }
+
+    /* Supprimer une échéance efface aussi son historique d'accomplissements :
+       la preuve qu'une déclaration a été faite disparaît avec elle. L'employé
+       saisit et corrige ; seul l'administrateur retire. Le contrôle est ici,
+       au plus près de la requête — cacher le bouton n'empêche pas un POST. */
     if (isset($_POST['supprimer'])) {
+        if (!is_admin()) {
+            flash("La suppression d'une échéance est réservée à l'administrateur. "
+                . "Vous pouvez la désactiver : elle sort du cadran sans que "
+                . "l'historique soit perdu.", 'error');
+            header('Location: echeances.php'); exit;
+        }
         $pdo->prepare('DELETE FROM echeances WHERE id=?')->execute([(int)$_POST['supprimer']]);
+        journaliser($pdo, 'suppression', 'echeance', (int)$_POST['supprimer'],
+                    'Échéance supprimée avec son historique');
         flash('Échéance supprimée.');
         header('Location: echeances.php'); exit;
     }
@@ -495,7 +526,7 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
     </p>
     <?php else: ?>
     <div class="ech-liste defilant">
-      <?php foreach ($aTraiter as $o): [$ic, $lbl] = $CATS[$o['categorie']] ?? ['📌', 'Autre']; ?>
+      <?php foreach ($aTraiter as $o): [$ic, $lbl] = ech_cat((string)$o['categorie']); ?>
       <div class="eo <?= e($o['etat']) ?>">
         <span class="eo-ico"><?= $ic ?></span>
         <div class="eo-c">
@@ -543,7 +574,7 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
   <?php else: ?>
   <div class="ech-liste defilant">
     <?php foreach ($toutes as $e):
-      [$ic, $lbl] = $CATS[$e['categorie']] ?? ['📌', 'Autre'];
+      [$ic, $lbl] = ech_cat((string)$e['categorie']);
       /* Prochaine occurrence non accomplie : c'est elle qui intéresse. */
       $prochaine = null;
       foreach ($e['occurrences'] as $o) {
@@ -554,14 +585,18 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
       $faites = count(array_filter($e['occurrences'], fn($o) => $o['etat'] === ECH_FAIT));
     ?>
     <div class="ee <?= empty($e['actif']) ? 'inactive' : '' ?>">
-      <span class="ee-ico"><?= $ic ?></span>
+      <span class="ee-ico" title="<?= e($lbl) ?>"><?= $ic ?></span>
       <div class="ee-c">
         <div class="ee-t">
           <strong><?= e($e['libelle']) ?></strong>
           <?php if (empty($e['actif'])): ?><span class="ee-off">Inactive</span><?php endif; ?>
         </div>
         <div class="ee-m">
-          <span><?= e($RECS[$e['recurrence']] ?? $e['recurrence']) ?></span>
+          <?php /* La catégorie est nommée, pas seulement dessinée : toutes les
+                   catégories écrites à la main portent la même épingle. */ ?>
+          <span class="ee-cat" style="color:<?= e(ech_couleur((string)$e['categorie'])) ?>">
+            <?= e($lbl) ?></span>
+          <span>· <?= e($RECS[$e['recurrence']] ?? $e['recurrence']) ?></span>
           <?php if ($e['organisme']): ?><span>· <?= e($e['organisme']) ?></span><?php endif; ?>
           <?php if ($e['responsable']): ?><span>· <?= e($e['responsable']) ?></span><?php endif; ?>
           <span>· préavis <?= (int)$e['preavis_jours'] ?> j</span>
@@ -573,11 +608,24 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
       <?php endif; ?>
       <div class="ee-a">
         <a class="eo-b" href="?edit=<?= (int)$e['id'] ?>#form" title="Modifier">✏️</a>
+
+        <?php /* Mettre en sommeil : l'échéance sort du cadran, son historique
+                 reste. C'est ce que fait un employé là où l'administrateur
+                 supprimerait. */ ?>
+        <form method="post" style="display:inline">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <button class="eo-b" name="basculer" value="<?= (int)$e['id'] ?>"
+                  title="<?= empty($e['actif']) ? 'Réactiver' : 'Mettre en sommeil' ?>">
+            <?= empty($e['actif']) ? '▶️' : '⏸️' ?></button>
+        </form>
+
+        <?php if (is_admin()): ?>
         <form method="post" style="display:inline"
               data-confirm="Supprimer « <?= e($e['libelle']) ?> » ? L'historique des accomplissements sera effacé aussi.">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
           <button class="eo-b sup" name="supprimer" value="<?= (int)$e['id'] ?>" title="Supprimer">✕</button>
         </form>
+        <?php endif; ?>
       </div>
     </div>
     <?php endforeach; ?>
@@ -604,13 +652,41 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
              value="<?= e($edit['libelle'] ?? '') ?>"
              placeholder="ex : Déclaration de TVA"></div>
 
+    <?php
+    /* La catégorie de la fiche ouverte est-elle dans la liste, ou écrite à
+       la main ? Dans le second cas on rouvre le champ libre sur son texte. */
+    $catEdit  = (string)($edit['categorie'] ?? 'fiscal');
+    $catDansListe = isset($CATS[$catEdit]);
+    $catsLibres = ech_cat_libres($pdo);
+    ?>
     <div class="field"><label>Catégorie</label>
-      <select class="input" name="categorie">
+      <select class="input" name="categorie" id="ech-cat">
         <?php foreach ($CATS as $k => [$i, $l]): ?>
-        <option value="<?= $k ?>" <?= ($edit['categorie'] ?? 'fiscal') === $k ? 'selected' : '' ?>>
+        <option value="<?= $k ?>" <?= $catDansListe && $catEdit === $k ? 'selected' : '' ?>>
           <?= $i ?> <?= $l ?></option>
         <?php endforeach; ?>
-      </select></div>
+
+        <?php /* Celles déjà écrites à la main reviennent dans la liste : on ne
+                 fait pas retaper « Redevance RTI » à chaque échéance. */ ?>
+        <?php if ($catsLibres): ?>
+        <optgroup label="Vos catégories">
+          <?php foreach ($catsLibres as $cl): ?>
+          <option value="<?= e($cl) ?>" <?= $catEdit === $cl ? 'selected' : '' ?>>
+            📌 <?= e($cl) ?></option>
+          <?php endforeach; ?>
+        </optgroup>
+        <?php endif; ?>
+
+        <option value="__libre" <?= (!$catDansListe && !in_array($catEdit, $catsLibres, true)) ? 'selected' : '' ?>>
+          ✏️ Saisir une catégorie…</option>
+      </select>
+
+      <input class="input" name="categorie_libre" id="ech-cat-libre" maxlength="40"
+             style="margin-top:8px;display:none"
+             placeholder="ex : Redevance RTI, Patente communale"
+             value="<?= (!$catDansListe && $catEdit !== 'autre') ? e($catEdit) : '' ?>">
+      <span class="ech-aide">La liste ne couvrira jamais tout : écrivez la vôtre,
+        elle sera proposée les fois suivantes.</span></div>
 
     <div class="field"><label>Organisme</label>
       <input class="input" name="organisme" maxlength="120"
@@ -786,6 +862,23 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
     });
     p.addEventListener('mouseleave', function () { bulle.hidden = true; });
   });
+})();
+
+/* Le champ de catégorie libre n'apparaît que lorsqu'on le demande : une
+   liste déroulante doublée d'un champ toujours visible fait hésiter. */
+(function () {
+  var sel = document.getElementById('ech-cat');
+  var champ = document.getElementById('ech-cat-libre');
+  if (!sel || !champ) return;
+
+  function ajuster(focus) {
+    var libre = (sel.value === '__libre');
+    champ.style.display = libre ? 'block' : 'none';
+    champ.required = libre;
+    if (libre && focus) champ.focus();
+  }
+  sel.addEventListener('change', function () { ajuster(true); });
+  ajuster(false);
 })();
 </script>
 

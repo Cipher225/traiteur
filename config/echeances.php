@@ -59,14 +59,54 @@ function ech_categories(): array {
         /* — Relation client et divers — */
         'commercial'  => ['🤝', 'Commercial',         '#fda4af'],
         'echeance'    => ['💳', 'Paiement à honorer', '#fcd34d'],
-        'autre'       => ['📌', 'Autre',              '#cbd5e1'],
     ];
 }
 
 /* Couleur d'une catégorie, pour le cadran et les pastilles. */
-function ech_couleur(string $cle): string {
+/* ----------------------------------------------------------------------------
+   L'icône, le libellé et la couleur d'une catégorie.
+
+   La liste ne couvrira jamais tout ce qu'une entreprise doit surveiller. Une
+   catégorie écrite à la main est donc enregistrée telle quelle et traitée
+   comme les autres : elle a son libellé et sa couleur sur le cadran.
+   ---------------------------------------------------------------------------- */
+function ech_cat(string $cle): array {
     $c = ech_categories();
-    return $c[$cle][2] ?? '#cbd5e1';
+    if (isset($c[$cle])) return $c[$cle];
+    if ($cle === '')      return ['📌', 'Sans catégorie', '#cbd5e1'];
+    if ($cle === 'autre') return ['📌', 'Autre', '#cbd5e1'];   // fiches d'avant
+    return ['📌', $cle, ech_teinte_libre($cle)];
+}
+
+/* ----------------------------------------------------------------------------
+   La couleur d'une catégorie libre.
+
+   Tirée de son propre texte, donc toujours la même : « Redevance RTI » garde
+   sa teinte d'une année sur l'autre et d'un écran à l'autre. On puise dans la
+   palette du cadran plutôt qu'au hasard — une couleur tirée à l'aveugle
+   finirait par se confondre avec le fond ou avec l'état « en retard ».
+   ---------------------------------------------------------------------------- */
+function ech_teinte_libre(string $texte): string {
+    $palette = ['#f0b429', '#7dd3fc', '#a78bfa', '#fb923c', '#34d399', '#60a5fa',
+                '#c084fc', '#38bdf8', '#f472b6', '#4ade80', '#fbbf24', '#22d3ee',
+                '#a3e635', '#818cf8', '#2dd4bf', '#fda4af', '#fcd34d', '#94a3b8'];
+    return $palette[hexdec(substr(md5(mb_strtolower($texte)), 0, 6)) % count($palette)];
+}
+
+function ech_couleur(string $cle): string {
+    return ech_cat($cle)[2];
+}
+
+/* Les catégories déjà écrites à la main, pour les proposer de nouveau plutôt
+   que de les faire retaper à l'identique. */
+function ech_cat_libres(PDO $pdo): array {
+    $connues = array_keys(ech_categories());
+    try {
+        $t = $pdo->query("SELECT DISTINCT categorie FROM echeances
+                          WHERE categorie <> '' ORDER BY categorie")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) { return []; }
+    return array_values(array_filter($t,
+        fn($c) => !in_array($c, $connues, true) && $c !== 'autre'));
 }
 
 function ech_recurrences(): array {
