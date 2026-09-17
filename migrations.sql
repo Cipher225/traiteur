@@ -672,3 +672,14 @@ CREATE TABLE IF NOT EXISTS admin_retraits (
 -- ajouté depuis se retrouve dans les droits des administrateurs existants.
 UPDATE users SET permissions = '["commandes_client","calendrier","echeances","recherche","messages","annuaire","clients","paiements","audit","finances","relances","comptabilite","stock","factures","proformas","bons_sortie","bons_entree","paie","employes","comptes","badges","externes","documents","coffre","taches","journal","rapports","messagerie","forum","menu","services","galerie","videos","temoignages","assistant","parametres","systeme"]'
 WHERE role = 'admin';
+
+-- ============================================================================
+--  ÉCHÉANCES — DATE DE DÉBUT DE SUIVI
+--  Sans elle, une obligation mensuelle saisie en septembre apparaissait en
+--  retard pour janvier à août : huit périodes que personne n'a manquées,
+--  puisque l'obligation n'était pas encore enregistrée. On ne compte donc
+--  les occurrences qu'à partir du jour où l'entreprise a commencé à suivre.
+-- ============================================================================
+ALTER TABLE echeances ADD COLUMN IF NOT EXISTS suivi_depuis DATE DEFAULT NULL;
+UPDATE echeances SET suivi_depuis = DATE(created_at)
+WHERE suivi_depuis IS NULL AND created_at IS NOT NULL;

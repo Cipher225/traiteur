@@ -52,20 +52,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 max(0, min(180, (int)($_POST['preavis_jours'] ?? 10))),
                 max(0, (float)str_replace([' ', ','], ['', '.'], (string)($_POST['montant_estime'] ?? 0))),
                 ($_POST['responsable_id'] ?? '') ?: null,
+                /* Début du suivi : rien n'est réclamé avant cette date. Par
+                   défaut, aujourd'hui — une obligation qu'on enregistre ce
+                   matin n'a pas été manquée les mois précédents. */
+                ($_POST['suivi_depuis'] ?? '') ?: date('Y-m-d'),
                 isset($_POST['actif']) ? 1 : 0,
             ];
 
             if ($id) {
                 $pdo->prepare("UPDATE echeances SET libelle=?, categorie=?, description=?, organisme=?,
                                recurrence=?, jour_du_mois=?, mois=?, date_unique=?, preavis_jours=?,
-                               montant_estime=?, responsable_id=?, actif=? WHERE id=?")
+                               montant_estime=?, responsable_id=?, suivi_depuis=?, actif=? WHERE id=?")
                     ->execute([...$data, $id]);
                 flash('Échéance modifiée.');
             } else {
                 $pdo->prepare("INSERT INTO echeances (libelle, categorie, description, organisme,
                                recurrence, jour_du_mois, mois, date_unique, preavis_jours,
-                               montant_estime, responsable_id, actif)
-                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")->execute($data);
+                               montant_estime, responsable_id, suivi_depuis, actif)
+                               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute($data);
                 flash('Échéance ajoutée. Elle apparaît désormais sur le cadran.');
             }
             journaliser($pdo, $id ? 'modification' : 'creation', 'échéance', $id ?: null, $lib);
@@ -118,11 +122,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* Installation des modèles, au premier lancement. */
     if (isset($_POST['modeles'])) {
         $ins = $pdo->prepare("INSERT INTO echeances (libelle, categorie, organisme, recurrence,
-                              jour_du_mois, mois, preavis_jours, actif, ordre)
-                              VALUES (?,?,?,?,?,?,?,0,?)");
+                              jour_du_mois, mois, preavis_jours, suivi_depuis, actif, ordre)
+                              VALUES (?,?,?,?,?,?,?,?,0,?)");
         $n = 0;
+        $aujourdhui = date('Y-m-d');
         foreach (ech_modeles() as $i => [$lib, $cat, $org, $rec, $jour, $mois, $preavis]) {
-            $ins->execute([$lib, $cat, $org, $rec, $jour, $mois, $preavis, $i]);
+            $ins->execute([$lib, $cat, $org, $rec, $jour, $mois, $preavis, $aujourdhui, $i]);
             $n++;
         }
         flash($n . ' modèles ajoutés — INACTIFS. Vérifiez chaque date auprès de votre comptable, '
@@ -137,7 +142,15 @@ if ($annee < 2000 || $annee > 2100) $annee = (int)date('Y');
 
 $toutes   = ech_annee($pdo, $annee, false);
 $aTraiter = ech_a_traiter($pdo, null, true);   // avec ce qui vient d'être coché
-$compteur = ech_compteur($pdo);
+$aRegler  = ech_a_regler($pdo, null, true);   // une ligne par obligation
+
+/* Le compteur se déduit de ce qu'on vient de lire : le recalculer appellerait
+   une seconde fois toute la machinerie des occurrences pour le même résultat. */
+$compteur = ['retard' => 0, 'aujourdhui' => 0, 'proche' => 0];
+foreach ($aTraiter as $o) {
+    if (isset($compteur[$o['etat']])) $compteur[$o['etat']]++;
+}
+$compteur['total'] = array_sum($compteur);
 
 $edit = null;
 if (isset($_GET['edit'])) {
@@ -333,9 +346,29 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
         <?php endfor; ?>
 
         <?php
-        /* Les échéances. Chacune est posée à sa date exacte, sur l'un des
-           trois anneaux disponibles pour éviter les recouvrements.
-           Sa couleur est celle de sa catégorie ; son état la nuance. */
+        /* Les échéances, posées chacune à sa date exacte.
+
+           Plusieurs obligations tombent le même jour — le 15 réunit souvent la
+           TVA, la CNPS et l'impôt sur les salaires. On les empile alors vers le
+           centre. L'ancien calcul repartait de l'anneau extérieur au quatrième
+           point (rang modulo 3) : il se reposait exactement sur le premier, et
+           deux échéances n'en faisaient plus qu'une à l'écran.
+
+           On compte donc d'abord combien d'obligations partagent chaque jour :
+           le pas s'en déduit. Deux points se posent au large, six se resserrent,
+           et la pile tient toujours entre la couronne et le cadran de l'heure.
+
+           La couleur d'un point est celle de sa catégorie ; son état la nuance. */
+        $parJour = [];
+        foreach ($parMois as $occ) {
+            foreach ($occ as $o) {
+                $k = substr((string)$o['date'], 0, 10);
+                $parJour[$k] = ($parJour[$k] ?? 0) + 1;
+            }
+        }
+        $bande = $rPoints - ($rHorloge + 14);   // hauteur disponible pour la pile
+        ?>
+        <?php
         $compteJour = [];
         foreach ($parMois as $m => $occ):
             foreach ($occ as $o):
@@ -343,10 +376,13 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
                 $jz = (int)date('z', $ts);
                 $ang = deg2rad($jz / $totalJrs * 360 - 90);
 
-                $cle = $m . '-' . (int)date('j', $ts);
+                $cle = substr((string)$o['date'], 0, 10);
                 $rang = $compteJour[$cle] ?? 0;
                 $compteJour[$cle] = $rang + 1;
-                $r = $rPoints - ($rang % 3) * 21;
+
+                $nJour = max(1, $parJour[$cle] ?? 1);
+                $pas = $nJour > 1 ? min(21, $bande / ($nJour - 1)) : 0;
+                $r = $rPoints - $rang * $pas;
 
                 $coulEtat = ['retard' => '#ff4d5e', 'aujourdhui' => '#f0b429',
                              'proche' => '#f0c14b', 'fait' => '#10b981'][$o['etat']] ?? null;
@@ -354,13 +390,25 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
                 $x = round($cx + $r * cos($ang), 1);
                 $y = round($cy + $r * sin($ang), 1);
         ?>
-          <?php /* Tige reliant le point à la couronne : on lit la date sans effort. */ ?>
+          <?php /* Tige reliant le point à la couronne : on lit la date sans
+                   effort. Une seule par jour — les points empilés partagent le
+                   même angle, et trois tiges superposées ne font qu'un pâté. */ ?>
+          <?php if ($rang === 0): ?>
           <line x1="<?= round($cx + ($rJours - 4) * cos($ang), 1) ?>"
                 y1="<?= round($cy + ($rJours - 4) * sin($ang), 1) ?>"
-                x2="<?= $x ?>" y2="<?= $y ?>"
-                stroke="<?= $coul ?>" stroke-width="1" opacity=".22"/>
+                x2="<?= round($cx + ($rHorloge + 12) * cos($ang), 1) ?>"
+                y2="<?= round($cy + ($rHorloge + 12) * sin($ang), 1) ?>"
+                stroke="<?= $coul ?>" stroke-width="1" opacity=".18"/>
+          <?php endif; ?>
+          <?php /* Le remplissage dit l'urgence, le liseré dit la catégorie :
+                   un point rouge cerclé de vert est une assurance en retard.
+                   Sans ce liseré, deux obligations en retard sont deux points
+                   rouges identiques. */ ?>
           <circle class="ec-pt <?= e($o['etat']) ?>" cx="<?= $x ?>" cy="<?= $y ?>" r="6"
                   fill="<?= $coul ?>" filter="url(#hLueur)"
+                  <?php if ($coulEtat): ?>stroke="<?= e(ech_couleur((string)$o['categorie'])) ?>"
+                  stroke-width="2"<?php endif; ?>
+                  data-ech="<?= (int)$o['id'] ?>"
                   data-lib="<?= e($o['libelle']) ?>"
                   data-date="<?= date('j', $ts) . ' ' . mb_strtolower($moisFr[$m]) ?>"
                   data-etat="<?= e(ech_delai($o['jours'])) ?>">
@@ -469,7 +517,13 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
          cette page doit donner : ce qui vient ensuite.
 
          $aTraiter est déjà trié du plus urgent au moins urgent. */
-      $suivante = $aTraiter[0] ?? null;
+      /* La plus urgente de celles qui RESTENT à faire. La liste inclut
+         désormais ce qui vient d'être coché, et une période réglée en janvier
+         venait s'annoncer ici comme « en retard de 8 mois ». */
+      $suivante = null;
+      foreach ($aRegler as $gL) {
+          if ($gL['etat'] !== ECH_FAIT) { $suivante = $gL; break; }
+      }
       if (!$suivante) {
           foreach ($toutes as $eL) {
               if (empty($eL['actif'])) continue;
@@ -508,49 +562,123 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
     <div class="ec-legende">
       <span><i style="background:#ff4d5e"></i>En retard</span>
       <span><i style="background:#f0b429"></i>Imminent</span>
-      <span><i class="cat"></i>À venir (couleur de sa catégorie)</span>
+      <span><i class="cat"></i>À venir</span>
       <span><i style="background:#10b981"></i>Accompli</span>
+      <span><i class="cerne"></i>Le cercle est la couleur de sa catégorie</span>
     </div>
+    <p class="ec-mode">
+      Posez le doigt ou la souris sur un point : il se nomme, et
+      <strong>toutes les dates de la même obligation s'allument</strong>.
+      Touchez-le pour descendre jusqu'à elle dans la liste.
+    </p>
   </div>
 
   <!-- ====================== À TRAITER ====================== -->
   <div class="panel glass">
     <div class="mod-tete">
-      <h2 style="margin:0">🔔 À traiter <span class="cnt"><?= count($aTraiter) ?></span></h2>
+      <?php /* Le chiffre annonce le nombre de LIGNES, pas de périodes : sinon
+               il promet douze affaires là où l'écran en montre cinq. */
+            $nbAgir = count(array_filter($aRegler, fn($g) => $g['etat'] !== ECH_FAIT)); ?>
+      <h2 style="margin:0">🔔 À régler
+        <?php if ($nbAgir): ?><span class="cnt"><?= $nbAgir ?></span><?php endif; ?></h2>
+      <?php if ($compteur['retard'] > 0): ?>
+      <span class="er-somme"><?= (int)$compteur['retard'] ?> période<?= $compteur['retard'] > 1 ? 's' : '' ?> en retard</span>
+      <?php endif; ?>
     </div>
 
-    <?php if (!$aTraiter): ?>
+    <?php if (!$aRegler): ?>
     <p class="ech-vide">
       <?= $toutes ? 'Rien ne presse : aucune échéance dans les prochains jours.'
                   : 'Aucune échéance enregistrée. Ajoutez-en une ci-dessous.' ?>
     </p>
     <?php else: ?>
+
+    <?php /* ------------------------------------------------------------------
+             UNE ligne par obligation, pas une par période.
+
+             Une TVA laissée de côté six mois remplissait six lignes : l'écran
+             se remplissait d'une seule affaire et les autres passaient dessous
+             sans être vues. On montre donc la période la plus urgente, et le
+             nombre de périodes qui attendent derrière — dépliables pour être
+             régularisées une à une.
+             ------------------------------------------------------------------ */ ?>
     <div class="ech-liste defilant">
-      <?php foreach ($aTraiter as $o): [$ic, $lbl] = ech_cat((string)$o['categorie']); ?>
-      <div class="eo <?= e($o['etat']) ?>">
-        <span class="eo-ico"><?= $ic ?></span>
-        <div class="eo-c">
-          <div class="eo-t"><?= e($o['libelle']) ?></div>
-          <div class="eo-m">
-            <span class="eo-d"><?= date('d/m/Y', strtotime($o['date'])) ?></span>
-            <span class="eo-q"><?= e(ech_delai($o['jours'])) ?></span>
-            <?php if ($o['organisme']): ?><span class="eo-o"><?= e($o['organisme']) ?></span><?php endif; ?>
-            <?php if ($o['montant_estime'] > 0): ?>
-            <span class="eo-mt">≈ <?= number_format((float)$o['montant_estime'], 0, ',', ' ') ?> <?= e($devise) ?></span>
-            <?php endif; ?>
+      <?php foreach ($aRegler as $g):
+        [$ic, $lbl] = ech_cat((string)$g['categorie']);
+        $arriere = (int)$g['nb_retard'];
+      ?>
+      <div class="eo-bloc">
+        <div class="eo <?= e($g['etat']) ?>">
+          <span class="eo-ico" title="<?= e($lbl) ?>"><?= $ic ?></span>
+          <div class="eo-c">
+            <div class="eo-t"><?= e($g['libelle']) ?>
+              <?php if ($arriere > 1): ?>
+              <span class="eo-lot"><?= $arriere ?> périodes dues</span>
+              <?php endif; ?>
+              <?php if ($g['etat'] === ECH_FAIT && $arriere === 0): ?>
+              <span class="eo-fini">à jour</span>
+              <?php endif; ?>
+            </div>
+            <div class="eo-m">
+              <span class="eo-d"><?= date('d/m/Y', strtotime($g['date'])) ?></span>
+              <?php /* Une période réglée ne se dit pas « en retard de 8 mois » :
+                       elle est réglée, et la date de son échéance suffit. */ ?>
+              <span class="eo-q<?= $g['etat'] === ECH_FAIT ? ' ok' : '' ?>">
+                <?= $g['etat'] === ECH_FAIT
+                    ? 'réglée' . (!empty($g['fait_le']) ? ' le ' . date('d/m', strtotime((string)$g['fait_le'])) : '')
+                    : e(ech_delai((int)$g['jours'])) ?></span>
+              <?php if ($g['organisme']): ?><span class="eo-o"><?= e($g['organisme']) ?></span><?php endif; ?>
+              <?php if ($arriere > 1 && $g['du_total'] > 0): ?>
+              <span class="eo-mt">≈ <?= number_format((float)$g['du_total'], 0, ',', ' ') ?> <?= e($devise) ?> au total</span>
+              <?php elseif ($g['montant_estime'] > 0): ?>
+              <span class="eo-mt">≈ <?= number_format((float)$g['montant_estime'], 0, ',', ' ') ?> <?= e($devise) ?></span>
+              <?php endif; ?>
+            </div>
           </div>
+
+          <form method="post" class="eo-f">
+            <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+            <input type="hidden" name="periode" value="<?= e($g['periode']) ?>">
+            <input type="hidden" name="echue_le" value="<?= e($g['date']) ?>">
+            <?php if ($g['etat'] === ECH_FAIT): ?>
+            <button class="eo-b" name="annuler" value="<?= (int)$g['id'] ?>"
+                    title="Annuler le marquage">↩︎</button>
+            <?php else: ?>
+            <button class="eo-b" name="marquer" value="<?= (int)$g['id'] ?>"
+                    title="Marquer <?= date('m/Y', strtotime($g['date'])) ?> comme réglée">✓</button>
+            <?php endif; ?>
+          </form>
         </div>
-        <form method="post" class="eo-f">
-          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-          <input type="hidden" name="periode" value="<?= e($o['periode']) ?>">
-          <input type="hidden" name="echue_le" value="<?= e($o['date']) ?>">
-          <?php if ($o['etat'] === ECH_FAIT): ?>
-          <button class="eo-b" name="annuler" value="<?= (int)$o['id'] ?>"
-                  title="Annuler le marquage">↩︎</button>
-          <?php else: ?>
-          <button class="eo-b" name="marquer" value="<?= (int)$o['id'] ?>" title="Marquer comme fait">✓</button>
-          <?php endif; ?>
-        </form>
+
+        <?php /* L'arriéré, déplié seulement si on veut le voir. */ ?>
+        <?php
+        $enAttente = count(array_filter($g['periodes'], fn($x) => $x['etat'] !== ECH_FAIT));
+        if (count($g['periodes']) > 1): ?>
+        <details class="eo-arriere<?= $enAttente === 0 ? ' calme' : '' ?>">
+          <summary><?= $enAttente > 1 ? 'Les ' . $enAttente . ' périodes en attente'
+              : ($enAttente === 1 ? '1 période en attente'
+              : 'Les ' . count($g['periodes']) . ' périodes de la série') ?></summary>
+          <div class="ea-grille">
+            <?php foreach ($g['periodes'] as $pr):
+              $prFait = ($pr['etat'] === ECH_FAIT); ?>
+            <div class="ed <?= e($pr['etat']) ?>">
+              <span class="ed-d"><?= date('d/m', strtotime($pr['date'])) ?></span>
+              <span class="ed-e"><?= $prFait ? 'Réglée' : e(ech_delai((int)$pr['jours'])) ?></span>
+              <form method="post">
+                <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                <input type="hidden" name="periode" value="<?= e($pr['periode']) ?>">
+                <input type="hidden" name="echue_le" value="<?= e($pr['date']) ?>">
+                <?php if ($prFait): ?>
+                <button class="ed-b annul" name="annuler" value="<?= (int)$g['id'] ?>" title="Annuler">↩︎</button>
+                <?php else: ?>
+                <button class="ed-b fait" name="marquer" value="<?= (int)$g['id'] ?>" title="Marquer réglée">✓</button>
+                <?php endif; ?>
+              </form>
+            </div>
+            <?php endforeach; ?>
+          </div>
+        </details>
+        <?php endif; ?>
       </div>
       <?php endforeach; ?>
     </div>
@@ -589,7 +717,7 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
       }
       $faites = count(array_filter($e['occurrences'], fn($o) => $o['etat'] === ECH_FAIT));
     ?>
-    <div class="ee-bloc">
+    <div class="ee-bloc" id="ech-<?= (int)$e['id'] ?>" data-ech="<?= (int)$e['id'] ?>">
     <div class="ee <?= empty($e['actif']) ? 'inactive' : '' ?>">
       <span class="ee-ico" title="<?= e($lbl) ?>"><?= $ic ?></span>
       <div class="ee-c">
@@ -770,6 +898,13 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
              value="<?= (int)($edit['preavis_jours'] ?? 10) ?>">
       <span class="ech-aide">L'alerte apparaît à partir de ce délai.</span></div>
 
+    <div class="field"><label>Suivi depuis</label>
+      <input class="input" type="date" name="suivi_depuis"
+             value="<?= e((string)($edit['suivi_depuis'] ?? date('Y-m-d'))) ?>">
+      <span class="ech-aide">Rien n'est réclamé avant cette date. Laissez aujourd'hui
+        pour une obligation que vous commencez à suivre ; reculez-la si vous voulez
+        rattraper des périodes déjà dues.</span></div>
+
     <div class="field"><label>Montant estimé</label>
       <input class="input" name="montant_estime" inputmode="numeric"
              value="<?= (float)($edit['montant_estime'] ?? 0) ?: '' ?>" placeholder="facultatif"></div>
@@ -895,21 +1030,81 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
 })();
 
 (function () {
-  /* Infobulle du cadran : au survol d'un point, on nomme l'échéance. */
-  var bulle = document.getElementById('ec-bulle');
-  if (!bulle) return;
+  /* ------------------------------------------------------------------
+     Qui est qui sur le cadran.
 
-  document.querySelectorAll('.ec-pt').forEach(function (p) {
-    p.addEventListener('mouseenter', function () {
-      bulle.innerHTML = '<strong>' + this.dataset.lib + '</strong>'
-                      + '<span>' + this.dataset.date + ' — ' + this.dataset.etat + '</span>';
-      bulle.hidden = false;
-      var r = this.getBoundingClientRect();
-      var c = this.closest('.ech-cadran').getBoundingClientRect();
-      bulle.style.left = (r.left - c.left + r.width / 2) + 'px';
-      bulle.style.top  = (r.top - c.top - 12) + 'px';
+     Un point de six pixels ne peut pas porter son nom, et la couleur dit
+     l'urgence — deux obligations en retard sont deux points rouges. Le
+     cadran et la liste se répondent donc : on désigne un point, sa ligne
+     s'allume ; on survole une ligne, ses points grossissent et les autres
+     s'effacent. Un clic descend jusqu'à l'obligation.
+
+     Tout passe par les événements « pointer », pour que le doigt fasse
+     sur un téléphone ce que la souris fait sur un écran.
+     ------------------------------------------------------------------ */
+  var bulle  = document.getElementById('ec-bulle');
+  var cadran = document.getElementById('horloge');   // le conteneur positionné
+  if (!bulle || !cadran) return;
+
+  var points = Array.prototype.slice.call(document.querySelectorAll('.ec-pt'));
+  var blocs  = Array.prototype.slice.call(document.querySelectorAll('.ee-bloc[data-ech]'));
+
+  function placerBulle(p) {
+    bulle.innerHTML = '<strong>' + p.dataset.lib + '</strong>'
+                    + '<span>' + p.dataset.date + ' — ' + p.dataset.etat + '</span>';
+    bulle.hidden = false;
+    var r = p.getBoundingClientRect();
+    var c = cadran.getBoundingClientRect();
+    bulle.style.left = (r.left - c.left + r.width / 2) + 'px';
+    bulle.style.top  = (r.top - c.top - 12) + 'px';
+  }
+
+  /* Mettre en avant une obligation, sur les deux vues à la fois. */
+  function designer(id) {
+    points.forEach(function (p) {
+      p.classList.toggle('vise', id !== null && p.dataset.ech === id);
+      p.classList.toggle('efface', id !== null && p.dataset.ech !== id);
     });
-    p.addEventListener('mouseleave', function () { bulle.hidden = true; });
+    blocs.forEach(function (b) {
+      b.classList.toggle('vise', id !== null && b.dataset.ech === id);
+    });
+  }
+
+  points.forEach(function (p) {
+    p.addEventListener('pointerenter', function () {
+      placerBulle(this);
+      designer(this.dataset.ech);
+    });
+    p.addEventListener('pointerleave', function (e) {
+      /* Au doigt, « pointerleave » survient dès qu'on relève la main : la
+         bulle s'ouvrirait et se refermerait dans le même geste. On ne la
+         referme donc que pour la souris ; sur un écran tactile, c'est le
+         prochain appui ailleurs qui la range. */
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      bulle.hidden = true;
+      designer(null);
+    });
+    /* Au doigt comme à la souris : on descend jusqu'à l'obligation. */
+    p.addEventListener('click', function () {
+      var cible = document.getElementById('ech-' + this.dataset.ech);
+      if (!cible) return;
+      cible.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      cible.classList.add('trouve');
+      setTimeout(function () { cible.classList.remove('trouve'); }, 1600);
+    });
+  });
+
+  /* Dans l'autre sens : survoler une ligne allume ses points. */
+  blocs.forEach(function (b) {
+    b.addEventListener('pointerenter', function () { designer(this.dataset.ech); });
+    b.addEventListener('pointerleave', function () { designer(null); });
+  });
+
+  /* Un doigt posé ailleurs referme la bulle : sur un téléphone, il n'y a
+     pas de « sortie de survol ». */
+  document.addEventListener('pointerdown', function (e) {
+    var sur = e.target && e.target.closest ? e.target.closest('.ec-pt') : null;
+    if (!sur) { bulle.hidden = true; designer(null); }
   });
 })();
 

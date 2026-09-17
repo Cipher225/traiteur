@@ -3915,3 +3915,79 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
   .ed-grille{margin-left:0;grid-template-columns:1fr}
   .ee-dates summary{padding-left:0}
 }
+
+/* ============================================================
+   À RÉGLER — UNE LIGNE PAR OBLIGATION
+
+   Le détail des périodes en souffrance ne s'ouvre que si on le
+   demande : six mois de TVA ne doivent pas chasser de l'écran
+   les cinq autres obligations.
+   ============================================================ */
+.eo-bloc{border-radius:12px}
+.eo-lot{font-size:9.5px;font-weight:700;padding:1px 8px;border-radius:12px;
+  color:#ff6b7a;background:rgba(255,77,94,.13);white-space:nowrap}
+.eo-arriere{margin:-2px 0 7px 0}
+.eo-arriere summary{cursor:pointer;list-style:none;font-size:11.5px;color:var(--ink-faint);
+  padding:5px 0 5px 40px;user-select:none;transition:.14s}
+.eo-arriere summary::-webkit-details-marker{display:none}
+.eo-arriere summary::before{content:'▸ ';color:#ff6b7a}
+.eo-arriere[open] summary::before{content:'▾ '}
+.eo-arriere summary:hover{color:var(--ink)}
+.ea-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+  gap:6px;margin:4px 0 10px 40px}
+
+@media (max-width:640px){
+  .ea-grille{margin-left:0;grid-template-columns:1fr}
+  .eo-arriere summary{padding-left:0}
+}
+.er-somme{margin-left:auto;font-size:11.5px;font-weight:600;color:#ff6b7a;
+  padding:4px 12px;border-radius:14px;background:rgba(255,77,94,.11);
+  border:1px solid rgba(255,77,94,.28);white-space:nowrap}
+.eo-q.ok{color:#10b981}
+.eo-fini{font-size:9.5px;font-weight:700;padding:1px 8px;border-radius:12px;
+  color:#10b981;background:rgba(16,185,129,.13)}
+.eo-arriere.calme summary::before{color:#10b981}
+
+/* ============================================================
+   CADRAN ↔ LISTE — SAVOIR QUI EST QUI
+
+   Un point de six pixels ne porte pas son nom. Désigner l'un
+   allume l'autre : c'est ce qui rend le cadran lisible sans
+   l'encombrer d'étiquettes.
+   ============================================================ */
+.ec-pt{cursor:pointer;transition:r .16s, opacity .16s}
+.ec-pt.vise{r:9}
+.ec-pt.efface{opacity:.2}
+
+.ee-bloc{transition:background .2s, box-shadow .2s}
+.ee-bloc.vise{background:rgba(240,193,75,.09);box-shadow:inset 3px 0 0 var(--gold,#d4a526)}
+
+/* Après un clic sur le cadran, la ligne se signale le temps d'être vue. */
+@keyframes ech-trouve{
+  0%   {background:rgba(240,193,75,.32)}
+  100% {background:transparent}
+}
+.ee-bloc.trouve{animation:ech-trouve 1.6s ease-out}
+
+@media (prefers-reduced-motion: reduce){
+  .ee-bloc.trouve{animation:none;background:rgba(240,193,75,.18)}
+  .ec-pt{transition:none}
+}
+.ec-legende i.cerne{background:#ff4d5e;box-shadow:0 0 0 2px #34d399}
+.ec-mode{margin:9px 0 0;font-size:11.5px;line-height:1.65;color:var(--ink-faint);
+  text-align:center}
+.ec-mode strong{color:var(--ink);font-weight:600}
+
+/* Sur un téléphone, la ligne d'échéance était comprimée entre l'icône et
+   trois boutons : chaque mention passait à la ligne, une par une. Le titre
+   prend maintenant toute la largeur, la date et les actions se posent
+   dessous. */
+@media (max-width:560px){
+  .ee{flex-wrap:wrap;row-gap:8px}
+  .ee-c{flex:1 1 100%;min-width:0}
+  .ee-p{order:2}
+  .ee-a{order:3;margin-left:auto}
+  .eo{flex-wrap:wrap;row-gap:8px}
+  .eo-c{flex:1 1 100%;min-width:0}
+  .eo-f{order:2;margin-left:auto}
+}

@@ -146,9 +146,16 @@ function ech_periode(array $e, string $date): string {
    passée restée en souffrance.
    ---------------------------------------------------------------------------- */
 function ech_occurrences(array $e, int $annee): array {
-    $jour = (int)($e['jour_du_mois'] ?: 15);
-    $ref  = (int)($e['mois'] ?: 1);
+    $jour = (int)(($e['jour_du_mois'] ?? 0) ?: 15);
+    $ref  = (int)(($e['mois'] ?? 0) ?: 1);
     $dates = [];
+
+    /* Rien avant le début du suivi. Une obligation mensuelle saisie en
+       septembre n'est pas « en retard » depuis janvier : personne n'a rien
+       manqué, elle n'était simplement pas encore enregistrée. À défaut de
+       date de suivi, on prend la création de la fiche. */
+    $depuis = trim((string)($e['suivi_depuis'] ?? ''));
+    if ($depuis === '' && !empty($e['created_at'])) $depuis = substr((string)$e['created_at'], 0, 10);
 
     switch ($e['recurrence']) {
         case 'mensuelle':
@@ -181,6 +188,10 @@ function ech_occurrences(array $e, int $annee): array {
             break;
     }
     sort($dates);
+
+    if ($depuis !== '') {
+        $dates = array_values(array_filter($dates, fn($d) => $d >= $depuis));
+    }
     return $dates;
 }
 
@@ -206,8 +217,14 @@ function ech_delai(int $jours): string {
     if ($jours === 0)  return "aujourd'hui";
     if ($jours === 1)  return 'demain';
     if ($jours === -1) return 'hier';
+
+    /* Au-delà de deux mois, le nombre de jours ne parle plus : « en retard de
+       245 jours » ne se lit pas, « en retard de 8 mois » se comprend. */
+    if ($jours > 60)   return 'dans ' . (int)round($jours / 30) . ' mois';
     if ($jours > 0)    return 'dans ' . $jours . ' jour' . ($jours > 1 ? 's' : '');
+
     $r = abs($jours);
+    if ($r > 60)       return 'en retard de ' . (int)round($r / 30) . ' mois';
     return 'en retard de ' . $r . ' jour' . ($r > 1 ? 's' : '');
 }
 
@@ -281,9 +298,14 @@ function ech_a_traiter(PDO $pdo, ?int $annee = null, bool $avecRecentes = false)
                     continue;
                 }
                 if ($o['etat'] === ECH_A_VENIR) continue;
-                /* On ne remonte pas indéfiniment : au-delà de 120 jours de
-                   retard, l'information n'est plus actionnable. */
-                if ($o['jours'] < -120) continue;
+
+                /* On écartait tout retard de plus de 120 jours, « parce que
+                   l'information n'était plus actionnable ». C'était faux : une
+                   TVA de six mois est précisément ce qu'il faut régulariser, et
+                   la masquer revenait à faire disparaître les pires arriérés.
+                   Ce plafond ne servait qu'à contenir la longueur de la liste ;
+                   le regroupement par obligation s'en charge désormais. On
+                   garde donc tout ce que la période balayée contient. */
                 $urgentes[] = $e + $o;
             }
         }
@@ -291,6 +313,59 @@ function ech_a_traiter(PDO $pdo, ?int $annee = null, bool $avecRecentes = false)
 
     usort($urgentes, fn($a, $b) => $a['jours'] <=> $b['jours']);
     return $urgentes;
+}
+
+/* ----------------------------------------------------------------------------
+   Ce qui réclame votre attention, regroupé par obligation.
+
+   Une obligation mensuelle laissée de côté six mois produisait six lignes
+   identiques : la liste se remplissait d'une seule affaire, et les autres
+   passaient dessous sans être vues. On ne montre donc qu'UNE ligne par
+   obligation — la période la plus urgente — en indiquant combien d'autres
+   périodes attendent derrière elle.
+   ---------------------------------------------------------------------------- */
+function ech_a_regler(PDO $pdo, ?int $annee = null, bool $avecRecentes = false): array {
+    $groupes = [];
+
+    foreach (ech_a_traiter($pdo, $annee, $avecRecentes) as $o) {
+        $id = (int)$o['id'];
+
+        /* La ligne visible doit porter la période qu'il reste à régler. Comme
+           le tri place d'abord la plus ancienne, une période déjà réglée en
+           janvier passerait devant une déclaration de septembre encore due —
+           et la ligne annoncerait « réglée » alors qu'il reste à faire. Une
+           période réglée ne représente donc le groupe que si aucune autre
+           n'attend. */
+        if (!isset($groupes[$id])) {
+            $groupes[$id] = $o + ['periodes' => [], 'nb_retard' => 0, 'du_total' => 0.0];
+        } elseif ($groupes[$id]['etat'] === ECH_FAIT && $o['etat'] !== ECH_FAIT) {
+            $garde = ['periodes' => $groupes[$id]['periodes'],
+                      'nb_retard' => $groupes[$id]['nb_retard'],
+                      'du_total'  => $groupes[$id]['du_total']];
+            $groupes[$id] = $o + $garde;
+        }
+        $groupes[$id]['periodes'][] = [
+            'periode' => $o['periode'], 'date' => $o['date'],
+            'jours'   => $o['jours'],   'etat' => $o['etat'],
+            'fait_le' => $o['fait_le'] ?? null,
+        ];
+        if ($o['etat'] === ECH_RETARD) {
+            $groupes[$id]['nb_retard']++;
+            $groupes[$id]['du_total'] += (float)($o['montant_estime'] ?? 0);
+        }
+    }
+
+    /* Les périodes d'une même obligation se lisent de la plus ancienne à la
+       plus récente : c'est l'ordre dans lequel on les régularise. */
+    foreach ($groupes as &$g) {
+        usort($g['periodes'], fn($a, $b) => strcmp($a['date'], $b['date']));
+    }
+    unset($g);
+
+    /* Le plus urgent en tête, et à égalité le plus gros arriéré d'abord. */
+    $liste = array_values($groupes);
+    usort($liste, fn($a, $b) => [$a['jours'], -$a['nb_retard']] <=> [$b['jours'], -$b['nb_retard']]);
+    return $liste;
 }
 
 /* Décompte rapide, pour la pastille du menu. */
