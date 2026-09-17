@@ -23,18 +23,36 @@ if (empty($_SESSION['admin_id'])) {
     }
     $_SESSION['derniere_activite'] = $maintenant;
 
+    /* Le compte, relu à chaque page.
+
+       Le rôle et les droits étaient jusqu'ici figés au moment de la connexion.
+       Un administrateur rétrogradé, désactivé ou supprimé gardait donc tous ses
+       accès jusqu'à ce qu'il se déconnecte lui-même — le retrait décidé par le
+       protocole ne prenait effet que s'il voulait bien. On relit la fiche. */
+    $u = $pdo->prepare("SELECT session_id, role, actif, permissions FROM users WHERE id=?");
+    $u->execute([$uid]);
+    $compte = $u->fetch();
+
+    /* Compte supprimé ou désactivé : la porte se ferme à la page suivante. */
+    if (!$compte || empty($compte['actif'])) {
+        session_unset(); session_destroy();
+        header('Location: ../login.php?ferme=1'); exit;
+    }
+
     /* Session unique : si une connexion plus récente a eu lieu ailleurs,
        l'identifiant de session en base ne correspond plus => on coupe.
        (On ne vérifie que si un sid_check a bien été posé à la connexion.) */
-    if (!empty($_SESSION['sid_check'])) {
-        $u = $pdo->prepare("SELECT session_id FROM users WHERE id=?");
-        $u->execute([$uid]);
-        $sidBase = $u->fetchColumn();
-        if ($sidBase && $sidBase !== $_SESSION['sid_check']) {
-            session_unset(); session_destroy();
-            header('Location: ../login.php?ailleurs=1'); exit;
-        }
+    if (!empty($_SESSION['sid_check'])
+        && $compte['session_id'] && $compte['session_id'] !== $_SESSION['sid_check']) {
+        session_unset(); session_destroy();
+        header('Location: ../login.php?ailleurs=1'); exit;
     }
+
+    /* Rôle et droits repris de la base : ils font foi, pas la session. */
+    $_SESSION['admin_role']  = (string)$compte['role'];
+    $_SESSION['admin_perms'] = $compte['permissions']
+                             ? (json_decode((string)$compte['permissions'], true) ?: [])
+                             : [];
 
     /* Trace d'activité en base (informative). */
     $pdo->prepare("UPDATE users SET last_activity=NOW() WHERE id=?")->execute([$uid]);

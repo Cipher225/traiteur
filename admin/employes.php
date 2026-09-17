@@ -2,6 +2,7 @@
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/layout.php';
 require_once __DIR__ . '/includes/badges.php';
+require_once __DIR__ . '/../config/protocole_admin.php';
 if (!is_admin()) { flash("Réservé à l'administrateur.", 'error'); header('Location: index.php'); exit; }
 $devise = $settings['devise'] ?? 'FCFA';
 
@@ -26,11 +27,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: employes.php'); exit;
     }
 
+    /* ---- Protocole administrateur : demander, approuver, refuser, annuler ---- */
+    if (isset($_POST['retrait_demander'])) {
+        $err = null;
+        $ok = admin_retrait_demander($pdo, (int)$_POST['retrait_demander'],
+                                     (string)($_POST['retrait_action'] ?? ''),
+                                     (string)($_POST['retrait_motif'] ?? ''), $err);
+        flash($ok ? "Demande déposée. Elle prend effet dès qu'un second administrateur "
+                  . "l'approuve, et expire sous " . ADMIN_RETRAIT_DELAI_H . " heures sans réponse."
+                  : (string)$err, $ok ? 'success' : 'error');
+        header('Location: employes.php#protocole'); exit;
+    }
+    if (isset($_POST['retrait_approuver'])) {
+        $err = null;
+        $ok = admin_retrait_approuver($pdo, (int)$_POST['retrait_approuver'], $err);
+        flash($ok ? 'Retrait approuvé et appliqué.' : (string)$err, $ok ? 'success' : 'error');
+        header('Location: employes.php#protocole'); exit;
+    }
+    if (isset($_POST['retrait_refuser'])) {
+        admin_retrait_refuser($pdo, (int)$_POST['retrait_refuser'],
+                              (string)($_POST['refus_motif'] ?? ''));
+        flash('Demande refusée. Le compte reste administrateur.');
+        header('Location: employes.php#protocole'); exit;
+    }
+    if (isset($_POST['retrait_annuler'])) {
+        admin_retrait_annuler($pdo, (int)$_POST['retrait_annuler']);
+        flash('Votre demande a été retirée.');
+        header('Location: employes.php#protocole'); exit;
+    }
+
     // Supprimer définitivement un employé (les DONNÉES de l'entreprise restent)
     if (isset($_POST['supprimer'])) {
         $eid = (int)$_POST['supprimer'];
         // Récupérer le compte lié pour archiver son identité AVANT suppression
         $uid = (int)$pdo->query("SELECT id FROM users WHERE employe_id=" . $eid . " AND role IN ('employe','admin') LIMIT 1")->fetchColumn();
+
+        /* Un administrateur ne s'efface pas d'un clic : il faut l'accord d'un
+           second. Le contrôle est ici, au plus près de la requête, et non dans
+           l'affichage — un bouton caché n'a jamais empêché une requête POST. */
+        if ($uid > 0 && admin_protege($pdo, $uid)) {
+            flash("Ce compte est un compte administrateur : sa suppression demande "
+                . "l'accord d'un second administrateur. Déposez la demande ci-dessous.", 'error');
+            header('Location: employes.php#protocole'); exit;
+        }
+
         if ($uid > 0) {
             archiver_membre($pdo, $uid); // garde le nom pour messages, forum, rapports…
             $pdo->prepare("DELETE FROM users WHERE id=?")->execute([$uid]);
@@ -43,6 +83,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Activer / désactiver le compte
     if (isset($_POST['toggle_compte'])) {
         $uid = (int)$_POST['toggle_compte'];
+
+        /* Désactiver, c'est fermer la porte : l'effet est celui d'un retrait,
+           et la règle est donc la même. Seule la RÉACTIVATION reste libre —
+           rendre ses accès à quelqu'un ne prive personne. */
+        $st = $pdo->prepare("SELECT role, actif FROM users WHERE id=?");
+        $st->execute([$uid]);
+        $c = $st->fetch();
+
+        if ($c && $c['role'] === 'admin' && !empty($c['actif']) && $uid !== (int)$_SESSION['admin_id']) {
+            flash("Désactiver un administrateur revient à le retirer : il faut l'accord "
+                . "d'un second administrateur. Déposez la demande ci-dessous.", 'error');
+            header('Location: employes.php#protocole'); exit;
+        }
+
         if ($uid !== (int)$_SESSION['admin_id'])
             $pdo->prepare("UPDATE users SET actif=1-actif WHERE id=? AND role IN ('employe','admin')")->execute([$uid]);
         flash('Statut du compte mis à jour.');
@@ -133,17 +187,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = preg_replace('/[^a-z0-9._@+-]/', '', strtolower(trim($_POST['username'] ?? '')));
     $pass     = $_POST['password'] ?? '';
     $perms    = array_values(array_intersect(array_keys($attribuables), $_POST['perms'] ?? []));
-    $permsJson = json_encode($perms);
 
     // Compte déjà lié ?
     /* Rôle du compte : seul un administrateur peut en désigner un autre.
        Sans cette restriction, un employé pourrait s'octroyer tous les droits. */
     $roleDemande = (is_admin() && ($_POST['role_compte'] ?? '') === 'admin') ? 'admin' : 'employe';
 
+    /* Un administrateur reçoit TOUT, sans qu'on ait à cocher quoi que ce soit :
+       les cases du formulaire ne concernent que les employés. */
+    if ($roleDemande === 'admin') $perms = permissions_admin();
+    $permsJson = json_encode($perms);
+
     $stmt = $pdo->prepare("SELECT id, role FROM users WHERE employe_id=? AND role IN ('employe','admin')");
     $stmt->execute([$eid]);
     $ligneCompte = $stmt->fetch();
     $existingUid = $ligneCompte['id'] ?? null;
+
+    /* Rétrograder un administrateur lui retire tous ses accès : cela passe par
+       le protocole, comme une suppression. Sans ce garde-fou, il suffirait de
+       décocher une liste déroulante pour contourner l'accord mutuel. */
+    if ($existingUid && ($ligneCompte['role'] ?? '') === 'admin' && $roleDemande !== 'admin'
+        && (int)$existingUid !== (int)$_SESSION['admin_id']) {
+        flash("Retirer les droits d'un administrateur demande l'accord d'un second "
+            . "administrateur. Ouvrez « Protocole administrateur » pour déposer la demande.", 'error');
+        header('Location: employes.php?edit=' . $eid . '#protocole'); exit;
+    }
 
     if ($username !== '') {
         // unicité
@@ -194,6 +262,23 @@ if (isset($_GET['edit'])) {
     }
 }
 
+/* ------------------------------------------------------- Protocole admin ----
+   Les administrateurs en exercice, et les demandes de retrait en cours.
+   ---------------------------------------------------------------------------- */
+$moiId = (int)($_SESSION['admin_id'] ?? 0);
+$lesAdmins = [];
+try {
+    $lesAdmins = $pdo->query("SELECT u.id, u.nom, u.username, u.actif, u.employe_id
+                              FROM users u WHERE u.role='admin' ORDER BY u.nom")->fetchAll();
+} catch (Throwable $e) {}
+$retraits      = admin_retraits($pdo, 'attente');
+$retraitsPasse = admin_retraits($pdo, 'histoire', 10);
+$nbAdminsActifs = admin_nombre($pdo);
+
+/* Quel administrateur fait déjà l'objet d'une demande ? */
+$visePar = [];
+foreach ($retraits as $d) $visePar[(int)$d['cible_id']] = $d;
+
 /* Une équipe grandit, et les anciens employés restent en fiche : la liste se
    parcourt par pages et se cherche par nom, poste ou matricule. */
 $q = trim($_GET['q'] ?? '');
@@ -209,7 +294,7 @@ $where .= $rch['sql']; $args = array_merge($args, $rch['args']);
 $pg = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
 
 $st = $pdo->prepare("SELECT e.*, u.id AS uid, u.username, u.actif AS compte_actif,
-                            u.permissions, u.acces_exception_until
+                            u.role AS compte_role, u.permissions, u.acces_exception_until
                      $jointures $where ORDER BY e.actif DESC, e.nom" . $pg['limite']);
 $st->execute($args);
 $rows = $st->fetchAll();
@@ -217,7 +302,145 @@ $rows = $st->fetchAll();
 admin_header('Employés & accès', 'employes', $pdo, $settings);
 $wJours = array_filter(array_map('intval', explode(',', $settings['work_jours'] ?? '1,2,3,4,5,6')));
 $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
+$ACTIONS = admin_actions_retrait();
 ?>
+
+<!-- ================= PROTOCOLE ADMINISTRATEUR ================= -->
+<div class="panel glass prot" id="protocole">
+  <div class="mod-tete">
+    <h2 style="margin:0">🔐 Protocole administrateur
+      <span class="cnt"><?= count($lesAdmins) ?></span></h2>
+    <?php if ($retraits): ?>
+    <span class="prot-att"><?= count($retraits) ?> demande<?= count($retraits) > 1 ? 's' : '' ?> en attente</span>
+    <?php endif; ?>
+  </div>
+
+  <p class="prot-regle">
+    Un administrateur voit tout et peut tout défaire : <strong>aucun ne peut en écarter
+    un autre seul</strong>. Il dépose une demande motivée, qu’un <strong>second
+    administrateur</strong> approuve — la personne visée comprise, si elle accepte son
+    départ. Sans réponse, la demande expire au bout de <?= ADMIN_RETRAIT_DELAI_H ?> heures.
+    Le dernier administrateur actif ne peut jamais être retiré.
+  </p>
+
+  <?php /* ---- Demandes en attente ---- */ ?>
+  <?php foreach ($retraits as $d):
+    $moiDemandeur = ((int)$d['demandeur_id'] === $moiId);
+    $moiVise      = ((int)$d['cible_id'] === $moiId);
+    $reste        = strtotime((string)$d['expire_le']) - time();
+    $resteTxt     = $reste > 3600 ? floor($reste / 3600) . ' h' : max(1, floor($reste / 60)) . ' min';
+  ?>
+  <div class="prot-dem <?= $moiVise ? 'vise' : '' ?>">
+    <div class="pd-tete">
+      <span class="pd-ico"><?= $moiVise ? '⚠️' : '🔎' ?></span>
+      <div>
+        <strong><?= e((string)$ACTIONS[$d['action']][0] ?? $d['action']) ?> —
+          <?= e((string)$d['cible_nom']) ?><?= $moiVise ? ' (vous)' : '' ?></strong>
+        <span>Demandé par <?= e((string)$d['demandeur_nom']) ?>
+          le <?= date('d/m/Y à H:i', strtotime((string)$d['created_at'])) ?>
+          · expire dans <?= $resteTxt ?></span>
+      </div>
+    </div>
+    <p class="pd-motif"><?= nl2br(e((string)$d['motif'])) ?></p>
+
+    <div class="pd-actes">
+      <?php if ($moiDemandeur): ?>
+        <span class="pd-note">Vous avez déposé cette demande : un autre administrateur
+          doit l’approuver.</span>
+        <form method="post" style="display:inline"
+              data-confirm="Retirer votre demande concernant <?= e((string)$d['cible_nom']) ?> ?">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <button class="btn btn-glass btn-sm" name="retrait_annuler" value="<?= (int)$d['id'] ?>">
+            Retirer ma demande</button>
+        </form>
+      <?php else: ?>
+        <form method="post" style="display:inline"
+              data-confirm="Approuver ce retrait ? L’action sera appliquée immédiatement.">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <button class="btn btn-gold btn-sm" name="retrait_approuver" value="<?= (int)$d['id'] ?>">
+            ✓ J’approuve<?= $moiVise ? ' mon retrait' : '' ?></button>
+        </form>
+        <form method="post" class="pd-refus">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input class="input" name="refus_motif" maxlength="500" placeholder="Motif du refus (facultatif)">
+          <button class="btn btn-glass btn-sm" name="retrait_refuser" value="<?= (int)$d['id'] ?>">
+            ✕ Je refuse</button>
+        </form>
+      <?php endif; ?>
+    </div>
+  </div>
+  <?php endforeach; ?>
+
+  <?php /* ---- Les administrateurs en exercice ---- */ ?>
+  <div class="prot-liste">
+    <?php foreach ($lesAdmins as $a):
+      $estMoi   = ((int)$a['id'] === $moiId);
+      $dernier  = ($nbAdminsActifs <= 1 && !empty($a['actif']));
+      $enCours  = $visePar[(int)$a['id']] ?? null;
+    ?>
+    <div class="pa <?= empty($a['actif']) ? 'off' : '' ?>">
+      <span class="pa-ico">👤</span>
+      <div class="pa-c">
+        <div class="pa-n"><?= e((string)$a['nom']) ?>
+          <?php if ($estMoi): ?><span class="pa-moi">vous</span><?php endif; ?>
+          <?php if (empty($a['actif'])): ?><span class="pa-etat">désactivé</span><?php endif; ?>
+          <?php if ($dernier): ?><span class="pa-cle">🔑 dernier administrateur</span><?php endif; ?>
+        </div>
+        <div class="pa-d"><code><?= e((string)$a['username']) ?></code> · accès à toute l’application</div>
+      </div>
+      <div class="pa-a">
+        <?php if ($enCours): ?>
+          <span class="pa-encours">Demande en cours</span>
+        <?php elseif ($estMoi): ?>
+          <span class="pa-note">Un retrait ne se demande pas pour soi-même</span>
+        <?php elseif ($dernier): ?>
+          <span class="pa-note">Protégé : le retirer fermerait l’application</span>
+        <?php else: ?>
+          <details class="pa-form">
+            <summary class="btn btn-glass btn-sm">Demander un retrait</summary>
+            <form method="post" class="pf">
+              <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+              <label>Que demandez-vous ?</label>
+              <select class="input" name="retrait_action">
+                <?php foreach ($ACTIONS as $k => $lib): ?>
+                <option value="<?= $k ?>"><?= e($lib[0]) ?> — <?= e($lib[1]) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <label>Motif <span class="pf-aide">— c’est ce que le second administrateur lira</span></label>
+              <textarea class="input" name="retrait_motif" rows="3" required minlength="10"
+                placeholder="Expliquez la situation en quelques phrases."></textarea>
+              <button class="btn btn-gold btn-sm" name="retrait_demander" value="<?= (int)$a['id'] ?>">
+                Déposer la demande</button>
+              <span class="pf-aide">Rien ne se passe avant l’accord d’un second administrateur.
+                <?= e((string)$a['nom']) ?> en est prévenu immédiatement.</span>
+            </form>
+          </details>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endforeach; ?>
+  </div>
+
+  <?php if ($retraitsPasse): ?>
+  <details class="prot-hist">
+    <summary>Demandes déjà tranchées (<?= count($retraitsPasse) ?>)</summary>
+    <?php
+    $etats = ['approuvee' => ['Approuvée', 'ok'], 'refusee' => ['Refusée', 'no'],
+              'annulee' => ['Retirée', 'na'], 'expiree' => ['Expirée sans réponse', 'na']];
+    foreach ($retraitsPasse as $d): $et = $etats[$d['statut']] ?? [$d['statut'], 'na']; ?>
+    <div class="ph-l">
+      <span class="ph-e <?= $et[1] ?>"><?= e($et[0]) ?></span>
+      <span class="ph-t"><?= e((string)($ACTIONS[$d['action']][0] ?? $d['action'])) ?>
+        — <?= e((string)$d['cible_nom']) ?></span>
+      <span class="ph-q"><?= e((string)$d['demandeur_nom']) ?>
+        <?= $d['approbateur_nom'] ? ' → ' . e((string)$d['approbateur_nom']) : '' ?>
+        · <?= date('d/m/Y', strtotime((string)$d['created_at'])) ?></span>
+    </div>
+    <?php endforeach; ?>
+  </details>
+  <?php endif; ?>
+</div>
+
 <div class="panel glass" style="border-left:4px solid var(--gold)">
   <h2>🕐 Horaires d'accès des employés</h2>
   <p style="color:var(--ink-dim);font-size:13.5px;margin:-4px 0 14px">En dehors de ces horaires, les employés ne peuvent pas accéder à leur espace de travail. (Ne concerne pas l'administrateur ni les clients.)</p>
@@ -305,6 +528,12 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
 
     <h3 class="form-section">🗂️ Sections autorisées</h3>
     <p style="color:var(--ink-faint);font-size:12.5px;margin:-4px 0 14px">Le tableau de bord, la messagerie, le forum, les tâches et les rapports sont toujours accessibles. Cochez les autres sections auxquelles l'employé aura accès.</p>
+    <div id="perms-admin" style="margin:-8px 0 14px;padding:10px 14px;border-radius:11px;font-size:12.5px;
+         display:<?= ($compte['role'] ?? '') === 'admin' ? 'block' : 'none' ?>;
+         color:#7dd3fc;background:rgba(125,211,252,.1);border:1px solid rgba(125,211,252,.28)">
+      👑 Ce compte est administrateur : il reçoit <strong>toutes les sections</strong>, y compris
+      celles qui ne figurent pas ci-dessous. Les cases ne servent qu'aux comptes employés.
+    </div>
     <div class="perms-grid">
       <?php foreach (groupes_modules() as $g=>$gl):
         $items = array_filter($attribuables, fn($m)=>$m[3]===$g); if(!$items) continue; ?>
@@ -354,8 +583,16 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
               <a class="btn btn-glass btn-sm" href="paie.php?edit=new&employe=<?= $r['id'] ?>" title="Bulletin de paie">📄</a>
               <a class="btn btn-glass btn-sm" href="?edit=<?= $r['id'] ?>#form" title="Modifier">✏️</a>
               <?php if ($r['uid']): ?>
+              <?php /* Fermer l'accès d'un administrateur passe par le protocole ;
+                       le rouvrir ne prive personne et reste libre. */
+                    $estAdminLigne = (($r['compte_role'] ?? '') === 'admin');
+                    if ($estAdminLigne && $r['compte_actif'] && (int)$r['uid'] !== $moiId): ?>
+                <a class="btn btn-glass btn-sm" href="#protocole"
+                   title="Retirer cet administrateur demande l'accord d'un second">🔐</a>
+              <?php else: ?>
               <form method="post" style="display:inline"><input type="hidden" name="csrf" value="<?= csrf_token() ?>">
                 <button class="btn btn-glass btn-sm" name="toggle_compte" value="<?= $r['uid'] ?>" title="<?= $r['compte_actif']?'Désactiver l\'accès':'Réactiver l\'accès' ?>"><?= $r['compte_actif']?'⏸️':'▶️' ?></button></form>
+              <?php endif; ?>
               <?php $excActif = $r['acces_exception_until'] && strtotime($r['acces_exception_until']) >= time(); ?>
               <details class="exc-menu" style="position:relative;display:inline-block">
                 <summary class="btn btn-sm <?= $excActif?'btn-gold':'btn-glass' ?>" title="Accorder un accès hors horaires">🕑</summary>
@@ -390,10 +627,15 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
                 </div>
               </details>
               <?php endif; ?>
+              <?php if (($r['compte_role'] ?? '') === 'admin'): ?>
+                <a class="btn btn-glass btn-sm" href="#protocole"
+                   title="Administrateur : la suppression demande l'accord d'un second">🔐</a>
+              <?php else: ?>
               <form method="post" data-confirm="Supprimer « <?= e($r['nom']) ?> » et son accès ?">
                 <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
                 <button class="btn btn-danger btn-sm" name="supprimer" value="<?= $r['id'] ?>">✕</button>
               </form>
+              <?php endif; ?>
             </div>
           </td>
         </tr>
@@ -407,8 +649,20 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
 (function(){
   var sel = document.getElementById('sel-role-compte');
   var av  = document.getElementById('avert-admin');
-  if (!sel || !av) return;
-  sel.addEventListener('change', function(){ av.style.display = (this.value === 'admin') ? 'block' : 'none'; });
+  var pa  = document.getElementById('perms-admin');
+  if (!sel) return;
+  /* Les cases de sections n'ont aucun effet sur un administrateur : on le dit
+     au moment où le rôle change, plutôt que de laisser cocher pour rien. */
+  sel.addEventListener('change', function () {
+    var estAdmin = (this.value === 'admin');
+    if (av) av.style.display = estAdmin ? 'block' : 'none';
+    if (pa) pa.style.display = estAdmin ? 'block' : 'none';
+    document.querySelectorAll('.perms-grid input[type=checkbox]').forEach(function (c) {
+      if (estAdmin) { c.dataset.avant = c.checked ? '1' : '0'; c.checked = true; c.disabled = true; }
+      else { c.disabled = false; if (c.dataset.avant !== undefined) c.checked = c.dataset.avant === '1'; }
+    });
+  });
+  if (sel.value === 'admin') sel.dispatchEvent(new Event('change'));
 })();
 </script>
 <?= pagination_html($pg, 'employé', $_GET) ?>

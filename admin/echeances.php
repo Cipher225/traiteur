@@ -227,9 +227,23 @@ admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
           <filter id="hOmbre" x="-40%" y="-40%" width="180%" height="180%">
             <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".5"/>
           </filter>
+
+          <?php /* Le cadran est un objet, pas un calque : il porte sa propre
+                   matière sombre. Sans elle, en thème clair, les graduations
+                   et les noms de mois — tracés en blanc — disparaissaient
+                   dans la page. Une horloge murale ne change pas de couleur
+                   selon le mur sur lequel on l'accroche. */ ?>
+          <radialGradient id="hCadran" cx="50%" cy="40%">
+            <stop offset="0%"   stop-color="#1b2740"/>
+            <stop offset="58%"  stop-color="#111c31"/>
+            <stop offset="100%" stop-color="#070e1c"/>
+          </radialGradient>
         </defs>
 
-        <?php /* Boîtier : trois cercles concentriques donnent l'épaisseur. */ ?>
+        <?php /* Boîtier : le disque de fond, puis trois cercles concentriques
+                 qui lui donnent son épaisseur. */ ?>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="url(#hCadran)"
+                filter="url(#hOmbre)"/>
         <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="url(#hFond)"/>
         <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="none"
                 stroke="url(#hLaiton)" stroke-width="2.5" opacity=".55"/>

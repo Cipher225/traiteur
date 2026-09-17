@@ -327,6 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $notice = '';
     if (isset($_GET['inactif']))  $notice = 'Vous avez été déconnecté après une période d\'inactivité.';
     if (isset($_GET['ailleurs']))  $notice = 'Votre compte vient d\'être connecté sur un autre appareil.';
+    if (isset($_GET['ferme']))     $notice = 'Votre accès a été fermé. Rapprochez-vous de l\'administration.';
     if (isset($_GET['deconnecte'])) $notice = 'Session terminée.';
     ?>
     <?php if ($notice): ?><div class="flash" style="background:rgba(212,165,38,.14);color:#8a6d13;border:1px solid rgba(212,165,38,.3);margin-bottom:14px"><?= e($notice) ?></div><?php endif; ?>

@@ -900,6 +900,19 @@ function taille_lisible(int $o): string {
     return $o . ' o';
 }
 
+/* ----------------------------------------------------------------------------
+   Les droits d'un administrateur : tous, sans exception.
+
+   can() le sait déjà et laisse passer un administrateur quoi que contienne sa
+   colonne « permissions ». Mais cette colonne est lue ailleurs — la fiche
+   employé y coche ses cases, et une rétrogradation la reprend telle quelle.
+   Laissée vide, elle montrerait un administrateur sans aucune section, et le
+   rétrograder le laisserait sans rien du tout. On l'écrit donc en entier.
+   ---------------------------------------------------------------------------- */
+function permissions_admin(): array {
+    return array_keys(all_modules());
+}
+
 /* L'utilisateur courant a-t-il accès à un module ? */
 function can(string $key): bool {
     $u = current_user();

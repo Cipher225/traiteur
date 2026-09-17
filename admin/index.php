@@ -255,6 +255,31 @@ try {
 } catch (Throwable $e) {}
 
 /* ----------------------------------------------------------------------------
+   Protocole administrateur.
+
+   Une demande de retrait attend un second avis : c'est la décision la plus
+   lourde de l'application, et elle expire toute seule si personne ne la voit.
+   ---------------------------------------------------------------------------- */
+if (is_admin()) {
+    try {
+        require_once __DIR__ . '/../config/protocole_admin.php';
+        $pr = admin_retraits_compteur($pdo, (int)($_SESSION['admin_id'] ?? 0));
+
+        if ($pr['contre_moi'] > 0) {
+            $alertes[] = ['urgent', '🔐', 'Votre retrait a été demandé',
+                          'Vous pouvez lire le motif et vous prononcer vous-même',
+                          'employes.php#protocole', 'Lire'];
+        } elseif ($pr['a_moi'] > 0) {
+            $alertes[] = ['urgent', '🔐',
+                          $pr['a_moi'] . ' retrait' . ($pr['a_moi'] > 1 ? 's' : '')
+                            . " d'administrateur à approuver",
+                          'Rien ne se fera sans votre accord ou celui d’un autre administrateur',
+                          'employes.php#protocole', 'Examiner'];
+        }
+    } catch (Throwable $e) {}
+}
+
+/* ----------------------------------------------------------------------------
    Demandes laissées à l'assistant du site.
 
    Un visiteur qui a donné son numéro attend un appel. Passé le délai promis,

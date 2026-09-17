@@ -639,3 +639,36 @@ CREATE TABLE IF NOT EXISTS ia_suivi (
   INDEX (conversation_id),
   FOREIGN KEY (conversation_id) REFERENCES ia_conversations(id) ON DELETE CASCADE
 );
+
+-- ============================================================================
+--  PROTOCOLE DE RETRAIT D'UN ADMINISTRATEUR
+--  Aucun administrateur ne peut en écarter un autre seul : il dépose une
+--  demande motivée, qu'un SECOND administrateur doit approuver. Sans
+--  approbation, elle expire au bout de trois jours.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS admin_retraits (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  cible_id INT NOT NULL,                  -- l'administrateur visé
+  cible_nom VARCHAR(120) DEFAULT '',      -- conservé : le compte peut disparaître
+  action VARCHAR(20) NOT NULL,            -- supprimer | desactiver | retrograder
+  motif TEXT NOT NULL,                    -- ce que le second administrateur lira
+  demandeur_id INT NOT NULL,
+  demandeur_nom VARCHAR(120) DEFAULT '',
+  statut VARCHAR(20) DEFAULT 'attente',   -- attente | approuvee | refusee | annulee | expiree
+  approbateur_id INT DEFAULT NULL,
+  approbateur_nom VARCHAR(120) DEFAULT '',
+  reponse_motif TEXT,
+  expire_le DATETIME DEFAULT NULL,
+  traitee_le DATETIME DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (cible_id),
+  INDEX (statut)
+);
+
+-- Un administrateur a tous les droits : sa colonne « permissions » doit le
+-- dire, sinon une rétrogradation le laisserait sans rien et la fiche afficherait
+-- des cases vides pour quelqu'un qui accède pourtant à tout. La liste est
+-- réécrite à chaque déploiement, sans condition : c'est ainsi qu'un module
+-- ajouté depuis se retrouve dans les droits des administrateurs existants.
+UPDATE users SET permissions = '["commandes_client","calendrier","echeances","recherche","messages","annuaire","clients","paiements","audit","finances","relances","comptabilite","stock","factures","proformas","bons_sortie","bons_entree","paie","employes","comptes","badges","externes","documents","coffre","taches","journal","rapports","messagerie","forum","menu","services","galerie","videos","temoignages","assistant","parametres","systeme"]'
+WHERE role = 'admin';
