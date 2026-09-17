@@ -19,15 +19,54 @@ const ECH_PROCHE   = 'proche';      // dans le délai de préavis
 const ECH_A_VENIR  = 'a_venir';     // plus loin
 const ECH_FAIT     = 'fait';        // accompli pour cette période
 
+/* ----------------------------------------------------------------------------
+   Catégories.
+
+   Elles couvrent ce qui revient dans une entreprise de restauration et de
+   négoce : les obligations légales, mais aussi les échéances d'exploitation
+   — renouvellement d'un agrément, entretien d'un véhicule, visite sanitaire.
+
+   Une liste trop courte oblige à tout ranger dans « Autre » et le filtrage
+   par couleur ne dit plus rien.
+   ---------------------------------------------------------------------------- */
 function ech_categories(): array {
     return [
-        'fiscal'    => ['🏛️', 'Fiscal'],
-        'social'    => ['👥', 'Social'],
-        'juridique' => ['⚖️', 'Juridique'],
-        'assurance' => ['🛡️', 'Assurance'],
-        'banque'    => ['🏦', 'Banque'],
-        'autre'     => ['📌', 'Autre'],
+        /* — Obligations légales — */
+        'fiscal'      => ['🏛️', 'Fiscal',            '#f0b429'],
+        'social'      => ['👥', 'Social',             '#7dd3fc'],
+        'juridique'   => ['⚖️', 'Juridique',          '#a78bfa'],
+        'douane'      => ['🛃', 'Douane & import',    '#fb923c'],
+
+        /* — Contrats et couvertures — */
+        'assurance'   => ['🛡️', 'Assurance',          '#34d399'],
+        'banque'      => ['🏦', 'Banque & finance',   '#60a5fa'],
+        'contrat'     => ['📝', 'Contrat & bail',     '#c084fc'],
+        'abonnement'  => ['🔁', 'Abonnement',         '#38bdf8'],
+
+        /* — Autorisations d'exercer — */
+        'licence'     => ['🎫', 'Licence & agrément', '#f472b6'],
+        'hygiene'     => ['🧪', 'Hygiène & sanitaire','#4ade80'],
+        'securite'    => ['🚨', 'Sécurité',           '#f87171'],
+        'certification' => ['🏅', 'Certification',    '#fbbf24'],
+
+        /* — Exploitation — */
+        'materiel'    => ['🔧', 'Matériel & entretien', '#94a3b8'],
+        'vehicule'    => ['🚚', 'Véhicule',           '#22d3ee'],
+        'stock'       => ['📦', 'Stock & inventaire', '#a3e635'],
+        'rh'          => ['🧑‍💼', 'Ressources humaines','#818cf8'],
+        'formation'   => ['🎓', 'Formation',          '#2dd4bf'],
+
+        /* — Relation client et divers — */
+        'commercial'  => ['🤝', 'Commercial',         '#fda4af'],
+        'echeance'    => ['💳', 'Paiement à honorer', '#fcd34d'],
+        'autre'       => ['📌', 'Autre',              '#cbd5e1'],
     ];
+}
+
+/* Couleur d'une catégorie, pour le cadran et les pastilles. */
+function ech_couleur(string $cle): string {
+    $c = ech_categories();
+    return $c[$cle][2] ?? '#cbd5e1';
 }
 
 function ech_recurrences(): array {
@@ -250,13 +289,32 @@ function ech_annuler(PDO $pdo, int $id, string $periode): bool {
    ---------------------------------------------------------------------------- */
 function ech_modeles(): array {
     return [
-        ['TVA — déclaration mensuelle',        'fiscal', 'DGI',   'mensuelle',     15, null, 8],
-        ['Cotisations sociales (CNPS)',        'social', 'CNPS',  'mensuelle',     15, null, 8],
-        ['Impôt sur les traitements et salaires', 'fiscal', 'DGI', 'mensuelle',    15, null, 8],
-        ['Acompte d\'impôt sur le résultat',    'fiscal', 'DGI',   'trimestrielle', 20, 1,   15],
-        ['Patente — règlement annuel',          'fiscal', 'Mairie','annuelle',      31, 3,   30],
-        ['États financiers annuels',            'fiscal', 'DGI',   'annuelle',      30, 6,   45],
-        ['Renouvellement assurance véhicule',   'assurance', '',   'annuelle',      1,  1,   30],
-        ['Visite médicale du personnel',        'social', '',      'annuelle',      1,  9,   30],
+        /* — Obligations légales — */
+        ['TVA — déclaration mensuelle',            'fiscal',    'DGI',    'mensuelle',     15, null, 8],
+        ['Cotisations sociales (CNPS)',            'social',    'CNPS',   'mensuelle',     15, null, 8],
+        ['Impôt sur les traitements et salaires',  'fiscal',    'DGI',    'mensuelle',     15, null, 8],
+        ['Acompte d\'impôt sur le résultat',       'fiscal',    'DGI',    'trimestrielle', 20, 1,    15],
+        ['Patente — règlement annuel',             'fiscal',    'Mairie', 'annuelle',      31, 3,    30],
+        ['États financiers annuels',               'fiscal',    'DGI',    'annuelle',      30, 6,    45],
+        ['Déclaration annuelle des salaires',      'social',    'CNPS',   'annuelle',      31, 1,    30],
+
+        /* — Autorisations d'exercer — */
+        ['Renouvellement licence de débit',        'licence',   'Mairie', 'annuelle',      31, 12,   45],
+        ['Visite sanitaire des locaux',            'hygiene',   '',       'semestrielle',  15, 3,    21],
+        ['Contrôle des extincteurs',               'securite',  '',       'annuelle',      1,  6,    30],
+        ['Analyse bactériologique cuisine',        'hygiene',   '',       'trimestrielle', 10, 1,    14],
+
+        /* — Contrats et couvertures — */
+        ['Renouvellement assurance véhicule',      'assurance', '',       'annuelle',      1,  1,    30],
+        ['Assurance responsabilité civile',        'assurance', '',       'annuelle',      1,  1,    30],
+        ['Échéance du bail commercial',            'contrat',   '',       'annuelle',      1,  1,    60],
+        ['Abonnement internet & téléphonie',       'abonnement','',       'annuelle',      1,  1,    21],
+
+        /* — Exploitation — */
+        ['Contrôle technique des véhicules',       'vehicule',  'SICTA',  'annuelle',      1,  1,    30],
+        ['Entretien des chambres froides',         'materiel',  '',       'trimestrielle', 5,  1,    10],
+        ['Inventaire physique du stock',           'stock',     '',       'semestrielle',  30, 6,    14],
+        ['Visite médicale du personnel',           'rh',        '',       'annuelle',      1,  9,    30],
+        ['Entretien du matériel de cuisine',       'materiel',  '',       'semestrielle',  15, 2,    14],
     ];
 }

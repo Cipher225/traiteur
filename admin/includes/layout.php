@@ -39,6 +39,22 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
                 if (!$notif) { $notif = $ma; $notif_url = 'messages.php'; $notif_label = 'message(s) à approuver'; }
             }
         } catch (Throwable $e) {}
+
+        /* Demandes transmises par l'assistant : derrière chaque chiffre il y a
+           quelqu'un qui attend un rappel. Le retard passe devant tout le reste. */
+        try {
+            $dm = $pdo->query("SELECT SUM(statut IN ('transmise','prise')) att,
+                                      SUM(statut='transmise' AND echeance_reponse < NOW()) ret
+                               FROM ia_conversations WHERE transmise=1")->fetch();
+            if ($dm && (int)$dm['att'] > 0) {
+                $badges['assistant'] = (int)$dm['att'];
+                if ((int)$dm['ret'] > 0 || !$notif) {
+                    $notif = (int)$dm['ret'] ?: (int)$dm['att'];
+                    $notif_url = 'assistant.php#demandes';
+                    $notif_label = (int)$dm['ret'] > 0 ? 'demande(s) en retard' : 'demande(s) à rappeler';
+                }
+            }
+        } catch (Throwable $e) {}
     }
     ?>
 <!DOCTYPE html>

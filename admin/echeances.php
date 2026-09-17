@@ -138,7 +138,7 @@ foreach ($toutes as $e) {
 }
 
 $devise = $settings['devise'] ?? 'FCFA';
-admin_header('Échéances', 'echeances', $pdo, $settings);
+admin_header('Échéances & Rappels', 'echeances', $pdo, $settings);
 ?>
 
 <!-- ====================== BANDEAU D'ALERTE ====================== -->
@@ -176,101 +176,294 @@ admin_header('Échéances', 'echeances', $pdo, $settings);
     </div>
 
     <?php
-      /* Le cadran : douze secteurs, un par mois, et une aiguille sur le jour.
-         Tracé en SVG pur — aucune bibliothèque à charger. */
-      $R = 200; $cx = 230; $cy = 230;
+      /* ------------------------------------------------------------------
+         L'HORLOGE
+
+         Deux lectures superposées dans un même cadran :
+
+           — la COURONNE extérieure porte l'année : douze secteurs, une
+             graduation par jour, et les échéances posées à leur date ;
+           — le CŒUR est une véritable horloge dont les aiguilles tournent
+             en direct.
+
+         C'est le même geste : lever les yeux vers une horloge pour savoir
+         où l'on en est. Ici on apprend l'heure ET la place dans l'année.
+
+         Tout est tracé en SVG — aucune bibliothèque à charger.
+         ------------------------------------------------------------------ */
+      $cx = 250; $cy = 250;
+      $R        = 236;   // bord extérieur
+      $rMois    = 208;   // anneau des noms de mois
+      $rJours   = 190;   // graduations journalières
+      $rPoints  = 176;   // premier anneau d'échéances
+      $rHorloge = 118;   // cadran de l'horloge
+
       $jourAn   = (int)date('z') + 1;
-      $totalJrs = (int)date('L') ? 366 : 365;
+      $totalJrs = ((int)date('L')) ? 366 : 365;
       $estCetteAnnee = $annee === (int)date('Y');
+      $partAnnee = $jourAn / $totalJrs;
     ?>
-    <div class="ech-cadran">
-      <svg viewBox="0 0 460 460" aria-label="Cadran des échéances de l'année <?= $annee ?>">
+    <div class="ech-horloge" id="horloge">
+      <svg viewBox="0 0 500 500" aria-label="Horloge des échéances — année <?= $annee ?>">
         <defs>
-          <radialGradient id="ecFond" cx="50%" cy="50%">
-            <stop offset="60%" stop-color="rgba(255,255,255,0)"/>
-            <stop offset="100%" stop-color="rgba(212,165,38,.07)"/>
+          <radialGradient id="hFond" cx="50%" cy="46%">
+            <stop offset="0%"   stop-color="rgba(212,165,38,.05)"/>
+            <stop offset="62%"  stop-color="rgba(255,255,255,0)"/>
+            <stop offset="100%" stop-color="rgba(212,165,38,.09)"/>
           </radialGradient>
+          <linearGradient id="hLaiton" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"   stop-color="#f7dd9a"/>
+            <stop offset="45%"  stop-color="#d4a526"/>
+            <stop offset="100%" stop-color="#8a6a12"/>
+          </linearGradient>
+          <linearGradient id="hParcouru" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%"   stop-color="rgba(240,193,75,.75)"/>
+            <stop offset="100%" stop-color="rgba(212,165,38,.3)"/>
+          </linearGradient>
+          <filter id="hLueur" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="4" result="f"/>
+            <feMerge><feMergeNode in="f"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="hOmbre" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity=".5"/>
+          </filter>
         </defs>
 
-        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="url(#ecFond)"/>
-        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R - 46 ?>" fill="none"
-                stroke="rgba(255,255,255,.07)" stroke-width="1"/>
+        <?php /* Boîtier : trois cercles concentriques donnent l'épaisseur. */ ?>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="url(#hFond)"/>
         <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R ?>" fill="none"
-                stroke="rgba(255,255,255,.09)" stroke-width="1"/>
+                stroke="url(#hLaiton)" stroke-width="2.5" opacity=".55"/>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $R - 7 ?>" fill="none"
+                stroke="rgba(255,255,255,.07)" stroke-width="1"/>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $rJours ?>" fill="none"
+                stroke="rgba(255,255,255,.08)" stroke-width="1"/>
 
         <?php
-        /* Séparateurs et noms des mois. Le premier janvier est en haut ;
-           l'année tourne dans le sens des aiguilles d'une montre. */
-        for ($m = 1; $m <= 12; $m++):
-            $a0 = deg2rad(($m - 1) * 30 - 90);
-            $am = deg2rad(($m - 1) * 30 + 15 - 90);
+        /* Arc de l'année écoulée : on voit d'un coup ce qui reste devant soi. */
+        if ($estCetteAnnee):
+            $rArc = $R - 3.5;
+            $angFin = $partAnnee * 360 - 90;
+            $xF = $cx + $rArc * cos(deg2rad($angFin));
+            $yF = $cy + $rArc * sin(deg2rad($angFin));
+            $grand = $partAnnee > 0.5 ? 1 : 0;
         ?>
-          <line x1="<?= round($cx + ($R - 46) * cos($a0), 1) ?>"
-                y1="<?= round($cy + ($R - 46) * sin($a0), 1) ?>"
-                x2="<?= round($cx + $R * cos($a0), 1) ?>"
-                y2="<?= round($cy + $R * sin($a0), 1) ?>"
-                stroke="rgba(255,255,255,.1)" stroke-width="1"/>
-          <text x="<?= round($cx + ($R - 23) * cos($am), 1) ?>"
-                y="<?= round($cy + ($R - 23) * sin($am) + 4, 1) ?>"
-                text-anchor="middle" font-size="11.5"
-                fill="<?= $estCetteAnnee && $m === (int)date('n') ? '#f0c14b' : 'rgba(255,255,255,.45)' ?>"
-                font-weight="<?= $estCetteAnnee && $m === (int)date('n') ? '700' : '400' ?>">
-            <?= $moisAbr[$m] ?></text>
+        <path d="M <?= $cx ?> <?= $cy - $rArc ?>
+                 A <?= $rArc ?> <?= $rArc ?> 0 <?= $grand ?> 1 <?= round($xF,1) ?> <?= round($yF,1) ?>"
+              fill="none" stroke="url(#hParcouru)" stroke-width="4" stroke-linecap="round"
+              filter="url(#hLueur)"/>
+        <?php endif; ?>
+
+        <?php
+        /* Graduation journalière : 365 traits fins. Le premier de chaque mois
+           est plus long — c'est ce qui donne l'aspect d'un instrument. */
+        for ($j = 0; $j < $totalJrs; $j++):
+            $a = deg2rad($j / $totalJrs * 360 - 90);
+            $estDebutMois = false;
+            $ts = mktime(0, 0, 0, 1, $j + 1, $annee);
+            if ((int)date('j', $ts) === 1) $estDebutMois = true;
+            $len = $estDebutMois ? 13 : (($j % 5 === 0) ? 7 : 4);
+            $op  = $estDebutMois ? '.55' : (($j % 5 === 0) ? '.26' : '.13');
+        ?>
+        <line x1="<?= round($cx + $rJours * cos($a), 1) ?>"
+              y1="<?= round($cy + $rJours * sin($a), 1) ?>"
+              x2="<?= round($cx + ($rJours - $len) * cos($a), 1) ?>"
+              y2="<?= round($cy + ($rJours - $len) * sin($a), 1) ?>"
+              stroke="#f0c14b" stroke-width="<?= $estDebutMois ? '1.8' : '1' ?>" opacity="<?= $op ?>"/>
         <?php endfor; ?>
 
         <?php
-        /* Chaque occurrence devient un point, posé à sa date exacte sur
-           l'anneau. Sa couleur dit son état : rouge en retard, or imminent,
-           vert accompli. */
-        $rayons = [];
+        /* Noms des mois, posés au milieu de leur secteur. */
+        for ($m = 1; $m <= 12; $m++):
+            $debutM = (int)date('z', mktime(0,0,0,$m,1,$annee));
+            $nbJ    = (int)date('t', mktime(0,0,0,$m,1,$annee));
+            $am = deg2rad(($debutM + $nbJ / 2) / $totalJrs * 360 - 90);
+            $courant = $estCetteAnnee && $m === (int)date('n');
+        ?>
+        <text x="<?= round($cx + $rMois * cos($am), 1) ?>"
+              y="<?= round($cy + $rMois * sin($am) + 4, 1) ?>"
+              text-anchor="middle" font-size="<?= $courant ? '13' : '11.5' ?>"
+              letter-spacing="1"
+              fill="<?= $courant ? '#f7dd9a' : 'rgba(255,255,255,.42)' ?>"
+              font-weight="<?= $courant ? '700' : '400' ?>"><?= $moisAbr[$m] ?></text>
+        <?php endfor; ?>
+
+        <?php
+        /* Les échéances. Chacune est posée à sa date exacte, sur l'un des
+           trois anneaux disponibles pour éviter les recouvrements.
+           Sa couleur est celle de sa catégorie ; son état la nuance. */
+        $compteJour = [];
         foreach ($parMois as $m => $occ):
-            foreach ($occ as $i => $o):
-                $jour = (int)date('j', strtotime($o['date']));
-                $dansMois = (int)date('t', strtotime($o['date']));
-                $ang = deg2rad(($m - 1) * 30 + ($jour - 1) / $dansMois * 30 - 90);
-                /* Plusieurs échéances le même mois se répartissent sur trois
-                   anneaux, pour ne pas se recouvrir. */
-                $r = $R - 62 - ($i % 3) * 19;
-                $coul = ['retard' => '#f87171', 'aujourdhui' => '#f0b429',
-                         'proche' => '#f0c14b', 'fait' => '#10b981',
-                         'a_venir' => 'rgba(125,211,252,.75)'][$o['etat']] ?? '#94a3b8';
+            foreach ($occ as $o):
+                $ts = strtotime($o['date']);
+                $jz = (int)date('z', $ts);
+                $ang = deg2rad($jz / $totalJrs * 360 - 90);
+
+                $cle = $m . '-' . (int)date('j', $ts);
+                $rang = $compteJour[$cle] ?? 0;
+                $compteJour[$cle] = $rang + 1;
+                $r = $rPoints - ($rang % 3) * 21;
+
+                $coulEtat = ['retard' => '#ff4d5e', 'aujourdhui' => '#f0b429',
+                             'proche' => '#f0c14b', 'fait' => '#10b981'][$o['etat']] ?? null;
+                $coul = $coulEtat ?: ech_couleur($o['categorie']);
                 $x = round($cx + $r * cos($ang), 1);
                 $y = round($cy + $r * sin($ang), 1);
         ?>
-          <circle class="ec-pt <?= e($o['etat']) ?>" cx="<?= $x ?>" cy="<?= $y ?>" r="5.5"
-                  fill="<?= $coul ?>"
+          <?php /* Tige reliant le point à la couronne : on lit la date sans effort. */ ?>
+          <line x1="<?= round($cx + ($rJours - 4) * cos($ang), 1) ?>"
+                y1="<?= round($cy + ($rJours - 4) * sin($ang), 1) ?>"
+                x2="<?= $x ?>" y2="<?= $y ?>"
+                stroke="<?= $coul ?>" stroke-width="1" opacity=".22"/>
+          <circle class="ec-pt <?= e($o['etat']) ?>" cx="<?= $x ?>" cy="<?= $y ?>" r="6"
+                  fill="<?= $coul ?>" filter="url(#hLueur)"
                   data-lib="<?= e($o['libelle']) ?>"
-                  data-date="<?= date('j', strtotime($o['date'])) . ' ' . $moisFr[$m] ?>"
+                  data-date="<?= date('j', $ts) . ' ' . mb_strtolower($moisFr[$m]) ?>"
                   data-etat="<?= e(ech_delai($o['jours'])) ?>">
-            <title><?= e($o['libelle']) ?> — <?= date('d/m/Y', strtotime($o['date'])) ?></title>
+            <title><?= e($o['libelle']) ?> — <?= date('d/m/Y', $ts) ?></title>
           </circle>
         <?php endforeach; endforeach; ?>
 
-        <?php if ($estCetteAnnee):
-          /* L'aiguille du jour : elle situe l'instant présent dans l'année. */
-          $angJour = deg2rad(($jourAn - 1) / $totalJrs * 360 - 90);
-        ?>
-        <line x1="<?= $cx ?>" y1="<?= $cy ?>"
-              x2="<?= round($cx + ($R - 8) * cos($angJour), 1) ?>"
-              y2="<?= round($cy + ($R - 8) * sin($angJour), 1) ?>"
-              stroke="#f0c14b" stroke-width="2" stroke-linecap="round" opacity=".85"/>
-        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="5" fill="#f0c14b"/>
-        <?php endif; ?>
+        <?php /* ---------- L'HORLOGE, au cœur ---------- */ ?>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $rHorloge ?>"
+                fill="rgba(4,10,22,.72)" stroke="url(#hLaiton)" stroke-width="1.6"
+                opacity=".95" filter="url(#hOmbre)"/>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="<?= $rHorloge - 6 ?>" fill="none"
+                stroke="rgba(255,255,255,.06)" stroke-width="1"/>
 
-        <text x="<?= $cx ?>" y="<?= $cy - 14 ?>" text-anchor="middle" font-size="13"
-              fill="rgba(255,255,255,.4)"><?= $estCetteAnnee ? "AUJOURD'HUI" : 'ANNÉE' ?></text>
-        <text x="<?= $cx ?>" y="<?= $cy + 16 ?>" text-anchor="middle" font-size="21"
-              fill="#fff" font-weight="700">
-          <?= $estCetteAnnee ? date('j') . ' ' . mb_strtolower($moisAbr[(int)date('n')]) : $annee ?></text>
+        <?php
+        /* Graduations de l'horloge : soixante minutes, douze heures marquées. */
+        for ($k = 0; $k < 60; $k++):
+            $a = deg2rad($k * 6 - 90);
+            $heure = $k % 5 === 0;
+            $r1 = $rHorloge - 12;
+            $r2 = $rHorloge - ($heure ? 24 : 18);
+        ?>
+        <line x1="<?= round($cx + $r1 * cos($a), 1) ?>" y1="<?= round($cy + $r1 * sin($a), 1) ?>"
+              x2="<?= round($cx + $r2 * cos($a), 1) ?>" y2="<?= round($cy + $r2 * sin($a), 1) ?>"
+              stroke="<?= $heure ? '#f0c14b' : 'rgba(255,255,255,.4)' ?>"
+              stroke-width="<?= $heure ? '2.4' : '1' ?>"
+              opacity="<?= $heure ? '.8' : '.3' ?>" stroke-linecap="round"/>
+        <?php endfor; ?>
+
+        <?php
+        /* Chiffres des heures. */
+        for ($h = 1; $h <= 12; $h++):
+            $a = deg2rad($h * 30 - 90);
+            $rc = $rHorloge - 40;
+        ?>
+        <text x="<?= round($cx + $rc * cos($a), 1) ?>"
+              y="<?= round($cy + $rc * sin($a) + 4.5, 1) ?>"
+              text-anchor="middle" font-size="12.5" fill="rgba(255,255,255,.5)"
+              font-weight="500"><?= $h ?></text>
+        <?php endfor; ?>
+
+        <?php
+        /* Les aiguilles, en fuseaux.
+
+           Elles étaient d'abord de simples lignes verticales — et l'aiguille
+           des heures restait invisible : un dégradé ne peut pas peindre une
+           forme dont la largeur est nulle, ce qui est le cas d'une ligne
+           strictement verticale. Un fuseau a une vraie surface, donc un vrai
+           dégradé, et il a l'allure d'une aiguille d'horloge.
+
+           Leur rotation est pilotée par le script. */
+        $ph = $cy - $rHorloge + 50;   // pointe des heures
+        $pm = $cy - $rHorloge + 22;   // pointe des minutes
+        ?>
+        <g id="aig-h" style="transform-origin:<?= $cx ?>px <?= $cy ?>px" filter="url(#hOmbre)">
+          <path d="M <?= $cx ?> <?= $ph ?>
+                   L <?= $cx + 4.5 ?> <?= $cy - 18 ?>
+                   L <?= $cx + 3 ?> <?= $cy + 16 ?>
+                   L <?= $cx - 3 ?> <?= $cy + 16 ?>
+                   L <?= $cx - 4.5 ?> <?= $cy - 18 ?> Z"
+                fill="url(#hLaiton)" stroke="rgba(0,0,0,.25)" stroke-width=".5"/>
+        </g>
+        <g id="aig-m" style="transform-origin:<?= $cx ?>px <?= $cy ?>px" filter="url(#hOmbre)">
+          <path d="M <?= $cx ?> <?= $pm ?>
+                   L <?= $cx + 3 ?> <?= $cy - 22 ?>
+                   L <?= $cx + 2 ?> <?= $cy + 20 ?>
+                   L <?= $cx - 2 ?> <?= $cy + 20 ?>
+                   L <?= $cx - 3 ?> <?= $cy - 22 ?> Z"
+                fill="#f7dd9a" stroke="rgba(0,0,0,.2)" stroke-width=".5"/>
+        </g>
+        <g id="aig-s" style="transform-origin:<?= $cx ?>px <?= $cy ?>px">
+          <?php /* La trotteuse garde un contrepoids, comme sur une vraie montre. */ ?>
+          <rect x="<?= $cx - 0.8 ?>" y="<?= $cy - $rHorloge + 14 ?>" width="1.6"
+                height="<?= $rHorloge + 14 ?>" fill="#ff4d5e" rx=".8"/>
+          <circle cx="<?= $cx ?>" cy="<?= $cy + 26 ?>" r="4" fill="#ff4d5e"/>
+        </g>
+
+        <?php /* Axe central, en dernier pour couvrir le pied des aiguilles. */ ?>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="7" fill="url(#hLaiton)"/>
+        <circle cx="<?= $cx ?>" cy="<?= $cy ?>" r="2.6" fill="#0a1020"/>
+
+        <?php
+        /* L'aiguille de l'année : la plus lente de toutes, elle pointe le jour
+           sur la couronne. Elle ne bouge visiblement qu'une fois par jour. */
+        if ($estCetteAnnee):
+            $angAn = deg2rad($partAnnee * 360 - 90);
+        ?>
+        <line x1="<?= round($cx + ($rHorloge + 4) * cos($angAn), 1) ?>"
+              y1="<?= round($cy + ($rHorloge + 4) * sin($angAn), 1) ?>"
+              x2="<?= round($cx + ($rJours - 2) * cos($angAn), 1) ?>"
+              y2="<?= round($cy + ($rJours - 2) * sin($angAn), 1) ?>"
+              stroke="#f0c14b" stroke-width="2.4" stroke-linecap="round"
+              opacity=".9" filter="url(#hLueur)"/>
+        <circle cx="<?= round($cx + $rJours * cos($angAn), 1) ?>"
+                cy="<?= round($cy + $rJours * sin($angAn), 1) ?>" r="4.5" fill="#f7dd9a"/>
+        <?php endif; ?>
       </svg>
 
       <div class="ec-bulle" id="ec-bulle" hidden></div>
     </div>
 
+    <?php
+      /* Sous le cadran, l'essentiel en clair. Le guichet de date était placé
+         dans l'horloge, à la façon d'une montre — mais les aiguilles le
+         traversaient. Ici rien ne le couvre, et l'on gagne l'information que
+         cette page doit donner : ce qui vient ensuite.
+
+         $aTraiter est déjà trié du plus urgent au moins urgent. */
+      $suivante = $aTraiter[0] ?? null;
+      if (!$suivante) {
+          foreach ($toutes as $eL) {
+              if (empty($eL['actif'])) continue;
+              foreach ($eL['occurrences'] as $oL) {
+                  if ($oL['etat'] === ECH_A_VENIR
+                      && ($suivante === null || $oL['jours'] < $suivante['jours'])) {
+                      $suivante = $eL + $oL;
+                  }
+              }
+          }
+      }
+    ?>
+    <div class="ec-barre">
+      <div class="eb-jour">
+        <span class="eb-n" id="eb-heure"><?= date('H:i') ?></span>
+        <span class="eb-l"><?= $estCetteAnnee
+            ? date('j') . ' ' . mb_strtolower($moisFr[(int)date('n')]) . ' ' . date('Y')
+            : 'Année ' . $annee ?></span>
+      </div>
+      <?php if ($suivante): ?>
+      <div class="eb-suite <?= e($suivante['etat']) ?>">
+        <span class="eb-t">Prochaine échéance</span>
+        <strong><?= e($suivante['libelle']) ?></strong>
+        <span class="eb-q"><?= e(ech_delai($suivante['jours'])) ?>
+          · <?= date('d/m/Y', strtotime($suivante['date'])) ?></span>
+      </div>
+      <?php else: ?>
+      <div class="eb-suite calme">
+        <span class="eb-t">Prochaine échéance</span>
+        <strong>Rien en vue</strong>
+        <span class="eb-q">Aucune obligation enregistrée pour cette période</span>
+      </div>
+      <?php endif; ?>
+    </div>
+
     <div class="ec-legende">
-      <span><i style="background:#f87171"></i>En retard</span>
+      <span><i style="background:#ff4d5e"></i>En retard</span>
       <span><i style="background:#f0b429"></i>Imminent</span>
-      <span><i style="background:rgba(125,211,252,.75)"></i>À venir</span>
+      <span><i class="cat"></i>À venir (couleur de sa catégorie)</span>
       <span><i style="background:#10b981"></i>Accompli</span>
     </div>
   </div>
@@ -379,8 +572,15 @@ admin_header('Échéances', 'echeances', $pdo, $settings);
 </div>
 
 <!-- ====================== FORMULAIRE ====================== -->
-<div class="panel glass" id="form">
-  <h2><?= $edit ? '✏️ Modifier l\'échéance' : '➕ Nouvelle échéance' ?></h2>
+<?php /* Le formulaire reste replié : la page s'ouvre sur ce qui compte —
+         l'horloge et les échéances — pas sur une vingtaine de champs vides.
+         Une modification en cours le déplie d'office. */ ?>
+<details class="panel glass ech-form" id="form" <?= $edit ? 'open' : '' ?>>
+  <summary class="ech-form-tete">
+    <span class="ef-plus">+</span>
+    <span class="ef-t"><?= $edit ? 'Modifier « ' . e($edit['libelle']) . ' »' : 'Ajouter une échéance' ?></span>
+    <span class="ef-chev">▾</span>
+  </summary>
   <form method="post" class="form-grid">
     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
     <?php if ($edit): ?><input type="hidden" name="id" value="<?= (int)$edit['id'] ?>"><?php endif; ?>
@@ -462,7 +662,7 @@ admin_header('Échéances', 'echeances', $pdo, $settings);
     </div>
     <input type="hidden" name="enregistrer" value="1">
   </form>
-</div>
+</details>
 
 <script>
 (function () {
@@ -491,6 +691,68 @@ admin_header('Échéances', 'echeances', $pdo, $settings);
   }
   sel.addEventListener('change', ajuster);
   ajuster();
+})();
+
+(function () {
+  /* ------------------------------------------------------------------
+     LES AIGUILLES
+
+     Elles tournent réellement. L'heure vient du poste de l'utilisateur,
+     pas du serveur : c'est l'heure qu'il a sous les yeux ailleurs sur son
+     écran, et un décalage serait déroutant.
+
+     L'aiguille des secondes avance en continu plutôt que par à-coups —
+     le mouvement est plus doux et coûte le même effort.
+     ------------------------------------------------------------------ */
+  var aH = document.getElementById('aig-h');
+  var aM = document.getElementById('aig-m');
+  var aS = document.getElementById('aig-s');
+  if (!aH || !aM || !aS) return;
+
+  var doux = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var horloge = document.getElementById('horloge');
+  var image = null;
+
+  function placer() {
+    var d = new Date();
+    var s = d.getSeconds() + d.getMilliseconds() / 1000;
+    var m = d.getMinutes() + s / 60;
+    var h = (d.getHours() % 12) + m / 60;
+
+    aH.style.transform = 'rotate(' + (h * 30) + 'deg)';
+    aM.style.transform = 'rotate(' + (m * 6) + 'deg)';
+    aS.style.transform = 'rotate(' + (s * 6) + 'deg)';
+  }
+
+  /* L'heure en clair, sous le cadran, suit les aiguilles. */
+  var champHeure = document.getElementById('eb-heure');
+  var derniereMin = -1;
+  function majHeure() {
+    var d = new Date();
+    if (d.getMinutes() === derniereMin) return;
+    derniereMin = d.getMinutes();
+    if (champHeure) {
+      champHeure.textContent = ('0' + d.getHours()).slice(-2) + ':'
+                             + ('0' + d.getMinutes()).slice(-2);
+    }
+  }
+
+  function boucle() { placer(); majHeure(); image = requestAnimationFrame(boucle); }
+
+  placer();
+  if (doux) {
+    image = requestAnimationFrame(boucle);
+
+    /* On arrête tout quand l'onglet passe en arrière-plan : animer une
+       horloge que personne ne regarde consomme de la batterie pour rien. */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { cancelAnimationFrame(image); }
+      else { image = requestAnimationFrame(boucle); }
+    });
+  } else {
+    /* Mouvement réduit : on se contente d'un rafraîchissement par minute. */
+    setInterval(function(){ placer(); majHeure(); }, 60000);
+  }
 })();
 
 (function () {

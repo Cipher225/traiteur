@@ -5,6 +5,11 @@
 --  MariaDB 10.2+ / MySQL 8 requis pour « ADD COLUMN IF NOT EXISTS ».
 -- ============================================================================
 
+-- Le client d'import doit parler UTF-8 : sans cette ligne, un client
+-- configuré en latin1 enregistre « événement » sous la forme « Ã©vÃ©nement »
+-- et les accents restent abîmés dans toute l'application.
+SET NAMES utf8mb4;
+
 -- Type de client (particulier / entreprise) + raison sociale
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS type_client ENUM('individuel','entreprise') DEFAULT 'individuel';
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS entreprise VARCHAR(150) DEFAULT '';
@@ -535,4 +540,102 @@ CREATE TABLE IF NOT EXISTS echeances_faites (
   note VARCHAR(255) DEFAULT '',
   UNIQUE KEY (echeance_id, periode),
   FOREIGN KEY (echeance_id) REFERENCES echeances(id) ON DELETE CASCADE
+);
+
+-- =====================================================================
+--  ASSISTANT DU SITE
+--
+--  La base de connaissances est découpée en SECTIONS plutôt qu'en un seul
+--  bloc de texte : on peut en désactiver une sans tout réécrire.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS ia_connaissances (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  titre VARCHAR(160) NOT NULL,
+  contenu TEXT NOT NULL,
+  mots_cles VARCHAR(255) DEFAULT '',
+  ordre SMALLINT DEFAULT 0,
+  actif TINYINT(1) DEFAULT 1,
+  maj TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Documents que l'assistant peut proposer au téléchargement.
+CREATE TABLE IF NOT EXISTS ia_documents (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  titre VARCHAR(160) NOT NULL,
+  description VARCHAR(400) DEFAULT '',
+  fichier VARCHAR(255) NOT NULL,
+  fichier_nom VARCHAR(255) NOT NULL,
+  taille INT DEFAULT 0,
+  mots_cles VARCHAR(255) DEFAULT '',
+  telechargements INT DEFAULT 0,
+  actif TINYINT(1) DEFAULT 1,
+  ordre SMALLINT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Conversations : ce que les visiteurs demandent vraiment.
+CREATE TABLE IF NOT EXISTS ia_conversations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  jeton VARCHAR(64) NOT NULL,
+  ip VARCHAR(45) DEFAULT '',
+  visiteur_nom VARCHAR(120) DEFAULT '',
+  visiteur_tel VARCHAR(40) DEFAULT '',
+  nb_messages SMALLINT DEFAULT 0,
+  transmise TINYINT(1) DEFAULT 0,
+  commande_id INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  maj DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX (jeton), INDEX (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS ia_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  role VARCHAR(12) NOT NULL,
+  contenu TEXT NOT NULL,
+  sans_reponse TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (conversation_id),
+  FOREIGN KEY (conversation_id) REFERENCES ia_conversations(id) ON DELETE CASCADE
+);
+
+-- Consommation quotidienne, pour tenir le plafond.
+CREATE TABLE IF NOT EXISTS ia_usage (
+  jour DATE NOT NULL PRIMARY KEY,
+  appels INT DEFAULT 0,
+  jetons_entree INT DEFAULT 0,
+  jetons_sortie INT DEFAULT 0
+);
+
+-- =====================================================================
+--  TRANSFERT AU SECRÉTARIAT
+--
+--  Une demande transmise par l'assistant n'est pas « envoyée puis
+--  oubliée » : elle a un état, un responsable, un canal de réponse et
+--  une échéance. Sans cela, personne n'est comptable de rien.
+-- =====================================================================
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS visiteur_email VARCHAR(160) DEFAULT '';
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS statut VARCHAR(20) DEFAULT 'ouverte';
+   -- ouverte | transmise | prise | traitee | classee
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS transmise_le DATETIME NULL;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS echeance_reponse DATETIME NULL;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS pris_par INT DEFAULT NULL;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS pris_le DATETIME NULL;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS traite_le DATETIME NULL;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS canal_reponse VARCHAR(16) DEFAULT '';
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS note_interne TEXT;
+ALTER TABLE ia_conversations ADD COLUMN IF NOT EXISTS relance_envoyee TINYINT(1) DEFAULT 0;
+
+-- Ce qui a été fait sur une demande : qui, quand, par quel canal.
+CREATE TABLE IF NOT EXISTS ia_suivi (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  conversation_id INT NOT NULL,
+  acteur_id INT DEFAULT NULL,
+  acteur_nom VARCHAR(120) DEFAULT '',
+  action VARCHAR(30) NOT NULL,        -- transmise | prise | relance | reponse | traitee | note
+  canal VARCHAR(16) DEFAULT '',       -- email | whatsapp | telephone
+  detail TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (conversation_id),
+  FOREIGN KEY (conversation_id) REFERENCES ia_conversations(id) ON DELETE CASCADE
 );

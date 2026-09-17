@@ -1,0 +1,5 @@
+# Les documents ne sont jamais servis directement : ia-document.php vérifie
+# que le fichier est bien publié avant de l'envoyer.
+<FilesMatch ".*">
+  Require all denied
+</FilesMatch>

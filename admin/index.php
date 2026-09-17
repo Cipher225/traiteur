@@ -254,6 +254,34 @@ try {
     }
 } catch (Throwable $e) {}
 
+/* ----------------------------------------------------------------------------
+   Demandes laissées à l'assistant du site.
+
+   Un visiteur qui a donné son numéro attend un appel. Passé le délai promis,
+   l'affaire ne regarde plus le seul secrétariat : elle remonte ici.
+   ---------------------------------------------------------------------------- */
+if (is_admin()) {
+    try {
+        require_once __DIR__ . '/../config/ia.php';
+        $dem = ia_compteur_demandes($pdo);
+
+        if ($dem['retard'] > 0) {
+            $alertes[] = ['urgent', '📞',
+                          $dem['retard'] . ' demande' . ($dem['retard'] > 1 ? 's' : '')
+                            . ' du site sans réponse',
+                          'Le délai de rappel promis au visiteur est dépassé',
+                          'assistant.php#demandes', 'Traiter'];
+        } elseif ($dem['attente'] > 0) {
+            $alertes[] = ['attention', '📨',
+                          $dem['attente'] . ' demande' . ($dem['attente'] > 1 ? 's' : '')
+                            . ' à rappeler',
+                          "Transmise" . ($dem['attente'] > 1 ? 's' : '')
+                            . " par l'assistant, personne ne les a encore prises",
+                          'assistant.php#demandes', 'Voir'];
+        }
+    } catch (Throwable $e) {}
+}
+
 // Articles sous le seuil d'alerte
 if (can('stock')) {
     try {

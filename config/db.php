@@ -755,7 +755,7 @@ function all_modules(): array {
     return [
         'commandes_client' => ['Commandes clients', '📦', 'commandes-client.php', 'activite', false, false],
         'calendrier'   => ['Calendrier',     '📅', 'calendrier.php',   'activite', false, false],
-        'echeances'    => ['Échéances',      '🕓', 'echeances.php',    'activite', false, false],
+        'echeances'    => ['Échéances & Rappels', '🕓', 'echeances.php', 'activite', false, false],
         'recherche'    => ['Recherche', '🔍', 'recherche.php', 'activite', false, true],
         'messages'     => ['E-mail', '✉️', 'messages.php', 'echange', false, false],
         'annuaire'     => ['Annuaire', '📇', 'annuaire.php', 'commercial', false, false],
@@ -787,6 +787,7 @@ function all_modules(): array {
         'galerie'      => ['Galerie',        '📸', 'galerie.php',      'site',    false, false],
         'videos'       => ['Vidéos',         '🎬', 'videos.php',       'site',    false, false],
         'temoignages'  => ['Témoignages',    '💬', 'temoignages.php',  'site',    false, false],
+        'assistant'    => ['Assistant IA',   '🤖', 'assistant.php',   'site',    true,  false],
         'parametres'   => ['Paramètres',     '⚙️', 'parametres.php',   'site',    true,  false],
         /* Réservé à l'administrateur : ces mesures n'intéressent pas un employé. */
         'systeme'      => ['État du serveur', '📡', 'systeme.php',     'technique', true, false],

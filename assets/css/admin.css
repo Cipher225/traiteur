@@ -3480,14 +3480,42 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 @media (max-width:900px){ .ech-haut{grid-template-columns:1fr} }
 .ech-nav{display:flex;gap:6px;margin-left:auto}
 
-/* ---- Cadran ---- */
-.ech-cadran{position:relative;max-width:460px;margin:0 auto}
-.ech-cadran svg{width:100%;height:auto;display:block}
+/* ---- Horloge ----
+   Le cadran porte deux lectures : l'année en couronne, l'heure au cœur.
+   Les aiguilles tournent pour de vrai — voir le script de la page. */
+.ech-horloge{position:relative;max-width:500px;margin:0 auto}
+.ech-horloge svg{width:100%;height:auto;display:block;overflow:visible}
+
+/* Les aiguilles tournent autour du centre du cadran. Aucune transition CSS :
+   le script les repositionne à chaque image, une transition les ferait
+   trembler. */
+#aig-h,#aig-m,#aig-s{will-change:transform}
+
 .ec-pt{cursor:pointer;transition:r .2s}
-.ec-pt:hover{r:8}
+.ec-pt:hover{r:9}
 /* Une échéance en retard pulse : elle doit attirer l'œil. */
 .ec-pt.retard{animation:ecBat 2.2s ease-in-out infinite}
-@keyframes ecBat{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes ecBat{0%,100%{opacity:1}50%{opacity:.35}}
+.ec-pt.aujourdhui{animation:ecBat 3s ease-in-out infinite}
+
+/* ---- Formulaire replié ---- */
+.ech-form{padding:0;overflow:hidden}
+.ech-form-tete{display:flex;align-items:center;gap:12px;cursor:pointer;
+  padding:15px 19px;list-style:none;user-select:none;
+  transition:background .18s}
+.ech-form-tete::-webkit-details-marker{display:none}
+.ech-form-tete:hover{background:rgba(212,165,38,.05)}
+.ef-plus{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;
+  flex-shrink:0;font-size:16px;font-weight:700;color:#0a1020;
+  background:linear-gradient(135deg,#e9c15c,#d4a526);
+  transition:transform .25s cubic-bezier(.2,.9,.3,1.4)}
+.ech-form[open] .ef-plus{transform:rotate(135deg)}
+.ef-t{flex:1;font-size:14px;font-weight:600;color:var(--ink)}
+.ef-chev{color:var(--ink-faint);font-size:12px;transition:transform .22s}
+.ech-form[open] .ef-chev{transform:rotate(180deg)}
+.ech-form .form-grid{padding:0 19px 19px;
+  animation:efOuvre .28s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes efOuvre{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 
 .ec-bulle{position:absolute;z-index:5;transform:translate(-50%,-100%);pointer-events:none;
   padding:8px 13px;border-radius:11px;white-space:nowrap;
@@ -3500,6 +3528,8 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
   padding-top:11px;border-top:1px solid var(--glass-border)}
 .ec-legende span{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-faint)}
 .ec-legende i{width:9px;height:9px;border-radius:50%;display:inline-block}
+/* Sans échéance urgente, le point prend la couleur de sa catégorie. */
+.ec-legende i.cat{background:linear-gradient(135deg,#a78bfa,#38bdf8,#34d399)}
 
 /* ---- Listes ---- */
 .ech-liste{display:flex;flex-direction:column;gap:7px}
@@ -3551,3 +3581,201 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .ee-a{display:flex;gap:4px;flex-shrink:0}
 
 @media (prefers-reduced-motion: reduce){ .ec-pt.retard{animation:none} }
+
+/* ============================================================
+   ASSISTANT — ADMINISTRATION
+   ============================================================ */
+.ia-etat{display:flex;align-items:center;gap:13px;flex-wrap:wrap;
+  padding:13px 17px;border-radius:14px;margin-bottom:14px}
+.ia-etat.on{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.28)}
+.ia-etat.off{background:rgba(255,255,255,.03);border:1px solid var(--glass-border)}
+.ie-pt{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ia-etat.on .ie-pt{background:#10b981;box-shadow:0 0 10px rgba(16,185,129,.7)}
+.ia-etat.off .ie-pt{background:var(--ink-faint)}
+.ia-etat strong{display:block;font-size:13.5px;color:var(--ink)}
+.ia-etat span:not(.ie-pt):not(.ie-avert){display:block;font-size:12px;color:var(--ink-faint);margin-top:2px}
+.ie-avert{margin-left:auto;font-size:11.5px;color:#f0b429;padding:4px 11px;border-radius:14px;
+  background:rgba(240,180,41,.1);border:1px solid rgba(240,180,41,.28)}
+
+.ia-essai .ie-q{margin:0 0 9px;font-size:12.5px;color:var(--ink-faint);
+  padding-left:11px;border-left:2px solid var(--glass-border)}
+.ia-essai .ie-r{margin:0;font-size:13.5px;color:var(--ink);line-height:1.65}
+.ia-essai .ie-j{display:block;margin-top:9px;font-size:10.5px;color:var(--ink-faint)}
+
+.ia-aide{margin:-4px 0 13px;font-size:12.5px;color:var(--ink-faint);line-height:1.65}
+.ia-vide{margin:0;font-size:13px;color:var(--ink-faint);line-height:1.65}
+.ia-liste{display:flex;flex-direction:column;gap:7px}
+
+.is{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;border-radius:12px;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.is.inactive{opacity:.5}
+.is-ico{font-size:16px;flex-shrink:0;padding-top:1px}
+.is-c{flex:1;min-width:0}
+.is-t{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:13px;font-weight:600;color:var(--ink)}
+.is-d{margin-top:2px;font-size:11.5px;color:var(--ink-faint);line-height:1.5}
+.is-off{font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:12px;
+  color:var(--ink-faint);background:rgba(0,0,0,.25)}
+.is-ok{font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:12px;
+  color:#10b981;background:rgba(16,185,129,.13)}
+.is-tel{font-size:10.5px;font-weight:400;color:var(--ink-faint)}
+.is-a{display:flex;gap:4px;flex-shrink:0}
+
+.ia-test{display:flex;gap:8px;margin-top:14px;padding-top:13px;
+  border-top:1px solid var(--glass-border);flex-wrap:wrap}
+.ia-test input{flex:1;min-width:190px;padding:9px 14px}
+
+/* Barre sous l'horloge : l'heure en clair et ce qui vient ensuite */
+.ec-barre{display:flex;align-items:stretch;gap:12px;margin-top:14px;flex-wrap:wrap}
+.eb-jour{flex-shrink:0;padding:11px 16px;border-radius:13px;text-align:center;
+  background:rgba(0,0,0,.24);border:1px solid rgba(240,193,75,.22)}
+.eb-n{display:block;font-size:22px;font-weight:700;color:#f7dd9a;letter-spacing:.5px;
+  font-variant-numeric:tabular-nums;line-height:1.1;
+  font-family:ui-monospace,'SFMono-Regular',Menlo,monospace}
+.eb-l{display:block;font-size:10.5px;color:var(--ink-faint);margin-top:3px}
+.eb-suite{flex:1;min-width:190px;padding:11px 16px;border-radius:13px;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border);
+  border-left:3px solid var(--ink-faint)}
+.eb-suite.retard{border-left-color:#ff4d5e;background:rgba(255,77,94,.06)}
+.eb-suite.aujourdhui{border-left-color:#f0b429;background:rgba(240,180,41,.06)}
+.eb-suite.proche{border-left-color:#f0c14b}
+.eb-suite.a_venir{border-left-color:#7dd3fc}
+.eb-suite.calme{border-left-color:#10b981}
+.eb-t{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint)}
+.eb-suite strong{display:block;font-size:13.5px;color:var(--ink);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eb-q{display:block;font-size:11px;color:var(--ink-faint);margin-top:2px}
+.eb-suite.retard .eb-q{color:#ff4d5e}
+.eb-suite.aujourdhui .eb-q{color:#f0b429}
+
+/* ============================================================
+   ASSISTANT — DEMANDES TRANSMISES
+
+   Une demande transmise est une personne qui attend un appel.
+   L'affichage est donc ordonné par le temps qui reste, et le
+   retard se voit de loin sans avoir à lire.
+   ============================================================ */
+.ia-heures{margin-left:auto;font-size:11.5px;color:var(--ink-faint);
+  padding:4px 12px;border-radius:14px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);white-space:nowrap}
+.ih-on{color:#10b981;font-weight:600}
+.ih-off{color:var(--ink-faint);font-weight:600}
+
+.ia-retard{margin:0 0 13px;padding:11px 15px;border-radius:12px;font-size:12.5px;
+  color:#ffb3bb;background:rgba(255,77,94,.09);border:1px solid rgba(255,77,94,.3);
+  border-left:3px solid #ff4d5e;line-height:1.6}
+.ia-retard strong{color:#ff6b7a;font-size:14px}
+
+.ia-filtres{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px}
+.if-b{font-size:11.5px;padding:6px 13px;border-radius:14px;text-decoration:none;
+  color:var(--ink-faint);background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);transition:.16s;display:inline-flex;
+  align-items:center;gap:6px}
+.if-b:hover{color:var(--ink);border-color:rgba(240,193,75,.35)}
+.if-b.on{color:#0a1020;background:var(--gold,#d4a526);border-color:transparent;font-weight:700}
+.if-b.alerte:not(.on){color:#ff6b7a;border-color:rgba(255,77,94,.35)}
+.if-b span{font-size:10px;font-weight:700;padding:0 5px;border-radius:9px;
+  background:var(--glass-border)}
+.if-b.on span{background:rgba(0,0,0,.18)}
+
+.ia-dem{display:flex;flex-direction:column;gap:8px}
+.ia-dem.defilant{max-height:520px}
+.ia-dem.deployee{max-height:none;overflow:visible}
+
+.dem{border-radius:13px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);border-left:3px solid var(--ink-faint);
+  overflow:hidden;transition:.16s}
+.dem.ok{border-left-color:#10b981}
+.dem.urgent{border-left-color:#f0b429}
+.dem.retard{border-left-color:#ff4d5e;background:rgba(255,77,94,.05)}
+.dem.ouverte{border-color:rgba(240,193,75,.35);background:rgba(240,193,75,.04)}
+
+.dem-tete{display:flex;align-items:flex-start;gap:11px;padding:11px 14px}
+.dem-ico{font-size:12px;flex-shrink:0;padding-top:3px}
+.dem-id{flex:1;min-width:0}
+.dem-nom{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:13.5px;font-weight:600;color:var(--ink)}
+.dem-etat{font-size:9.5px;font-weight:700;padding:1px 8px;border-radius:12px;
+  letter-spacing:.03em}
+.dem-etat.att{color:#7dd3fc;background:rgba(125,211,252,.13)}
+.dem-etat.pri{color:#f0c14b;background:rgba(240,193,75,.13)}
+.dem-etat.tra{color:#10b981;background:rgba(16,185,129,.13)}
+.dem-delai{font-size:10.5px;font-weight:600}
+.dem-delai.ok{color:var(--ink-faint)}
+.dem-delai.urgent{color:#f0b429}
+.dem-delai.retard{color:#ff6b7a}
+.dem-coord{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:4px;font-size:11.5px;color:var(--ink-faint)}
+.dc-wa{color:#25d366;text-decoration:none}
+.dc-ml{color:#7dd3fc;text-decoration:none}
+.dc-wa:hover,.dc-ml:hover{text-decoration:underline}
+.dem-plus{flex-shrink:0;font-size:11px;padding:5px 13px;border-radius:12px;
+  text-decoration:none;color:var(--ink);background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);transition:.16s}
+.dem-plus:hover{border-color:rgba(240,193,75,.4)}
+
+.dem-corps{padding:0 14px 14px;border-top:1px solid var(--glass-border);margin-top:2px}
+
+/* Le fil de la conversation, tel que le visiteur l'a vécu */
+.dem-fil{max-height:420px;overflow-y:auto;padding:13px 2px 4px;
+  display:flex;flex-direction:column;gap:9px}
+.df-m{max-width:82%;padding:9px 13px;border-radius:13px;font-size:12.5px;line-height:1.6}
+.df-m p{margin:3px 0 0;color:var(--ink)}
+.df-q{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint)}
+.df-m.v{align-self:flex-start;background:rgba(255,255,255,.05);
+  border:1px solid var(--glass-border);border-bottom-left-radius:4px}
+.df-m.a{align-self:flex-end;background:rgba(240,193,75,.08);
+  border:1px solid rgba(240,193,75,.2);border-bottom-right-radius:4px}
+
+/* Ce qui a été fait, dans l'ordre */
+.dem-suivi{margin-top:12px;padding-top:11px;border-top:1px solid var(--glass-border);
+  display:flex;flex-direction:column;gap:6px}
+.ds-l{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;font-size:11.5px}
+.ds-p{width:6px;height:6px;border-radius:50%;background:var(--gold,#d4a526);flex-shrink:0}
+.ds-d{color:var(--ink-faint);font-variant-numeric:tabular-nums;flex-shrink:0}
+.ds-a{color:var(--ink);font-weight:600}
+.ds-a em{font-style:normal;font-weight:400;color:var(--ink-faint)}
+.ds-w{color:var(--ink-faint)}
+.ds-x{flex-basis:100%;margin-left:15px;color:var(--ink-faint);font-size:11px;
+  padding-left:9px;border-left:2px solid var(--glass-border);line-height:1.55}
+
+.dem-actes{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;
+  padding-top:12px;border-top:1px solid var(--glass-border)}
+
+.dem-canaux{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:11px;margin-top:12px}
+.dem-canal{padding:12px 14px;border-radius:12px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);display:flex;flex-direction:column;gap:7px}
+.dem-canal.wa{border-left:3px solid #25d366}
+.dem-canal.ml{border-left:3px solid #7dd3fc}
+.dem-canal label{font-size:12px;font-weight:600;color:var(--ink)}
+.dem-canal .input{font-size:12.5px;padding:8px 12px}
+.dem-canal .btn{align-self:flex-start}
+.dem-canal .ia-aide{margin:0}
+
+.dem-note{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+.dem-note label{font-size:12px;font-weight:600;color:var(--ink)}
+.dem-note .ia-aide{margin:0;display:inline}
+.dem-note .input{font-size:12.5px;padding:8px 12px}
+.dem-note .btn{align-self:flex-start}
+
+/* Jours d'ouverture : des pastilles, pas une liste de cases */
+.ia-sep{padding-top:13px;border-top:1px solid var(--glass-border);margin-top:4px}
+.ia-sep>span:first-child{display:block;font-size:12.5px;font-weight:700;
+  color:var(--ink);letter-spacing:.02em;margin-bottom:3px}
+.ia-jours{display:flex;gap:6px;flex-wrap:wrap}
+.ij{position:relative;cursor:pointer;user-select:none}
+.ij input{position:absolute;opacity:0;pointer-events:none}
+.ij span{display:block;padding:7px 15px;border-radius:12px;font-size:12px;
+  color:var(--ink-faint);background:var(--glass-border-soft);
+  border:1px solid var(--glass-border);transition:.16s;text-transform:capitalize}
+.ij input:checked+span{color:#0a1020;background:var(--gold,#d4a526);
+  border-color:transparent;font-weight:700}
+.ij input:focus-visible+span{outline:2px solid var(--gold,#d4a526);outline-offset:2px}
+
+@media (max-width:640px){
+  .ia-heures{margin-left:0;white-space:normal}
+  .dem-canaux{grid-template-columns:1fr}
+  .df-m{max-width:94%}
+}

@@ -8,6 +8,10 @@ $categories = $pdo->query("SELECT * FROM categories WHERE actif=1 ORDER BY ordre
 $plats = $pdo->query("SELECT * FROM plats WHERE actif=1 ORDER BY categorie_id, ordre, id")->fetchAll();
 /* Galerie : on charge les photos actives avec leur album, pour permettre
    au visiteur de filtrer par type de prestation. */
+/* Assistant du site : la bulle n'apparaît que s'il est activé. */
+require_once __DIR__ . '/config/ia.php';
+$iaReglages = ia_reglages($pdo);
+
 $galerie = $pdo->query("SELECT g.*, a.nom AS album_nom, a.icone AS album_icone, a.id AS aid
                         FROM galerie g LEFT JOIN galerie_albums a ON a.id = g.album_id
                         WHERE COALESCE(g.actif,1) = 1
@@ -877,5 +881,229 @@ $f = flash();
 })();
 </script>
 <script src="<?= asset('assets/js/ui.js') ?>"></script>
+
+<?php if ($iaReglages['active']): ?>
+<!-- ====================== ASSISTANT ====================== -->
+<?php /* La clé n'apparaît jamais ici : tout passe par ia-chat.php, côté serveur. */ ?>
+<div class="asst" id="asst" data-mode="<?= e($iaReglages['declenchement']) ?>">
+  <button type="button" class="as-bulle" id="as-ouvrir" aria-label="Discuter avec nous">
+    <span class="as-ico">💬</span>
+  </button>
+
+  <div class="as-invite" id="as-invite" hidden>
+    <span>Une question sur nos prestations ?</span>
+    <button type="button" class="as-inv-x" aria-label="Fermer">✕</button>
+  </div>
+
+  <div class="as-fen" id="as-fen" hidden>
+    <div class="as-tete">
+      <div class="as-t-id">
+        <span class="as-t-pt"></span>
+        <div>
+          <strong><?= e($s['nom_entreprise'] ?? 'Assistant') ?></strong>
+          <span>Réponse immédiate</span>
+        </div>
+      </div>
+      <button type="button" class="as-fermer" id="as-fermer" aria-label="Fermer">✕</button>
+    </div>
+
+    <div class="as-fil" id="as-fil"></div>
+
+    <div class="as-saisie">
+      <input type="text" id="as-champ" maxlength="500"
+             placeholder="Écrivez votre question…" autocomplete="off">
+      <button type="button" id="as-envoyer" aria-label="Envoyer">➤</button>
+    </div>
+    <div class="as-pied">Nos conseillers reprennent la main pour tout devis.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var racine = document.getElementById('asst');
+  if (!racine) return;
+
+  var ouvrir  = document.getElementById('as-ouvrir');
+  var fermer  = document.getElementById('as-fermer');
+  var fen     = document.getElementById('as-fen');
+  var fil     = document.getElementById('as-fil');
+  var champ   = document.getElementById('as-champ');
+  var envoyer = document.getElementById('as-envoyer');
+  var invite  = document.getElementById('as-invite');
+
+  var jeton = null, occupe = false, demarre = false;
+
+  function ligne(role, texte, docs) {
+    var d = document.createElement('div');
+    d.className = 'as-m ' + role;
+    var p = document.createElement('p');
+    p.textContent = texte;
+    d.appendChild(p);
+
+    (docs || []).forEach(function (doc) {
+      var a = document.createElement('a');
+      a.className = 'as-doc';
+      a.href = doc.lien;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.innerHTML = '<span class="ad-i">📄</span><span class="ad-c"><strong></strong>'
+                  + '<em></em></span><span class="ad-t">⬇</span>';
+      a.querySelector('strong').textContent = doc.titre;
+      a.querySelector('em').textContent = doc.detail || doc.poids || 'Télécharger';
+      d.appendChild(a);
+    });
+
+    fil.appendChild(d);
+    fil.scrollTop = fil.scrollHeight;
+    return d;
+  }
+
+  function attente() {
+    var d = document.createElement('div');
+    d.className = 'as-m assistant as-attend';
+    d.innerHTML = '<span></span><span></span><span></span>';
+    fil.appendChild(d);
+    fil.scrollTop = fil.scrollHeight;
+    return d;
+  }
+
+  /* ------------------------------------------------------------------
+     Le récapitulatif à confirmer.
+
+     L'assistant a mené la conversation ; ce formulaire garantit que les
+     coordonnées arrivent justes. Un chiffre manquant dans un numéro fait
+     perdre la demande, et on ne s'en aperçoit qu'au rappel manqué.
+     ------------------------------------------------------------------ */
+  function formulaire(pre) {
+    var f = document.createElement('div');
+    f.className = 'as-form';
+    f.innerHTML =
+      '<div class="af-t">Vos coordonnées</div>'
+      + '<input class="af-i" data-k="nom" type="text" placeholder="Votre nom" maxlength="120">'
+      + '<input class="af-i" data-k="tel" type="tel" placeholder="Numéro WhatsApp" maxlength="24">'
+      + '<input class="af-i" data-k="email" type="email" placeholder="Adresse email" maxlength="160">'
+      + '<div class="af-err" hidden></div>'
+      + '<button type="button" class="af-b">Transmettre ma demande</button>'
+      + '<span class="af-n"></span>';
+
+    f.querySelector('[data-k="tel"]').value = pre.tel || '';
+    f.querySelector('[data-k="email"]').value = pre.email || '';
+    f.querySelector('.af-n').textContent = pre.promesse || '';
+
+    var err = f.querySelector('.af-err');
+    var bouton = f.querySelector('.af-b');
+
+    bouton.addEventListener('click', function () {
+      var vals = {};
+      f.querySelectorAll('.af-i').forEach(function (i) { vals[i.dataset.k] = i.value.trim(); });
+
+      bouton.disabled = true;
+      bouton.textContent = 'Envoi…';
+      err.hidden = true;
+
+      appeler({ action: 'transmettre', jeton: jeton, nom: vals.nom,
+                tel: vals.tel, email: vals.email })
+        .then(function (d) {
+          if (d && d.ok) {
+            f.remove();
+            var c = document.createElement('div');
+            c.className = 'as-confirme';
+            c.innerHTML = '<strong>✓ Demande transmise</strong><span></span>';
+            c.querySelector('span').textContent = d.message || '';
+            fil.appendChild(c);
+            fil.scrollTop = fil.scrollHeight;
+          } else {
+            err.textContent = (d && d.message) || "L'envoi n'a pas abouti.";
+            err.hidden = false;
+            bouton.disabled = false;
+            bouton.textContent = 'Transmettre ma demande';
+          }
+        })
+        .catch(function () {
+          err.textContent = 'Connexion interrompue. Réessayez.';
+          err.hidden = false;
+          bouton.disabled = false;
+          bouton.textContent = 'Transmettre ma demande';
+        });
+    });
+
+    fil.appendChild(f);
+    fil.scrollTop = fil.scrollHeight;
+    var premier = f.querySelector('[data-k="nom"]');
+    if (premier) premier.focus();
+  }
+
+  function appeler(charge) {
+    return fetch('ia-chat.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(charge)
+    }).then(function (r) { return r.json(); });
+  }
+
+  function demarrer() {
+    if (demarre) return;
+    demarre = true;
+    appeler({ action: 'ouvrir' }).then(function (d) {
+      jeton = d.jeton;
+      ligne('assistant', d.accueil || 'Bonjour, comment pouvons-nous vous aider ?');
+    }).catch(function () {
+      ligne('assistant', 'Bonjour ! Posez-nous votre question.');
+    });
+  }
+
+  function envoi() {
+    var t = (champ.value || '').trim();
+    if (!t || occupe) return;
+
+    champ.value = '';
+    ligne('visiteur', t);
+    occupe = true;
+    var att = attente();
+
+    appeler({ action: 'message', jeton: jeton, message: t })
+      .then(function (d) {
+        att.remove();
+        if (d && d.jeton) jeton = d.jeton;
+        ligne('assistant',
+              (d && d.reponse) || "Je n'ai pas pu répondre. Appelez-nous, nous vous renseignerons.",
+              d && d.documents);
+        if (d && d.formulaire) formulaire(d.formulaire);
+      })
+      .catch(function () {
+        att.remove();
+        /* Panne réseau : on ne montre aucun message technique. */
+        ligne('assistant', 'La connexion a été interrompue. Réessayez, ou appelez-nous directement.');
+      })
+      .finally(function () { occupe = false; champ.focus(); });
+  }
+
+  ouvrir.addEventListener('click', function () {
+    fen.hidden = !fen.hidden;
+    racine.classList.toggle('ouvert', !fen.hidden);
+    if (invite) invite.hidden = true;
+    if (!fen.hidden) { demarrer(); champ.focus(); }
+  });
+  fermer.addEventListener('click', function () {
+    fen.hidden = true;
+    racine.classList.remove('ouvert');
+  });
+  envoyer.addEventListener('click', envoi);
+  champ.addEventListener('keydown', function (e) { if (e.key === 'Enter') envoi(); });
+
+  /* Invitation : elle ne se montre qu'une fois par visite, et disparaît au
+     premier signe de désintérêt. */
+  if (racine.dataset.mode === 'invitation' && invite) {
+    setTimeout(function () { if (fen.hidden) invite.hidden = false; }, 12000);
+    invite.querySelector('.as-inv-x').addEventListener('click', function (e) {
+      e.stopPropagation();
+      invite.hidden = true;
+    });
+    invite.addEventListener('click', function () { ouvrir.click(); });
+  }
+})();
+</script>
+<?php endif; ?>
+
 </body>
 </html>
