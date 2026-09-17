@@ -331,7 +331,7 @@ try {
   $moisNoms = ['', 'jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
   $jourPrec = '';
   ?>
-  <div class="jrn">
+  <div class="jrn defilant">
     <?php foreach ($ops as $o):
       $d = strtotime($o['date_operation']);
       $jour = date('Y-m-d', $d);

@@ -149,7 +149,7 @@ admin_header('Stock', 'stock', $pdo, $settings);
   <?php if (!$articles): ?>
     <p style="text-align:center;color:var(--ink-dim);padding:30px">Aucun article. Ajoutez votre premier article ci-dessus.</p>
   <?php else: ?>
-  <div class="stock-liste">
+  <div class="stock-liste defilant">
     <?php foreach ($articles as $a):
       $bas = $a['seuil_alerte'] > 0 && $a['quantite'] <= $a['seuil_alerte'];
     ?>

@@ -105,7 +105,7 @@ admin_header('Relance des impayés', 'relances', $pdo, $settings);
   <?php if (!$impayees): ?>
     <p style="color:var(--ink-faint)">Aucune facture en attente. Tout est encaissé. 🎉</p>
   <?php else: ?>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Facture</th><th>Client</th><th>Échéance</th><th>Retard</th><th>Restant dû</th><th>Relances</th><th></th></tr></thead>
       <tbody>
@@ -146,7 +146,7 @@ admin_header('Relance des impayés', 'relances', $pdo, $settings);
 <?php if ($histo): ?>
 <div class="panel glass">
   <h2>📜 Relances envoyées</h2>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Date</th><th>Facture</th><th>Client</th><th>Niveau</th><th>Montant</th><th>Origine</th><th>État</th></tr></thead>
       <tbody>

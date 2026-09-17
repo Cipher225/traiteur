@@ -663,7 +663,7 @@ $nomFournisseur = $fournisseurs[$serveur] ?? ($serveur !== '' ? $serveur : '');
     <button class="btn btn-glass btn-sm" name="purger_historique" value="tout">🧹 Vider l'historique</button>
   </form>
   <?php endif; ?>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Date</th><th>Destinataire</th><th>Objet</th><th>Pièces</th><th>Référence</th><th>État</th><th></th></tr></thead>
       <tbody>

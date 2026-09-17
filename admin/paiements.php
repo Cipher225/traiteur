@@ -137,7 +137,7 @@ $devise = $settings['devise'] ?? 'FCFA';
   <?php if (!$paiements): ?>
     <p style="color:var(--ink-faint)">Aucun paiement pour le moment.</p>
   <?php else: ?>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Date</th><th>Client</th><th>Facture</th><th>Montant</th><th>État</th><th>Reçu</th><th></th></tr></thead>
       <tbody>

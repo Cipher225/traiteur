@@ -284,7 +284,7 @@ admin_header('Galerie', 'galerie', $pdo, $settings);
     </div>
 
     <?php if ($photos): ?>
-    <div class="gal-grille">
+    <div class="gal-grille defilant">
       <?php foreach ($photos as $g): ?>
       <label class="gp <?= empty($g['actif']) ? 'masquee' : '' ?>">
         <input type="checkbox" name="photos[]" value="<?= (int)$g['id'] ?>" class="gp-case" hidden>

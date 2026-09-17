@@ -495,7 +495,7 @@ admin_header('Tableau de bord financier', 'finances', $pdo, $settings);
      garde son sens à toutes les largeurs, et la barre de marge se lit d'un
      coup d'œil sans chercher dans une colonne. */
   ?>
-  <div class="rent-liste">
+  <div class="rent-liste defilant">
     <?php foreach ($activites as $iAct => $a):
       $t = (float)$a['taux'];
       $classe = $t >= 40 ? 'bon' : ($t >= 15 ? 'moyen' : 'faible');

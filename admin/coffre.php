@@ -315,7 +315,7 @@ $csrf = csrf_token();
         </span>
         <?php endif; ?>
       </h2>
-      <div class="doc-grid">
+      <div class="doc-grid defilant">
         <?php foreach ($documents as $doc): ?>
         <div class="doc-card">
           <div class="doc-ic"><?= doc_icone($doc['fichier_nom']) ?></div>

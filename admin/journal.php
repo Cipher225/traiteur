@@ -184,7 +184,7 @@ admin_header('Journal des actions', 'journal', $pdo, $settings);
              'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
   $jourPrec = '';
   ?>
-  <div class="jr">
+  <div class="jr defilant">
     <?php foreach ($lignes as $l):
       $inf = $LIBELLES[$l['action']] ?? ['•', $l['action']];
       $t = strtotime($l['created_at']);

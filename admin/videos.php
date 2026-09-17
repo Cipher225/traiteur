@@ -131,7 +131,7 @@ admin_header('Vidéos', 'videos', $pdo, $settings);
 
 <div class="panel glass">
   <h2>🎬 Vidéos (<?= count($videos) ?>)</h2>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Ordre</th><th>Titre</th><th>Source</th><th>Statut</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>

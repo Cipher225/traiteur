@@ -106,7 +106,7 @@ admin_header('Services & prestations', 'services', $pdo, $settings);
   </p>
 
   <?php if ($services): ?>
-  <div class="svc-liste">
+  <div class="svc-liste defilant">
     <?php foreach ($services as $iS => $sv):
       $points = array_filter(array_map('trim', explode("\n", (string)($sv['details'] ?? ''))));
     ?>

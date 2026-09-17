@@ -58,7 +58,7 @@ $csrf = csrf_token();
 <div class="panel glass">
   <h2>⏳ En attente de validation <span class="badge badge-gold"><?= count($attente) ?></span></h2>
   <?php if ($attente): ?>
-  <div class="temo-grid">
+  <div class="temo-grid defilant">
     <?php foreach ($attente as $t): carte_temo($t,
       '<form method="post" style="display:inline"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-gold btn-sm" name="valider" value="'.$t['id'].'">✅ Publier</button></form>'
       .'<form method="post" style="display:inline"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-glass btn-sm" name="rejeter" value="'.$t['id'].'">✖ Rejeter</button></form>'
@@ -75,7 +75,7 @@ $csrf = csrf_token();
     <?= barre_recherche($q, 'Nom, message, événement…', $_GET) ?>
   </div>
   <?php if ($valides): ?>
-  <div class="temo-grid">
+  <div class="temo-grid defilant">
     <?php foreach ($valides as $t): carte_temo($t,
       '<form method="post" style="display:inline"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-glass btn-sm" name="masquer" value="'.$t['id'].'">🙈 Retirer</button></form>'
       .'<form method="post" style="display:inline" data-confirm="Supprimer définitivement ?"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-danger btn-sm" name="supprimer" value="'.$t['id'].'">🗑️</button></form>'
@@ -87,7 +87,7 @@ $csrf = csrf_token();
 <?php if ($rejetes): ?>
 <div class="panel glass">
   <h2>✖ Rejetés <span class="badge badge-danger"><?= count($rejetes) ?></span></h2>
-  <div class="temo-grid">
+  <div class="temo-grid defilant">
     <?php foreach ($rejetes as $t): carte_temo($t,
       '<form method="post" style="display:inline"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-gold btn-sm" name="valider" value="'.$t['id'].'">✅ Finalement publier</button></form>'
       .'<form method="post" style="display:inline" data-confirm="Supprimer définitivement ?"><input type="hidden" name="csrf" value="'.$csrf.'"><button class="btn btn-danger btn-sm" name="supprimer" value="'.$t['id'].'">🗑️</button></form>'

@@ -330,7 +330,7 @@ $joursNoms = [1=>'Lun',2=>'Mar',3=>'Mer',4=>'Jeu',5=>'Ven',6=>'Sam',7=>'Dim'];
     <h2 style="margin:0">🧑‍🍳 Équipe <span class="cnt"><?= number_format($pg['total'], 0, ',', ' ') ?></span></h2>
     <?= barre_recherche($q, 'Nom, poste, matricule…', $_GET) ?>
   </div>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Nom</th><th>Poste</th><th>Salaire base</th><th>Accès</th><th>Statut</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>

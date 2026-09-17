@@ -2986,24 +2986,40 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .cla:hover{color:var(--ink);border-color:var(--glass-border)}
 .cla.on{color:var(--gold);background:rgba(212,165,38,.16);border-color:rgba(212,165,38,.4)}
 
-/* La liste défile dans son propre cadre : vingt-quatre fiches allongeaient la
-   page au point de perdre la barre de recherche et les filtres, restés tout
-   en haut. Avec un cadre à hauteur fixe, ils demeurent visibles.
-
-   Sur téléphone, on laisse la page défiler normalement : un cadre qui défile
-   à l'intérieur d'une page qui défile aussi est pénible à manipuler au doigt. */
 .cl-liste{display:flex;flex-direction:column;gap:7px}
 
+/* ============================================================
+   CADRE DÉFILANT
+
+   Une longue liste allonge la page au point de faire disparaître
+   la recherche et les filtres, restés tout en haut. Un cadre à
+   hauteur fixe les garde sous les yeux.
+
+   Sur téléphone, la page défile normalement : un cadre qui défile
+   à l'intérieur d'une page qui défile aussi est pénible à
+   manipuler au doigt — on ne sait jamais lequel on fait bouger.
+
+   Une seule définition, appliquée partout par la classe
+   « defilant » : quinze copies finiraient par diverger.
+   ============================================================ */
 @media (min-width:641px){
-  .cl-liste{max-height:62vh;overflow-y:auto;padding-right:6px;
-    /* Un léger dégradé en bas signale qu'il reste des fiches en dessous. */
+  .defilant{max-height:62vh;overflow-y:auto;padding-right:6px;
+    /* Le dégradé du bas signale qu'il reste du contenu en dessous. */
     -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
-    mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
-  .cl-liste::-webkit-scrollbar{width:7px}
-  .cl-liste::-webkit-scrollbar-track{background:rgba(0,0,0,.2);border-radius:4px}
-  .cl-liste::-webkit-scrollbar-thumb{background:rgba(212,165,38,.32);border-radius:4px}
-  .cl-liste::-webkit-scrollbar-thumb:hover{background:rgba(212,165,38,.55)}
-  .cl-liste{scrollbar-width:thin;scrollbar-color:rgba(212,165,38,.32) rgba(0,0,0,.2)}
+    mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
+    scrollbar-width:thin;scrollbar-color:rgba(212,165,38,.32) rgba(0,0,0,.2)}
+  .defilant::-webkit-scrollbar{width:7px}
+  .defilant::-webkit-scrollbar-track{background:rgba(0,0,0,.2);border-radius:4px}
+  .defilant::-webkit-scrollbar-thumb{background:rgba(212,165,38,.32);border-radius:4px}
+  .defilant::-webkit-scrollbar-thumb:hover{background:rgba(212,165,38,.55)}
+
+  /* Un tableau garde ses en-têtes visibles pendant le défilement :
+     sans cela, on perd le nom des colonnes au bout de dix lignes. */
+  .defilant table thead th{position:sticky;top:0;z-index:2;
+    background:var(--fond-tete, #101c33)}
+
+  /* Plus court là où le contenu est dense ou la carte partagée. */
+  .defilant.court{max-height:46vh}
 }
 .cl{display:flex;align-items:center;gap:13px;padding:11px 13px;border-radius:14px;
   background:var(--glass-border-soft);border:1px solid var(--glass-border);

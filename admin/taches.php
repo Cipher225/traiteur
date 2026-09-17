@@ -123,7 +123,7 @@ admin_header('Tâches', 'taches', $pdo, $settings);
     </form>
     <?= barre_recherche($q, 'Titre, description, employé…', $_GET) ?>
   </h2>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Tâche</th><th>Employé</th><th>Priorité</th><th>Échéance</th><th>Statut</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>

@@ -359,7 +359,7 @@ function fmt_periode($r) {
     </form>
     <?= barre_recherche($q, 'Titre, contenu, auteur…', $_GET) ?>
   </h2>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>N°</th><th>Type</th><th>Employé</th><th>Objet</th><th>Envoyé le</th><th>Décision</th><th style="text-align:right">Actions</th></tr></thead>
       <tbody>

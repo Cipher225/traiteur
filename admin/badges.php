@@ -244,7 +244,7 @@ admin_header('Badges & cartes', 'badges', $pdo, $settings);
   <?php if (!$badges): ?>
     <div style="text-align:center;padding:40px;color:var(--ink-faint)">Aucun badge <?= $q||$filtre?'ne correspond':'émis pour le moment' ?>.</div>
   <?php else: ?>
-  <div class="bdg-list">
+  <div class="bdg-list defilant">
     <?php foreach ($badges as $b): $st = badge_statut($b); [$sl,$sb] = badge_statut_label($st); ?>
     <div class="bdg-item">
       <div class="bdg-item-photo">

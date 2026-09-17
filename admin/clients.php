@@ -268,7 +268,7 @@ admin_header('Clients', 'clients', $pdo, $settings);
   <?php endif; ?>
 
   <?php if ($clients): ?>
-  <div class="cl-liste">
+  <div class="cl-liste defilant">
     <?php foreach ($clients as $c):
       $nom     = $c['affiche'];
       $estEnt  = trim((string)$c['entreprise']) !== '';

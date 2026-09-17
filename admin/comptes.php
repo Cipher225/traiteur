@@ -96,7 +96,7 @@ admin_header('Comptes & accès', '', $pdo, $settings);
 
 <div class="panel glass">
   <h2>👥 Comptes utilisateurs (<?= count($users) ?>)</h2>
-  <div class="tbl-wrap">
+  <div class="tbl-wrap defilant">
     <table>
       <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Connexion</th><th>Statut</th><th style="text-align:right">Réinitialisation</th></tr></thead>
       <tbody>
