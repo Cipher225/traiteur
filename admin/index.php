@@ -225,6 +225,35 @@ if (can('factures')) {
     } catch (Throwable $e) {}
 }
 
+/* ----------------------------------------------------------------------------
+   Échéances récurrentes.
+
+   Une déclaration oubliée coûte des pénalités, et on s'en aperçoit toujours
+   trop tard. Elle mérite donc sa place parmi les alertes, avant même les
+   factures impayées quand elle est en retard.
+   ---------------------------------------------------------------------------- */
+try {
+    require_once __DIR__ . '/../config/echeances.php';
+    $ech = ech_compteur($pdo);
+
+    if ($ech['retard'] > 0) {
+        $alertes[] = ['urgent', '🕓',
+                      $ech['retard'] . ' échéance' . ($ech['retard'] > 1 ? 's' : '') . ' en retard',
+                      'Déclarations ou cotisations non marquées comme faites',
+                      'echeances.php', 'Voir'];
+    }
+    if ($ech['aujourdhui'] > 0) {
+        $alertes[] = ['urgent', '🔔',
+                      $ech['aujourdhui'] . " échéance" . ($ech['aujourdhui'] > 1 ? 's' : '') . " aujourd'hui",
+                      'À traiter dans la journée', 'echeances.php', 'Voir'];
+    }
+    if ($ech['proche'] > 0) {
+        $alertes[] = ['attention', '📆',
+                      $ech['proche'] . ' échéance' . ($ech['proche'] > 1 ? 's' : '') . ' approche',
+                      'Dans le délai de préavis que vous avez fixé', 'echeances.php', 'Préparer'];
+    }
+} catch (Throwable $e) {}
+
 // Articles sous le seuil d'alerte
 if (can('stock')) {
     try {

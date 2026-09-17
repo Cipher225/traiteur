@@ -755,6 +755,7 @@ function all_modules(): array {
     return [
         'commandes_client' => ['Commandes clients', '📦', 'commandes-client.php', 'activite', false, false],
         'calendrier'   => ['Calendrier',     '📅', 'calendrier.php',   'activite', false, false],
+        'echeances'    => ['Échéances',      '🕓', 'echeances.php',    'activite', false, false],
         'recherche'    => ['Recherche', '🔍', 'recherche.php', 'activite', false, true],
         'messages'     => ['E-mail', '✉️', 'messages.php', 'echange', false, false],
         'annuaire'     => ['Annuaire', '📇', 'annuaire.php', 'commercial', false, false],

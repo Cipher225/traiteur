@@ -1098,3 +1098,43 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS last_mobile TINYINT(1) DEFAULT 0;
 ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_id VARCHAR(80) DEFAULT '';
 ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_lien VARCHAR(255) DEFAULT '';
 ALTER TABLE coffre_documents ADD COLUMN IF NOT EXISTS drive_le DATETIME NULL;
+
+-- =====================================================================
+--  ÉCHÉANCES RÉCURRENTES
+--
+--  Les obligations qui reviennent : déclarations, impôts, cotisations,
+--  renouvellements. Le système calcule la prochaine date et prévient
+--  à l'avance, pour qu'aucune ne passe à la trappe.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS echeances (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  libelle VARCHAR(160) NOT NULL,
+  categorie VARCHAR(40) DEFAULT 'fiscal',      -- fiscal, social, juridique, assurance, autre
+  description TEXT,
+  organisme VARCHAR(120) DEFAULT '',           -- DGI, CNPS, mairie…
+  recurrence VARCHAR(20) DEFAULT 'mensuelle',  -- mensuelle, trimestrielle, semestrielle, annuelle, unique
+  jour_du_mois TINYINT DEFAULT 15,             -- 1 à 31
+  mois TINYINT DEFAULT NULL,                   -- pour annuelle / semestrielle : mois de référence
+  date_unique DATE DEFAULT NULL,               -- pour une échéance ponctuelle
+  preavis_jours SMALLINT DEFAULT 10,           -- combien de jours avant on prévient
+  montant_estime DECIMAL(14,0) DEFAULT 0,
+  responsable_id INT DEFAULT NULL,
+  actif TINYINT(1) DEFAULT 1,
+  ordre SMALLINT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (actif), INDEX (recurrence)
+);
+
+-- Ce qui a été accompli : une ligne par échéance et par période.
+CREATE TABLE IF NOT EXISTS echeances_faites (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  echeance_id INT NOT NULL,
+  periode VARCHAR(10) NOT NULL,                -- 2026-03, ou 2026 pour une annuelle
+  echue_le DATE NOT NULL,                      -- la date qui était attendue
+  fait_le DATETIME DEFAULT CURRENT_TIMESTAMP,
+  fait_par INT DEFAULT NULL,
+  montant_reel DECIMAL(14,0) DEFAULT 0,
+  note VARCHAR(255) DEFAULT '',
+  UNIQUE KEY (echeance_id, periode),
+  FOREIGN KEY (echeance_id) REFERENCES echeances(id) ON DELETE CASCADE
+);
