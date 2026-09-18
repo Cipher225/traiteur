@@ -2,6 +2,22 @@
    LIQUID GLASS — Système de design iOS 26
    Tokens partagés (site public + espace admin)
    ============================================================ */
+
+/* ------------------------------------------------------------
+   L'attribut « hidden » doit masquer, toujours.
+
+   Le navigateur le traduit par « display:none », mais cette règle
+   vient de sa feuille par défaut : la moindre règle à nous portant
+   un « display » l'emporte. La fenêtre de discussion, déclarée
+   « display:flex », restait donc affichée en permanence — ouverte
+   dès l'arrivée sur le site, et insensible à sa croix de fermeture.
+   Le JavaScript posait bien l'attribut ; c'est la feuille de style
+   qui le rendait sans effet.
+
+   Six éléments étaient dans ce cas. Une règle pour tous.
+   ------------------------------------------------------------ */
+[hidden] { display: none !important; }
+
 :root {
   /* ===== Palette « Site public » — Marine profond & Or ===== */
   --navy-900: #060f22;   /* fond de page, marine très sombre */
