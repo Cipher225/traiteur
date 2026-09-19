@@ -886,22 +886,25 @@ $f = flash();
 <!-- ====================== ASSISTANT ====================== -->
 <?php /* La clé n'apparaît jamais ici : tout passe par ia-chat.php, côté serveur. */ ?>
 <div class="asst" id="asst" data-mode="<?= e($iaReglages['declenchement']) ?>">
-  <button type="button" class="as-bulle" id="as-ouvrir" aria-label="Discuter avec nous">
-    <span class="as-ico">💬</span>
+  <?php /* La bulle porte la marque de l'assistant, pas une bulle de dialogue :
+           le visiteur sait à quoi il s'adresse avant d'écrire. */ ?>
+  <button type="button" class="as-bulle" id="as-ouvrir" aria-label="Discuter avec l'assistant">
+    <span class="as-halo"></span>
+    <span class="as-ico"><?= ia_marque() ?></span>
   </button>
 
   <div class="as-invite" id="as-invite" hidden>
-    <span>Une question sur nos prestations ?</span>
+    <span><?= ia_marque('mq-mini', false) ?> Une question sur nos prestations ?</span>
     <button type="button" class="as-inv-x" aria-label="Fermer">✕</button>
   </div>
 
   <div class="as-fen" id="as-fen" hidden>
     <div class="as-tete">
       <div class="as-t-id">
-        <span class="as-t-pt"></span>
+        <span class="as-avatar"><?= ia_marque() ?><i class="as-t-pt"></i></span>
         <div>
-          <strong><?= e($s['nom_entreprise'] ?? 'Assistant') ?></strong>
-          <span>Réponse immédiate</span>
+          <strong>Assistant <?= e($s['nom_entreprise'] ?? '') ?></strong>
+          <span>Intelligence artificielle · réponse immédiate</span>
         </div>
       </div>
       <button type="button" class="as-fermer" id="as-fermer" aria-label="Fermer">✕</button>
@@ -914,7 +917,11 @@ $f = flash();
              placeholder="Écrivez votre question…" autocomplete="off">
       <button type="button" id="as-envoyer" aria-label="Envoyer">➤</button>
     </div>
-    <div class="as-pied">Nos conseillers reprennent la main pour tout devis.</div>
+    <?php /* Dit franchement ce qu'est l'interlocuteur : on ne confie pas les
+             mêmes choses à une machine qu'à une personne. */ ?>
+    <div class="as-pied">
+      Réponses générées automatiquement — nos conseillers reprennent la main pour tout devis.
+    </div>
   </div>
 </div>
 
@@ -933,9 +940,22 @@ $f = flash();
 
   var jeton = null, occupe = false, demarre = false;
 
+  /* La marque, reprise du serveur : une seule définition pour tout le site. */
+  var MARQUE = <?= json_encode(ia_marque('mq-mini', false)) ?>;
+
   function ligne(role, texte, docs) {
     var d = document.createElement('div');
     d.className = 'as-m ' + role;
+
+    /* Chaque réponse porte la marque : au fil d'un long échange, on doit
+       pouvoir dire d'un coup d'œil qui a écrit quoi. */
+    if (role === 'assistant') {
+      var av = document.createElement('span');
+      av.className = 'as-m-av';
+      av.innerHTML = MARQUE;
+      d.appendChild(av);
+    }
+
     var p = document.createElement('p');
     p.textContent = texte;
     d.appendChild(p);
@@ -961,7 +981,10 @@ $f = flash();
   function attente() {
     var d = document.createElement('div');
     d.className = 'as-m assistant as-attend';
-    d.innerHTML = '<span></span><span></span><span></span>';
+    /* La marque tourne pendant la réflexion, puis les trois points : on voit
+       que c'est l'assistant qui travaille, et non la page qui a figé. */
+    d.innerHTML = '<span class="as-m-av reflechit">' + MARQUE + '</span>'
+                + '<span class="ap"><i></i><i></i><i></i></span>';
     fil.appendChild(d);
     fil.scrollTop = fil.scrollHeight;
     return d;

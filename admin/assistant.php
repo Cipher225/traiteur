@@ -261,6 +261,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: assistant.php?d=' . $id . '#demandes'); exit;
     }
 
+    /* ========================================================================
+       CONVERSATIONS
+
+       Ce que les visiteurs ont écrit leur appartient autant qu'à vous : on
+       doit pouvoir l'effacer. Une conversation déjà transmise au secrétariat
+       n'est pas supprimée à la légère — sa demande reste, mais le fil qui l'a
+       produite disparaît avec elle.
+       ======================================================================== */
+    if (isset($_POST['suppr_conv'])) {
+        $id = (int)$_POST['suppr_conv'];
+        try {
+            /* Les messages et le suivi partent en cascade (clé étrangère) ;
+               la demande transmise au module Commandes, elle, reste. */
+            $pdo->prepare('DELETE FROM ia_conversations WHERE id=?')->execute([$id]);
+            journaliser($pdo, 'suppression', 'ia_conversation', $id, 'Conversation effacée');
+            flash('Conversation supprimée.');
+        } catch (Throwable $e) {
+            flash("La suppression n'a pas abouti.", 'error');
+        }
+        header('Location: assistant.php#convs'); exit;
+    }
+
+    if (isset($_POST['purger_convs'])) {
+        $quoi = (string)($_POST['purge_quoi'] ?? 'anciennes');
+        try {
+            [$sql, $args, $mot] = match ($quoi) {
+                'toutes'      => ['1=1', [], 'toutes les conversations'],
+                'non_transmises' => ['transmise = 0', [], 'les conversations sans demande'],
+                default       => ['created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+                                  [max(1, (int)($_POST['purge_jours'] ?? 30))],
+                                  'les conversations de plus de '
+                                    . max(1, (int)($_POST['purge_jours'] ?? 30)) . ' jours'],
+            };
+            $st = $pdo->prepare("DELETE FROM ia_conversations WHERE $sql");
+            $st->execute($args);
+            $n = $st->rowCount();
+            journaliser($pdo, 'purge', 'ia_conversation', null, $n . ' conversation(s) — ' . $mot);
+            flash($n > 0 ? $n . ' conversation' . ($n > 1 ? 's' : '') . ' supprimée' . ($n > 1 ? 's' : '') . '.'
+                         : 'Aucune conversation ne correspondait.');
+        } catch (Throwable $e) {
+            flash("La purge n'a pas abouti.", 'error');
+        }
+        header('Location: assistant.php#convs'); exit;
+    }
+
     /* ---- Essai ---- */
     if (isset($_POST['essai'])) {
         $q = trim((string)($_POST['essai_question'] ?? ''));
@@ -292,7 +337,8 @@ $sections = []; $docs = []; $convs = []; $sansReponse = [];
 try {
     $sections = $pdo->query("SELECT * FROM ia_connaissances ORDER BY ordre, id")->fetchAll();
     $docs = $pdo->query("SELECT * FROM ia_documents ORDER BY ordre, id")->fetchAll();
-    $convs = $pdo->query("SELECT * FROM ia_conversations ORDER BY maj DESC LIMIT 30")->fetchAll();
+    $convs = $pdo->query("SELECT * FROM ia_conversations ORDER BY maj DESC LIMIT 60")->fetchAll();
+    $convsTotal = (int)$pdo->query("SELECT COUNT(*) FROM ia_conversations")->fetchColumn();
     $sansReponse = $pdo->query("SELECT contenu, created_at FROM ia_messages
                                 WHERE sans_reponse = 1 ORDER BY id DESC LIMIT 20")->fetchAll();
 } catch (Throwable $e) {}
@@ -322,6 +368,18 @@ if (!in_array($filtre, ['actives', 'attente', 'retard', 'prises', 'traitees'], t
 $demandes = ia_demandes($pdo, $filtre);
 $compteur = ia_compteur_demandes($pdo);
 $horaires = ia_horaires($pdo);
+
+/* La conversation qu'on veut relire, avec son fil. */
+$convOuverte = (int)($_GET['c'] ?? 0);
+$convFil = [];
+if ($convOuverte > 0) {
+    try {
+        $st = $pdo->prepare("SELECT role, contenu, created_at FROM ia_messages
+                             WHERE conversation_id=? ORDER BY id");
+        $st->execute([$convOuverte]);
+        $convFil = $st->fetchAll();
+    } catch (Throwable $e) {}
+}
 
 $ouverte = (int)($_GET['d'] ?? 0);
 $fil = []; $suivi = [];
@@ -360,21 +418,63 @@ admin_header("Assistant du site", 'assistant', $pdo, $settings);
 ?>
 
 <!-- ====================== ÉTAT ====================== -->
-<div class="ia-etat <?= $r['active'] && $r['cle'] !== '' ? 'on' : 'off' ?>">
-  <span class="ie-pt"></span>
-  <div>
-    <strong><?= $r['active'] && $r['cle'] !== '' ? 'Assistant en service' : 'Assistant hors service' ?></strong>
-    <span>
-      <?php if ($r['active'] && $r['cle'] !== ''): ?>
-        <?= (int)$conso['appels'] ?> échange<?= $conso['appels'] > 1 ? 's' : '' ?> aujourd'hui
-        sur <?= (int)$r['plafond_jour'] ?> autorisés
-      <?php else: ?>
-        Les visiteurs voient tout de même vos réponses enregistrées
-      <?php endif; ?>
-    </span>
+<?php
+$enService = $r['active'] && $r['cle'] !== '';
+$part = max(1, (int)$r['plafond_jour']);
+$pourcent = min(100, round((int)$conso['appels'] / $part * 100));
+$jetons = (int)($conso['jetons_entree'] ?? 0) + (int)($conso['jetons_sortie'] ?? 0);
+?>
+<div class="ia-noyau <?= $enService ? 'on' : 'off' ?>">
+
+  <?php /* Le cœur : la marque de l'assistant, entourée de ses anneaux. Ils
+           tournent tant qu'il est en service, et s'arrêtent sinon — l'état se
+           lit avant le texte. */ ?>
+  <div class="in-coeur">
+    <span class="in-anneau"></span>
+    <span class="in-anneau in-a2"></span>
+    <span class="in-signe"><?= ia_marque() ?></span>
   </div>
+
+  <div class="in-c">
+    <div class="in-t">
+      <strong><?= $enService ? 'Assistant en service' : 'Assistant hors service' ?></strong>
+      <span class="in-pastille <?= $enService ? 'vive' : '' ?>">
+        <?= $enService ? 'en ligne' : 'arrêté' ?></span>
+    </div>
+    <p class="in-d">
+      <?php if ($enService): ?>
+        Il répond aux visiteurs à partir de vos <?= count($sections) ?> section<?= count($sections) > 1 ? 's' : '' ?>
+        de connaissances, et de rien d'autre.
+      <?php else: ?>
+        La bulle est absente du site. Vos sections restent enregistrées —
+        indiquez une clé d'accès et activez l'assistant pour le remettre en service.
+      <?php endif; ?>
+    </p>
+
+    <?php if ($enService): ?>
+    <div class="in-mesures">
+      <div class="in-m">
+        <span class="im-l">Modèle</span>
+        <strong class="im-v"><?= e($r['modele']) ?></strong>
+      </div>
+      <div class="in-m in-jauge">
+        <span class="im-l">Échanges du jour</span>
+        <strong class="im-v"><?= (int)$conso['appels'] ?> <em>/ <?= $part ?></em></strong>
+        <span class="im-b"><i style="width:<?= $pourcent ?>%"
+              class="<?= $pourcent >= 90 ? 'plein' : ($pourcent >= 60 ? 'haut' : '') ?>"></i></span>
+      </div>
+      <?php if ($jetons > 0): ?>
+      <div class="in-m">
+        <span class="im-l">Jetons consommés</span>
+        <strong class="im-v"><?= number_format($jetons, 0, ',', ' ') ?></strong>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+  </div>
+
   <?php if (count($sections) === 0): ?>
-  <span class="ie-avert">⚠️ Aucune connaissance saisie — commencez par là</span>
+  <a class="in-avert" href="#form-savoir">⚠️ Aucune connaissance saisie — commencez par là</a>
   <?php endif; ?>
 </div>
 
@@ -590,7 +690,8 @@ admin_header("Assistant du site", 'assistant', $pdo, $settings);
 <!-- ====================== BASE DE CONNAISSANCES ====================== -->
 <div class="panel glass" id="savoir">
   <div class="mod-tete">
-    <h2 style="margin:0">📚 Ce que l'assistant sait <span class="cnt"><?= count($sections) ?></span></h2>
+    <h2 style="margin:0"><span class="h2-mq"><?= ia_marque('', false) ?></span>
+      Ce que l'assistant sait <span class="cnt"><?= count($sections) ?></span></h2>
   </div>
   <p class="ia-aide">
     L'assistant répond <strong>uniquement</strong> à partir de ces sections et de votre carte.
@@ -740,29 +841,87 @@ admin_header("Assistant du site", 'assistant', $pdo, $settings);
 
 <!-- ====================== CONVERSATIONS ====================== -->
 <?php if ($convs): ?>
-<div class="panel glass">
+<div class="panel glass" id="convs">
   <div class="mod-tete">
-    <h2 style="margin:0">💬 Dernières conversations <span class="cnt"><?= count($convs) ?></span></h2>
-  </div>
-  <div class="ia-liste defilant">
-    <?php foreach ($convs as $c): ?>
-    <div class="is">
-      <span class="is-ico"><?= $c['transmise'] ? '📨' : '💬' ?></span>
-      <div class="is-c">
-        <div class="is-t">
-          <?= $c['visiteur_nom'] ? e($c['visiteur_nom']) : 'Visiteur' ?>
-          <?php if ($c['visiteur_tel']): ?><span class="is-tel"><?= e($c['visiteur_tel']) ?></span><?php endif; ?>
-          <?php if ($c['transmise']): ?><span class="is-ok">Transmise</span><?php endif; ?>
+    <h2 style="margin:0">💬 Conversations <span class="cnt"><?= (int)$convsTotal ?></span></h2>
+    <details class="conv-purge">
+      <summary class="btn btn-glass btn-sm">🧹 Faire le ménage</summary>
+      <form method="post" class="cp-f"
+            data-confirm="Supprimer ces conversations ? Les messages partent avec elles.">
+        <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+        <label>Que supprimer ?</label>
+        <select class="input" name="purge_quoi">
+          <option value="anciennes">Les conversations de plus de…</option>
+          <option value="non_transmises">Celles qui n'ont donné aucune demande</option>
+          <option value="toutes">Toutes, sans exception</option>
+        </select>
+        <div class="cp-j">
+          <input class="input" type="number" name="purge_jours" min="1" max="3650" value="30">
+          <span>jours</span>
         </div>
-        <div class="is-d">
-          <?= (int)$c['nb_messages'] ?> message<?= $c['nb_messages'] > 1 ? 's' : '' ?>
-          · <?= date('d/m/Y à H:i', strtotime($c['created_at'])) ?>
-          <?php if ($c['ip']): ?> · <?= e($c['ip']) ?><?php endif; ?>
+        <button class="btn btn-danger btn-sm" name="purger_convs" value="1">Supprimer</button>
+        <span class="ia-aide">Les demandes déjà transmises au secrétariat restent
+          dans le module Commandes : seul le fil de discussion disparaît.</span>
+      </form>
+    </details>
+  </div>
+  <p class="ia-aide">
+    Ce que les visiteurs écrivent leur appartient autant qu'à vous.
+    Ouvrez un échange pour le relire, effacez-le quand il n'a plus lieu d'être.
+  </p>
+
+  <div class="ia-liste conv-liste<?= $convOuverte ? '' : ' defilant' ?>">
+    <?php foreach ($convs as $c):
+      $estOuverte = ((int)$c['id'] === $convOuverte); ?>
+    <div class="conv-bloc <?= $estOuverte ? 'ouverte' : '' ?>">
+      <div class="is">
+        <span class="is-ico"><?= $c['transmise'] ? '📨' : '💬' ?></span>
+        <div class="is-c">
+          <div class="is-t">
+            <?= $c['visiteur_nom'] ? e($c['visiteur_nom']) : 'Visiteur' ?>
+            <?php if ($c['visiteur_tel']): ?><span class="is-tel"><?= e($c['visiteur_tel']) ?></span><?php endif; ?>
+            <?php if ($c['transmise']): ?><span class="is-ok">Transmise</span><?php endif; ?>
+          </div>
+          <div class="is-d">
+            <?= (int)$c['nb_messages'] ?> message<?= $c['nb_messages'] > 1 ? 's' : '' ?>
+            · <?= date('d/m/Y à H:i', strtotime($c['created_at'])) ?>
+            <?php if ($c['ip']): ?> · <?= e($c['ip']) ?><?php endif; ?>
+          </div>
+        </div>
+        <div class="is-a">
+          <a class="eo-b" href="<?= $estOuverte ? '#convs' : '?c=' . (int)$c['id'] . '#conv-' . (int)$c['id'] ?>"
+             title="<?= $estOuverte ? 'Replier' : 'Lire l’échange' ?>"><?= $estOuverte ? '▾' : '👁' ?></a>
+          <form method="post" style="display:inline"
+                data-confirm="Supprimer cet échange<?= $c['visiteur_nom'] ? ' avec ' . e($c['visiteur_nom']) : '' ?> ? Les messages seront effacés.">
+            <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+            <button class="eo-b sup" name="suppr_conv" value="<?= (int)$c['id'] ?>" title="Supprimer">✕</button>
+          </form>
         </div>
       </div>
+
+      <?php if ($estOuverte): ?>
+      <div class="conv-fil" id="conv-<?= (int)$c['id'] ?>">
+        <?php if (!$convFil): ?>
+        <p class="ia-vide" style="margin:0">Aucun message conservé pour cet échange.</p>
+        <?php endif; ?>
+        <?php foreach ($convFil as $m): ?>
+        <div class="df-m <?= $m['role'] === 'visiteur' ? 'v' : 'a' ?>">
+          <span class="df-q"><?= $m['role'] === 'visiteur' ? 'Visiteur' : 'Assistant' ?>
+            · <?= date('H:i', strtotime((string)$m['created_at'])) ?></span>
+          <p><?= nl2br(e((string)$m['contenu'])) ?></p>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php endif; ?>
     </div>
     <?php endforeach; ?>
   </div>
+  <?php if ($convsTotal > count($convs)): ?>
+  <p class="ia-aide" style="margin:11px 0 0">
+    Les <?= count($convs) ?> plus récentes sur <?= (int)$convsTotal ?>.
+    Le ménage ci-dessus agit sur toutes.
+  </p>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -863,5 +1022,18 @@ admin_header("Assistant du site", 'assistant', $pdo, $settings);
   </form>
   <?php endif; ?>
 </div>
+
+<script>
+(function () {
+  /* Le nombre de jours n'a de sens que pour « les plus anciennes » : affiché
+     à côté des deux autres choix, il laisse croire qu'il les limite. */
+  var sel = document.querySelector('.cp-f select[name=purge_quoi]');
+  var jours = document.querySelector('.cp-f .cp-j');
+  if (!sel || !jours) return;
+  function ajuster() { jours.hidden = (sel.value !== 'anciennes'); }
+  sel.addEventListener('change', ajuster);
+  ajuster();
+})();
+</script>
 
 <?php admin_footer(); ?>

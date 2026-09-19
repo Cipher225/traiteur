@@ -882,12 +882,13 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
   background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.28)}
 
 /* Points d'attente */
-.as-attend{display:flex;gap:5px;padding:13px 16px;border-radius:15px;
+.as-attend{display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:15px;
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);width:fit-content}
-.as-attend span{width:6px;height:6px;border-radius:50%;background:rgba(240,193,75,.75);
+.as-attend .ap{display:flex;gap:5px}
+.as-attend .ap i{width:6px;height:6px;border-radius:50%;background:rgba(240,193,75,.75);
   animation:asPoint 1.3s ease-in-out infinite}
-.as-attend span:nth-child(2){animation-delay:.18s}
-.as-attend span:nth-child(3){animation-delay:.36s}
+.as-attend .ap i:nth-child(2){animation-delay:.18s}
+.as-attend .ap i:nth-child(3){animation-delay:.36s}
 @keyframes asPoint{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
 
 .as-saisie{display:flex;gap:8px;padding:12px 14px;border-top:1px solid rgba(255,255,255,.08)}
@@ -929,3 +930,72 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .as-confirme strong{display:block;font-size:13px;color:#10b981}
 .as-confirme span{display:block;font-size:11.5px;color:rgba(255,255,255,.62);margin-top:3px;
   line-height:1.5}
+
+
+/* ============================================================
+   LA MARQUE DE L'ASSISTANT
+
+   Une étincelle à quatre branches, signe devenu commun des
+   assistants. Elle prend la couleur du texte qui l'entoure,
+   de sorte qu'une seule définition serve sur or comme sur
+   marine. Sa taille suit celle de son conteneur.
+   ============================================================ */
+.ia-mq{width:1em;height:1em;display:block;fill:currentColor;overflow:visible}
+.ia-mq .mq-petit{opacity:.62}
+.ia-mq.mq-mini{width:.95em;height:.95em}
+
+/* Le grand signe respire ; les satellites suivent, décalés. Rien de rapide :
+   une animation pressée donne l'impression d'un chargement en panne. */
+.ia-mq.anim .mq-etoile{transform-origin:24px 20px;
+  animation:mqCoeur 3.4s ease-in-out infinite}
+.ia-mq.anim .mq-a{transform-origin:37px 36px;animation:mqSat 3.4s ease-in-out infinite .45s}
+.ia-mq.anim .mq-b{transform-origin:11px 32px;animation:mqSat 3.4s ease-in-out infinite .9s}
+@keyframes mqCoeur{0%,100%{transform:scale(1);opacity:1}
+                   50%{transform:scale(1.08);opacity:.88}}
+@keyframes mqSat{0%,100%{transform:scale(.85);opacity:.45}
+                 50%{transform:scale(1.1);opacity:.95}}
+
+/* ---- La bulle du site ---- */
+.as-bulle .as-ico{display:grid;place-items:center;font-size:28px;color:#0a1020;
+  position:relative;z-index:2;line-height:1}
+.as-bulle .as-ico .ia-mq{width:28px;height:28px}
+/* Un halo qui bat lentement : la bulle se remarque sans clignoter. */
+.as-halo{position:absolute;inset:-4px;border-radius:50%;z-index:1;
+  background:radial-gradient(circle,rgba(240,193,75,.55),transparent 68%);
+  animation:asHalo 3.4s ease-in-out infinite}
+@keyframes asHalo{0%,100%{transform:scale(.85);opacity:.35}
+                  50%{transform:scale(1.22);opacity:0}}
+
+.as-invite span .ia-mq{display:inline-block;vertical-align:-2px;color:var(--gold,#d4a526)}
+
+/* ---- L'en-tête de la fenêtre ----
+   La règle « .as-t-id span:not(.as-t-pt) », plus haut, vise tous les « span »
+   de l'en-tête — dont l'avatar, qui en est un. Le « :not() » lui ajoute la
+   portée de son argument, ce qui la rend plus forte qu'un simple
+   « .as-t-id .as-avatar ». D'où le troisième niveau. */
+.as-tete .as-t-id .as-avatar{position:relative;width:34px;height:34px;border-radius:50%;
+  flex-shrink:0;display:grid;place-items:center;font-size:20px;color:#0a1020;
+  margin-top:0;
+  background:linear-gradient(135deg,#e9c15c,#d4a526);
+  box-shadow:0 4px 14px rgba(212,165,38,.4)}
+.as-tete .as-t-id .as-avatar .as-t-pt{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;
+  border-radius:50%;background:#10b981;border:2px solid #0e1a30;
+  box-shadow:0 0 8px rgba(16,185,129,.8)}
+
+/* ---- La marque au fil des réponses ---- */
+.as-m.assistant{display:flex;align-items:flex-start;gap:8px}
+.as-m-av{flex-shrink:0;width:23px;height:23px;border-radius:50%;margin-top:2px;
+  display:grid;place-items:center;font-size:13px;color:var(--gold-light,#f0c14b);
+  background:rgba(240,193,75,.13);border:1px solid rgba(240,193,75,.26)}
+.as-m.assistant p{flex:1;min-width:0}
+/* Pendant la réflexion, la marque tourne doucement. */
+.as-m-av.reflechit .ia-mq{animation:mqTourne 2.6s linear infinite}
+@keyframes mqTourne{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+.as-pied{line-height:1.5}
+
+@media (prefers-reduced-motion: reduce){
+  .ia-mq.anim .mq-etoile,.ia-mq.anim .mq-a,.ia-mq.anim .mq-b,
+  .as-halo,.as-m-av.reflechit .ia-mq{animation:none}
+  .as-halo{opacity:.2}
+}

@@ -533,6 +533,47 @@ function ia_echeance(PDO $pdo, ?int $depuis = null): int {
 }
 
 /* ============================================================================
+   LA MARQUE DE L'ASSISTANT
+
+   Une bulle de dialogue signifie « quelqu'un vous répond ». Une IA, c'est
+   autre chose, et le visiteur doit le savoir avant d'écrire : il ne confie
+   pas les mêmes choses à une machine qu'à une personne.
+
+   D'où cette marque : une étincelle à quatre branches, devenue le signe
+   commun des assistants, tracée aux couleurs de la maison. Elle est définie
+   ICI, une seule fois, et sert partout — la bulle du site, l'en-tête de la
+   fenêtre, chaque réponse de l'assistant, le bandeau des réglages. Quinze
+   copies finiraient par diverger.
+
+   Le SVG s'adapte : il prend la couleur du texte qui l'entoure, et sa taille
+   suit celle du conteneur.
+   ============================================================================ */
+function ia_marque(string $classe = '', bool $anime = true): string {
+    $a = $anime ? ' anim' : '';
+    return '<svg class="ia-mq' . $a . ($classe !== '' ? ' ' . $classe : '') . '"'
+         . ' viewBox="0 0 48 48" aria-hidden="true" focusable="false">'
+         /* L'étincelle principale : quatre branches aux flancs incurvés,
+            ce qui la distingue d'une simple croix. */
+         . '<path class="mq-etoile" d="M24 4'
+         . ' C25.6 13.4 30.6 18.4 40 20'
+         . ' C30.6 21.6 25.6 26.6 24 36'
+         . ' C22.4 26.6 17.4 21.6 8 20'
+         . ' C17.4 18.4 22.4 13.4 24 4 Z"/>'
+         /* Deux satellites : ils donnent le mouvement et la profondeur. */
+         . '<path class="mq-petit mq-a" d="M37 30'
+         . ' C37.7 33.8 39.2 35.3 43 36'
+         . ' C39.2 36.7 37.7 38.2 37 42'
+         . ' C36.3 38.2 34.8 36.7 31 36'
+         . ' C34.8 35.3 36.3 33.8 37 30 Z"/>'
+         . '<path class="mq-petit mq-b" d="M11 28'
+         . ' C11.5 30.6 12.4 31.5 15 32'
+         . ' C12.4 32.5 11.5 33.4 11 36'
+         . ' C10.5 33.4 9.6 32.5 7 32'
+         . ' C9.6 31.5 10.5 30.6 11 28 Z"/>'
+         . '</svg>';
+}
+
+/* ============================================================================
    COORDONNÉES DU VISITEUR
 
    On vérifie ce qu'il donne avant de l'enregistrer : un numéro mal noté fait

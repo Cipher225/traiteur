@@ -75,8 +75,19 @@ if ($auth) {
 <link rel="stylesheet" href="<?= asset('assets/css/style.css') ?>">
 <script src="<?= asset('assets/js/theme.js') ?>"></script>
 <style>
-  body{min-height:100svh;display:grid;place-items:center;padding:24px}
-  .verif{max-width:520px;width:100%;padding:38px 34px;border-radius:26px}
+  /* Le QR se scanne au téléphone : la carte ne doit jamais dépasser l'écran.
+     Avec « display:grid » et « place-items:center », la colonne implicite se
+     dimensionnait sur le contenu maximal de la carte — 520 px — quelle que
+     soit la largeur du téléphone, et tout le côté droit passait hors champ.
+     Un centrage en « flex » laisse la carte se réduire. */
+  body{min-height:100svh;display:flex;align-items:center;justify-content:center;
+       padding:24px 16px}
+  .verif{width:100%;max-width:520px;padding:34px 28px;border-radius:26px}
+
+  /* Un objet d'e-mail ou une adresse n'ont pas la longueur d'un numéro de
+     facture : ils doivent pouvoir se couper, sinon ils élargissent la
+     colonne et débordent à leur tour. */
+  .verif, .vtable td{overflow-wrap:anywhere}
   .vbrand{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;font-family:var(--font-display);font-weight:800;font-size:20px;color:var(--gold);margin-bottom:20px}
   .vbrand .vlogo{width:64px;height:64px;object-fit:contain;display:block}
   .vbrand span.vlogo{display:grid;place-items:center;font-size:40px;width:64px;height:64px;border-radius:16px;background:radial-gradient(circle,#fff,#eef1f6)}
@@ -85,10 +96,25 @@ if ($auth) {
   .vhead h1{font-family:var(--font-display);font-size:23px;margin:8px 0 4px}
   .vhead.ok h1{color:#3edbc1}.vhead.no h1{color:#e57373}
   .vhead p{color:var(--ink-dim);font-size:14px;line-height:1.5}
-  .vtable{border-collapse:collapse;width:100%;margin:16px 0}
+  .vtable{border-collapse:collapse;width:100%;margin:16px 0;table-layout:fixed}
   .vtable td{padding:10px 12px;border-bottom:1px solid var(--glass-border)}
   .vtable td.k{color:var(--ink-faint);width:38%;font-size:13px}
   .vtable td.v{font-weight:700}
+
+  /* Sur un écran étroit, deux colonnes ne laissent plus la place d'écrire :
+     l'intitulé passe au-dessus de sa valeur. */
+  @media (max-width:430px){
+    .verif{padding:26px 18px;border-radius:20px}
+    .vtable, .vtable tbody, .vtable tr, .vtable td{display:block;width:auto}
+    .vtable tr{padding:9px 0;border-bottom:1px solid var(--glass-border)}
+    .vtable tr:last-child{border-bottom:none}
+    .vtable td{padding:0;border-bottom:none}
+    .vtable td.k{width:auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+    .vtable td.v{margin-top:2px;font-size:14.5px}
+    .vhead h1{font-size:20px}
+    .vhead .ic{font-size:46px}
+    .vseal{font-size:12.5px;padding:9px 10px}
+  }
   .vfoot{text-align:center;color:var(--ink-faint);font-size:12.5px;margin-top:16px;line-height:1.6}
   .vform{display:flex;gap:8px;margin-top:14px}
   .vseal{display:flex;align-items:center;gap:8px;justify-content:center;background:rgba(62,219,193,.1);border:1px solid rgba(62,219,193,.35);color:#3edbc1;padding:10px;border-radius:12px;font-size:13.5px;font-weight:600;margin-bottom:8px}
@@ -108,10 +134,18 @@ if ($auth) {
     <div class="vhead ok"><div class="ic">✅</div><h1>Document authentique</h1><p>Ce document a bien été émis par <strong><?= e($ent) ?></strong>. Les informations officielles ci-dessous font foi.</p></div>
     <div class="vseal">🔐 Émis par <?= e($ent) ?></div>
     <table class="vtable">
-      <tr><td class="k">Type de document</td><td class="v"><?= e($typeLabels[$auth['type']] ?? $auth['type']) ?></td></tr>
-      <?php foreach ($details as $k=>$v): ?><tr><td class="k"><?= e($k) ?></td><td class="v"><?= e($v) ?></td></tr><?php endforeach; ?>
-      <tr><td class="k">Empreinte</td><td class="v"><?= e($auth['checksum']) ?></td></tr>
-      <tr><td class="k">Authentifié le</td><td class="v"><?= date('d/m/Y', strtotime($auth['created_at'])) ?></td></tr>
+      <?php
+      /* Une ligne vide sur une page d'authenticité inquiète plus qu'elle ne
+         renseigne : l'empreinte est facultative à l'enregistrement, on ne
+         l'affiche donc que si elle existe. */
+      $lignes = ['Type de document' => $typeLabels[$auth['type']] ?? $auth['type']]
+              + $details
+              + ['Empreinte'     => (string)($auth['checksum'] ?? ''),
+                 'Authentifié le' => date('d/m/Y', strtotime($auth['created_at']))];
+      foreach ($lignes as $k => $v):
+        if (trim((string)$v) === '') continue; ?>
+      <tr><td class="k"><?= e($k) ?></td><td class="v"><?= e((string)$v) ?></td></tr>
+      <?php endforeach; ?>
     </table>
     <p class="vfoot">Comparez ces informations avec votre exemplaire papier. En cas de différence (montant, nom, date…), le document en votre possession est une falsification.</p>
   <?php elseif ($mail): ?>
