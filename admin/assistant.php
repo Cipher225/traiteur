@@ -29,6 +29,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ia_secretariat'   => (int)($_POST['ia_secretariat'] ?? 0),
             'ia_accueil'       => mb_substr(trim((string)($_POST['ia_accueil'] ?? '')), 0, 300),
             'ia_declenchement' => ($_POST['ia_declenchement'] ?? 'bulle') === 'invitation' ? 'invitation' : 'bulle',
+            'ia_delai_invitation' => max(2, min(180, (int)($_POST['ia_delai_invitation'] ?? 12))),
+            'ia_invitation_texte' => mb_substr(trim((string)($_POST['ia_invitation_texte'] ?? '')), 0, 120),
             'ia_enregistrer'   => empty($_POST['ia_enregistrer']) ? '0' : '1',
 
             /* Horaires : l'assistant ne promet un rappel « dans la journée »
@@ -997,11 +999,27 @@ $jetons = (int)($conso['jetons_entree'] ?? 0) + (int)($conso['jetons_sortie'] ??
     <div class="field full ia-sep"><span>🌐 Sur le site</span></div>
 
     <div class="field"><label>Apparition sur le site</label>
-      <select class="input" name="ia_declenchement">
-        <option value="bulle" <?= $r['declenchement'] === 'bulle' ? 'selected' : '' ?>>Bulle discrète</option>
-        <option value="invitation" <?= $r['declenchement'] === 'invitation' ? 'selected' : '' ?>>Invitation après 12 secondes</option>
+      <select class="input" name="ia_declenchement" id="ia-declenchement">
+        <option value="bulle" <?= $r['declenchement'] === 'bulle' ? 'selected' : '' ?>>
+          Bulle seule — le visiteur vient à lui</option>
+        <option value="invitation" <?= $r['declenchement'] === 'invitation' ? 'selected' : '' ?>>
+          Invitation — l'assistant parle le premier</option>
       </select>
-      <span class="ia-aide">L'invitation convertit mieux, elle agace aussi davantage.</span></div>
+      <span class="ia-aide">L'invitation convertit mieux, elle agace aussi davantage.
+        Elle n'apparaît qu'une fois par visite, et plus du tout si le visiteur l'a écartée.</span></div>
+
+    <div class="field" id="ia-champ-delai">
+      <label>Après combien de secondes</label>
+      <input class="input" type="number" name="ia_delai_invitation" min="2" max="180"
+             value="<?= (int)$r['delai_invitation'] ?>">
+      <span class="ia-aide">Trop tôt, on dérange quelqu'un qui lit ; trop tard, il est parti.
+        Une douzaine de secondes est un bon point de départ.</span></div>
+
+    <div class="field full" id="ia-champ-texte">
+      <label>Ce que dit l'invitation</label>
+      <input class="input" name="ia_invitation_texte" maxlength="120"
+             value="<?= e($r['invitation_texte']) ?>"
+             placeholder="Une question sur nos prestations ?"></div>
 
     <div class="field full"><label>Message d'accueil</label>
       <input class="input" name="ia_accueil" maxlength="300" value="<?= e($r['accueil']) ?>"></div>
@@ -1027,6 +1045,20 @@ $jetons = (int)($conso['jetons_entree'] ?? 0) + (int)($conso['jetons_sortie'] ??
 (function () {
   /* Le nombre de jours n'a de sens que pour « les plus anciennes » : affiché
      à côté des deux autres choix, il laisse croire qu'il les limite. */
+  /* Le délai et le texte de l'invitation ne concernent que ce mode : affichés
+     en permanence, ils laissent croire que la bulle seule les utilise aussi. */
+  var mode = document.getElementById('ia-declenchement');
+  var champs = [document.getElementById('ia-champ-delai'),
+                document.getElementById('ia-champ-texte')];
+  if (mode) {
+    var ajusterMode = function () {
+      var invit = (mode.value === 'invitation');
+      champs.forEach(function (c) { if (c) c.hidden = !invit; });
+    };
+    mode.addEventListener('change', ajusterMode);
+    ajusterMode();
+  }
+
   var sel = document.querySelector('.cp-f select[name=purge_quoi]');
   var jours = document.querySelector('.cp-f .cp-j');
   if (!sel || !jours) return;

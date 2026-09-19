@@ -893,9 +893,14 @@ $f = flash();
     <span class="as-ico"><?= ia_marque() ?></span>
   </button>
 
-  <div class="as-invite" id="as-invite" hidden>
-    <span><?= ia_marque('mq-mini', false) ?> Une question sur nos prestations ?</span>
-    <button type="button" class="as-inv-x" aria-label="Fermer">✕</button>
+  <?php /* L'invitation se pose AU-DESSUS de la bulle. À gauche, elle
+           recouvrait « Demander un devis » sur téléphone : l'assistant
+           cachait le bouton qui fait vivre l'entreprise. */ ?>
+  <div class="as-invite" id="as-invite" hidden
+       data-delai="<?= (int)$iaReglages['delai_invitation'] ?>">
+    <span class="as-inv-av"><?= ia_marque('', false) ?></span>
+    <span class="as-inv-t"><?= e($iaReglages['invitation_texte']) ?></span>
+    <button type="button" class="as-inv-x" aria-label="Fermer l'invitation">✕</button>
   </div>
 
   <div class="as-fen" id="as-fen" hidden>
@@ -916,11 +921,6 @@ $f = flash();
       <input type="text" id="as-champ" maxlength="500"
              placeholder="Écrivez votre question…" autocomplete="off">
       <button type="button" id="as-envoyer" aria-label="Envoyer">➤</button>
-    </div>
-    <?php /* Dit franchement ce qu'est l'interlocuteur : on ne confie pas les
-             mêmes choses à une machine qu'à une personne. */ ?>
-    <div class="as-pied">
-      Réponses générées automatiquement — nos conseillers reprennent la main pour tout devis.
     </div>
   </div>
 </div>
@@ -1104,7 +1104,7 @@ $f = flash();
   ouvrir.addEventListener('click', function () {
     fen.hidden = !fen.hidden;
     racine.classList.toggle('ouvert', !fen.hidden);
-    if (invite) invite.hidden = true;
+    if (invite) { invite.hidden = true; retenir(); }
     if (!fen.hidden) { demarrer(); champ.focus(); }
   });
   fermer.addEventListener('click', function () {
@@ -1114,13 +1114,39 @@ $f = flash();
   envoyer.addEventListener('click', envoi);
   champ.addEventListener('keydown', function (e) { if (e.key === 'Enter') envoi(); });
 
-  /* Invitation : elle ne se montre qu'une fois par visite, et disparaît au
-     premier signe de désintérêt. */
-  if (racine.dataset.mode === 'invitation' && invite) {
-    setTimeout(function () { if (fen.hidden) invite.hidden = false; }, 12000);
+  /* ------------------------------------------------------------------
+     L'invitation.
+
+     Le commentaire promettait « une fois par visite » ; rien ne le mettait
+     en œuvre, et elle repartait à chaque page ouverte. Elle se souvient
+     maintenant, le temps de la visite : écartée une fois, elle ne revient
+     pas, et elle ne s'affiche pas non plus si la discussion a déjà été
+     ouverte. Le délai vient des réglages, il n'est plus figé ici.
+     ------------------------------------------------------------------ */
+  var MEMOIRE = 'helisce-invite-vue';
+
+  function dejaVue() {
+    try { return sessionStorage.getItem(MEMOIRE) === '1'; } catch (e) { return false; }
+  }
+  function retenir() {
+    try { sessionStorage.setItem(MEMOIRE, '1'); } catch (e) {}
+  }
+
+  if (racine.dataset.mode === 'invitation' && invite && !dejaVue()) {
+    var delai = Math.max(2, parseInt(invite.dataset.delai, 10) || 12) * 1000;
+
+    setTimeout(function () {
+      /* Si le visiteur a déjà ouvert la discussion entre-temps, l'invitation
+         n'a plus lieu d'être. */
+      if (!fen.hidden || dejaVue()) return;
+      invite.hidden = false;
+      retenir();
+    }, delai);
+
     invite.querySelector('.as-inv-x').addEventListener('click', function (e) {
       e.stopPropagation();
       invite.hidden = true;
+      retenir();
     });
     invite.addEventListener('click', function () { ouvrir.click(); });
   }

@@ -42,6 +42,12 @@ function ia_reglages(PDO $pdo): array {
         'accueil'       => trim((string)($s['ia_accueil'] ?? '')) ?:
                            'Bonjour 👋 Je peux vous renseigner sur nos prestations. Que préparez-vous ?',
         'declenchement' => (string)($s['ia_declenchement'] ?? 'bulle'),   // bulle | invitation
+        /* Délai avant l'invitation, en secondes. Il était figé à douze dans le
+           JavaScript pendant que l'écran des réglages annonçait « 12 secondes » :
+           deux endroits à corriger ensemble, donc un qui finit par mentir. */
+        'delai_invitation' => max(2, min(180, (int)($s['ia_delai_invitation'] ?? 12))),
+        'invitation_texte' => trim((string)($s['ia_invitation_texte'] ?? ''))
+                              ?: 'Une question sur nos prestations ?',
         'enregistrer'   => ($s['ia_enregistrer'] ?? '1') === '1',
     ];
 }

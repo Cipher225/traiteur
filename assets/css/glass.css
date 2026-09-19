@@ -816,14 +816,34 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .as-bulle:hover{transform:scale(1.08)}
 .asst.ouvert .as-bulle{transform:scale(.9);opacity:.85}
 
-/* Invitation discrète */
-.as-invite{position:absolute;right:70px;bottom:10px;white-space:nowrap;cursor:pointer;
-  display:flex;align-items:center;gap:10px;padding:11px 15px;border-radius:14px;
-  font-size:13px;color:#0a1020;background:#fff;
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-  animation:asEntre .4s cubic-bezier(.2,.9,.3,1.3) both}
-@keyframes asEntre{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-.as-inv-x{border:none;background:transparent;cursor:pointer;color:#8a94a6;font-size:13px;padding:0}
+/* ------------------------------------------------------------
+   L'invitation
+
+   Posée AU-DESSUS de la bulle, jamais à côté : à gauche, elle
+   recouvrait le bouton « Demander un devis » sur téléphone.
+   Elle emprunte l'habillage de la fenêtre de discussion —
+   c'est le même interlocuteur qui prend la parole.
+   ------------------------------------------------------------ */
+.as-invite{position:absolute;right:0;bottom:74px;cursor:pointer;
+  display:flex;align-items:center;gap:11px;padding:12px 14px;
+  width:max-content;max-width:min(300px,calc(100vw - 34px));
+  border-radius:17px;border-bottom-right-radius:6px;
+  background:linear-gradient(160deg,rgba(14,26,48,.99),rgba(8,16,32,.99));
+  border:1px solid rgba(240,193,75,.3);
+  box-shadow:0 18px 44px rgba(0,0,0,.5);
+  animation:asEntre .45s cubic-bezier(.2,.9,.3,1.3) both}
+@keyframes asEntre{from{opacity:0;transform:translateY(10px) scale(.94)}
+                   to{opacity:1;transform:none}}
+
+.as-inv-av{flex-shrink:0;width:30px;height:30px;border-radius:50%;
+  display:grid;place-items:center;font-size:17px;color:#0a1020;
+  background:linear-gradient(135deg,#e9c15c,#d4a526)}
+.as-inv-t{flex:1;min-width:0;font-size:13px;line-height:1.45;color:rgba(255,255,255,.92)}
+.as-inv-x{flex-shrink:0;border:none;background:transparent;cursor:pointer;
+  color:rgba(255,255,255,.4);font-size:14px;padding:2px 0 2px 2px;line-height:1}
+.as-inv-x:hover{color:#fff}
+
+@media (prefers-reduced-motion: reduce){ .as-invite{animation:none} }
 
 /* Fenêtre */
 .as-fen{position:absolute;right:0;bottom:70px;width:370px;max-width:calc(100vw - 32px);
@@ -899,7 +919,6 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .as-saisie button{width:40px;height:40px;border-radius:50%;border:none;cursor:pointer;
   flex-shrink:0;font-size:15px;color:#0a1020;
   background:linear-gradient(135deg,#e9c15c,#d4a526)}
-.as-pied{padding:0 14px 11px;font-size:10px;color:rgba(255,255,255,.35);text-align:center}
 
 @media (prefers-reduced-motion: reduce){
   .as-invite,.as-fen,.as-m{animation:none}
@@ -992,7 +1011,6 @@ img.reg-logo{width:30px;height:30px;object-fit:contain;vertical-align:middle;dis
 .as-m-av.reflechit .ia-mq{animation:mqTourne 2.6s linear infinite}
 @keyframes mqTourne{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
-.as-pied{line-height:1.5}
 
 @media (prefers-reduced-motion: reduce){
   .ia-mq.anim .mq-etoile,.ia-mq.anim .mq-a,.ia-mq.anim .mq-b,

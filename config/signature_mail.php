@@ -188,10 +188,17 @@ function signature_image(array $s, string $reference, string $empreinte, string 
 
     $x = 46; $y = 62;
 
-    /* Logo, si disponible */
+    /* ---- Le logo ----
+       Le logo téléversé d'abord ; à défaut, celui livré avec l'application.
+       Les pages du site appliquent déjà ce repli : sans lui, une signature
+       partait sans logo là où le site en affichait un — le destinataire
+       comparait deux identités différentes. */
     $logo = trim((string)($s['logo'] ?? ''));
     $cheminLogo = __DIR__ . '/../uploads/' . $logo;
-    if ($logo !== '' && is_file($cheminLogo)) {
+    if ($logo === '' || !is_file($cheminLogo)) {
+        $cheminLogo = __DIR__ . '/../assets/img/logo.png';
+    }
+    if (is_file($cheminLogo)) {
         $src = @imagecreatefromstring(file_get_contents($cheminLogo));
         if ($src) {
             $lw = imagesx($src); $lh = imagesy($src);
