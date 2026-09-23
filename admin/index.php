@@ -48,19 +48,21 @@ if (!is_admin()) {
 
     admin_header('Mon espace', 'dashboard', $pdo, $settings);
     ?>
-    <div class="panel glass" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-      <div style="font-size:34px">👋</div>
-      <div style="flex:1;min-width:220px">
-        <h2 style="margin:0;border:0;padding:0">Bonjour <?= e($prenom) ?> !</h2>
-        <p style="margin:4px 0 0;color:var(--ink-dim)">
+    <?php /* Même présentation que chez le client : la salutation suit l'heure,
+             et le nom est écrit en grand, dans la police de titre. */ ?>
+    <div class="panel glass accueil-mot">
+      <p class="am-salut"><?= salutation_du_jour() ?>,</p>
+      <h2 class="am-nom"><?= e($prenom) ?></h2>
+      <div class="am-barre">
+        <p class="am-sous">
           <?php if ($tc['non_vues']>0): ?>Vous avez <strong style="color:var(--gold)"><?= $tc['non_vues'] ?> nouvelle<?= $tc['non_vues']>1?'s':'' ?> tâche<?= $tc['non_vues']>1?'s':'' ?></strong> à découvrir.
           <?php elseif ($tc['a_faire']+$tc['en_cours']>0): ?>Vous avez <strong><?= $tc['a_faire']+$tc['en_cours'] ?> tâche<?= ($tc['a_faire']+$tc['en_cours'])>1?'s':'' ?></strong> en cours. Bon courage 💪
           <?php else: ?>Tout est à jour, aucune tâche en attente ✨<?php endif; ?>
         </p>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <a href="taches.php" class="btn btn-glass">✅ Mes tâches</a>
-        <a href="rapports.php?edit=new" class="btn btn-gold">📝 Rédiger un rapport</a>
+        <div class="am-act">
+          <a href="taches.php" class="btn btn-glass btn-sm">✅ Mes tâches</a>
+          <a href="rapports.php?edit=new" class="btn btn-gold btn-sm">📝 Rédiger un rapport</a>
+        </div>
       </div>
     </div>
 
@@ -513,7 +515,27 @@ if (can('comptabilite')) {
     } catch (Throwable $e) { $tendance = []; }
 }
 $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
+
+/* Le prénom suffit entre nous : « Bonsoir, Administrateur Konan » sonne comme
+   une convocation. On prend donc le premier mot du nom du compte. */
+$monNom = trim((string)($_SESSION['admin_nom'] ?? ''));
+$monPrenom = $monNom !== '' ? explode(' ', $monNom)[0] : 'à vous';
 ?>
+
+<div class="panel glass accueil-mot">
+  <p class="am-salut"><?= salutation_du_jour() ?>,</p>
+  <h2 class="am-nom"><?= e($monPrenom) ?></h2>
+  <div class="am-barre">
+    <p class="am-sous">
+      <?php if ($alertes): ?>
+        <strong><?= count($alertes) ?> point<?= count($alertes) > 1 ? 's' : '' ?> d'attention</strong>
+        <?= count($alertes) > 1 ? 'demandent' : 'demande' ?> votre regard aujourd'hui.
+      <?php else: ?>
+        Rien ne réclame votre attention pour l'instant : tout est à jour ✨
+      <?php endif; ?>
+    </p>
+  </div>
+</div>
 
 <?php if ($alertes): ?>
 <div class="alertes-bande">

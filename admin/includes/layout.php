@@ -116,7 +116,7 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
         </button>
         <div style="min-width:0">
           <h1><?= e($titre) ?></h1>
-          <p class="crumb">Bonjour, <?= e($_SESSION['admin_nom']) ?> 👋<?= is_admin() ? '' : ' · <span class="badge">Employé</span>' ?></p>
+          <p class="crumb"><?= salutation_du_jour() ?>, <?= e($_SESSION['admin_nom']) ?> 👋<?= is_admin() ? '' : ' · <span class="badge">Employé</span>' ?></p>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">

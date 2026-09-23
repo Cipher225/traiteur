@@ -81,13 +81,9 @@ $monAvis->execute([$CLIENT['nom']]); $monAvis = $monAvis->fetch();
 
 client_header('Mon espace', 'accueil', $settings, $CLIENT);
 
-/* La salutation change avec l'heure : à 7 h du matin, « bonsoir » sonne faux.
-   L'heure est celle d'Abidjan, fixée dans la configuration. */
-$h = (int)date('G');
-$salut = $h < 5 ? 'Bonne nuit' : ($h < 18 ? 'Bonjour' : 'Bonsoir');
 ?>
 <div class="panel glass accueil-mot">
-  <p class="am-salut"><?= $salut ?>,</p>
+  <p class="am-salut"><?= salutation_du_jour() ?>,</p>
   <h2 class="am-nom"><?= e(client_appellation($CLIENT)) ?></h2>
   <p class="am-sous">
     <?php if ($reste_du > 0): ?>
@@ -119,8 +115,39 @@ require_once __DIR__ . '/../admin/includes/rangement.php';
 $mesFactures = array_values(array_filter($factures, fn($f)=>($f['type'] ?? 'facture')==='facture'));
 $mesProformas = array_values(array_filter($factures, fn($f)=>($f['type'] ?? 'facture')==='proforma'));
 
+/* ----------------------------------------------------------------------------
+   L'état d'une facture, dit au client
+   ----------------------------------------------------------------------------
+   Le client doit lire sur la ligne elle-même si sa facture est réglée ou non :
+   les totaux du haut lui donnent la somme, pas le détail. Le vocabulaire est
+   le sien, pas celui de la comptabilité : « À régler » plutôt que « envoyée »,
+   « En préparation » plutôt que « brouillon ».
+---------------------------------------------------------------------------- */
+$etatClient = function (array $f) {
+    $statut = (string)($f['statut'] ?? '');
+    $ttc    = (float)($f['_ttc']   ?? 0);
+    $regle  = (float)($f['_regle'] ?? 0);
+    $reste  = (float)($f['_reste'] ?? 0);
+
+    if ($statut === 'annulee')  return ['badge-danger', 'Annulée', 0.0];
+    if ($statut === 'payee')    return ['badge-teal',   '✅ Payée', 0.0];
+    if ($statut === 'brouillon')return ['badge',        'En préparation', 0.0];
+
+    /* Le solde fait foi autant que le statut : si les encaissements couvrent
+       la facture, elle est réglée, même si personne n'a encore pensé à cocher
+       « payée » dans l'administration. Afficher « à régler » sur une facture
+       déjà soldée ferait payer deux fois un client consciencieux. */
+    if ($ttc > 0 && $regle > 0 && $reste <= 0) return ['badge-teal', '✅ Réglée', 0.0];
+
+    /* Reste le cas courant : émise et non soldée. Un acompte déjà versé se
+       dit — sinon le client croit que son versement n'a pas été pris. */
+    if ($regle > 0 && $reste > 0) return ['badge-gold', 'Partiellement réglée', $reste];
+    return ['badge-gold', 'À régler', $ttc];
+};
+
 /* Rendu d'une section rangée par date pour l'espace client */
-$sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($devise, $statutBadge, $statutLabel) {
+$sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam, $avecEtat = false)
+                 use ($devise, $etatClient) {
     if (!$docs) return;
     $arbre = rangement_par_mois($docs, $dateKey);
     ?>
@@ -144,6 +171,14 @@ $sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($dev
                 <span class="dt"><?= date('d/m/Y', strtotime($d[$dateKey])) ?></span>
                 <?php if (isset($d['_ttc'])): ?><span class="mt"><?= money($d['_ttc'], $devise) ?></span>
                 <?php elseif (isset($d['montant'])): ?><span class="mt"><?= money($d['montant'], $devise) ?></span><?php endif; ?>
+                <?php if ($avecEtat): [$cls, $mot, $reste] = $etatClient($d); ?>
+                <span class="etat">
+                  <span class="badge <?= $cls ?>"><?= e($mot) ?></span>
+                  <?php if ($reste > 0 && $mot === 'Partiellement réglée'): ?>
+                  <small>reste <?= money($reste, $devise) ?></small>
+                  <?php endif; ?>
+                </span>
+                <?php endif; ?>
                 <span class="acts"><a class="btn btn-glass btn-sm" href="doc-pdf.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>" target="_blank">📄 Voir</a>
                   <a class="btn btn-gold btn-sm" href="doc-pdf.php?type=<?= $typeParam ?>&id=<?= $d['id'] ?>&dl=1">⬇️ Télécharger</a></span>
               </div>
@@ -161,7 +196,9 @@ $sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($dev
 
 <div id="documents">
   <?php
-  $sectionClient('Mes factures', '🧾', $mesFactures, 'date_emission', 'facture');
+  /* Seules les factures portent un état de règlement : une proforma est une
+     proposition, un bon de sortie est déjà un encaissement. */
+  $sectionClient('Mes factures', '🧾', $mesFactures, 'date_emission', 'facture', true);
   $sectionClient('Mes proformas', '📋', $mesProformas, 'date_emission', 'proforma');
   $sectionClient('Mes bons de sortie', '📄', $recus, 'date_paiement', 'recu');
   if (!$factures && !$recus): ?>

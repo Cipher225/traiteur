@@ -47,9 +47,7 @@ if (!$CLIENT) { session_destroy(); header('Location: ../login.php'); exit; }
    lui, n'a que son nom — on le lui rend.
 ---------------------------------------------------------------------------- */
 function client_appellation(array $client): string {
-    $ent = trim((string)($client['entreprise'] ?? ''));
-    if ($ent !== '') return $ent;
-    return trim((string)($client['nom'] ?? '')) ?: 'cher client';
+    return nom_d_appel($client, 'cher client');   /* défini dans config/db.php */
 }
 
 function client_header(string $titre, string $actif, array $settings, array $client): void {
@@ -119,7 +117,7 @@ function client_header(string $titre, string $actif, array $settings, array $cli
         </button>
         <div style="min-width:0">
           <h1><?= e($titre) ?></h1>
-          <p class="crumb">Bonjour, <?= e(client_appellation($client)) ?> 👋 · <span class="badge">Client</span></p>
+          <p class="crumb"><?= salutation_du_jour() ?>, <?= e(client_appellation($client)) ?> 👋 · <span class="badge">Client</span></p>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">

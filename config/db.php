@@ -1189,6 +1189,35 @@ function google_state_verifier(PDO $pdo, string $state, int $validite = 600): ?s
     return $role === 'employe' ? 'employe' : 'client';
 }
 
+/* ============================================================================
+   SALUER À LA BONNE HEURE
+   ============================================================================
+   Une seule définition pour toute l'application : administration, employés et
+   clients saluent de la même façon, sinon l'un dira « bonsoir » quand l'autre
+   dit encore « bonjour ». L'heure est celle du fuseau fixé au démarrage
+   (Abidjan), pas celle du navigateur : c'est le serveur qui répond.
+
+     5 h – 11 h 59 : Bonjour
+    12 h – 17 h 59 : Bon après-midi
+    18 h –  4 h 59 : Bonsoir
+============================================================================ */
+function salutation_du_jour(): string {
+    $h = (int)date('G');
+    if ($h >= 18 || $h < 5) return 'Bonsoir';
+    if ($h >= 12)           return 'Bon après-midi';
+    return 'Bonjour';
+}
+
+/* Sous quel nom saluer quelqu'un : la raison sociale d'abord pour une
+   entreprise, le nom de la personne à défaut. Le tableau accepte aussi bien
+   une fiche client qu'un compte utilisateur. */
+function nom_d_appel(array $fiche, string $defaut = 'à vous'): string {
+    $ent = trim((string)($fiche['entreprise'] ?? ''));
+    if ($ent !== '') return $ent;
+    $nom = trim((string)($fiche['nom'] ?? ''));
+    return $nom !== '' ? $nom : $defaut;
+}
+
 /* Ajoute la date de modification du fichier à l'URL d'un asset
    → le navigateur recharge automatiquement CSS/JS après une mise à jour */
 function asset(string $chemin): string {
