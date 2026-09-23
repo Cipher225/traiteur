@@ -1166,6 +1166,9 @@ td strong { color: var(--ink); }
 
 /* Arborescence */
 .rng-tree{display:flex;flex-direction:column;gap:8px}
+/* Une arborescence de documents s'allonge d'année en année : bornée, elle
+   reste consultable sans repousser le reste de la page hors de l'écran. */
+@media (min-width:641px){ .rng-tree.defilant{max-height:56vh;padding-right:8px} }
 .rng-annee>summary{cursor:pointer;list-style:none;padding:13px 16px;border-radius:13px;
   background:linear-gradient(135deg,#0a1f44,#143264);color:#fff;font-weight:800;font-size:15px;
   display:flex;align-items:center;gap:10px;user-select:none}
@@ -2546,6 +2549,31 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
    sous ses yeux, barré : il voit ce qu'il a laissé de côté au
    lieu de le voir disparaître.
    ============================================================ */
+/* ============================================================
+   ACCUEIL CLIENT — la salutation
+   ------------------------------------------------------------
+   C'est la première chose que le client lit : son nom y est
+   écrit en grand, dans la police de titre de la maison, et non
+   noyé dans une ligne de fil d'Ariane.
+   ============================================================ */
+.accueil-mot{padding:26px 28px}
+.am-salut{margin:0;font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:600}
+/* « .panel h2 » impose 16 px et, en mode clair, sa propre couleur : les
+   sélecteurs ci-dessous nomment donc l'élément (h2.am-nom) pour passer
+   devant, plutôt que d'aller semer des « !important ». */
+.panel h2.am-nom{font-family:var(--font-display);font-weight:800;display:block;
+  font-size:clamp(27px,4.4vw,42px);line-height:1.12;margin:6px 0 0;
+  background:linear-gradient(120deg,var(--gold),#f3d98b 55%,var(--gold));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  overflow-wrap:anywhere}
+[data-theme="light"] .panel h2.am-nom{
+  background:linear-gradient(120deg,#b8870f,#d9a92c 55%,#b8870f);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.am-sous{margin:11px 0 0;font-size:14px;line-height:1.6;color:var(--ink-dim)}
+.am-sous strong{color:var(--ink)}
+@media (max-width:640px){ .accueil-mot{padding:20px} }
+
 .cmd-intro h2{margin-bottom:10px}
 .cmd-etapes{margin:0 0 4px;padding-left:20px;display:flex;flex-direction:column;gap:5px}
 .cmd-etapes li{font-size:13.5px;line-height:1.55;color:var(--ink-dim)}
@@ -2558,6 +2586,11 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .cmd-pers-aide{font-size:12px;color:var(--ink-faint);flex:1;min-width:180px}
 
 .order-menu{display:flex;flex-direction:column;gap:14px}
+/* Le halo doré d'une formule choisie déborde de sa carte : sans cette marge,
+   la fenêtre de défilement le sectionnerait sur les bords. */
+@media (min-width:641px){
+  .order-menu.defilant{max-height:74vh;padding:3px 8px 3px 3px}
+}
 
 .pk{border-radius:18px;overflow:hidden;background:var(--glass);
   border:1px solid var(--glass-border);transition:border-color .18s,box-shadow .18s}
@@ -4378,4 +4411,163 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 @media (max-width:640px){
   .pub-ligne{flex-direction:column;align-items:flex-start;gap:8px}
   .pub-dit{min-width:0}
+}
+
+/* ============================================================
+   CALCULATRICE SCIENTIFIQUE — GH-991
+   ------------------------------------------------------------
+   Une machine de bureau, pas un gadget : écran à deux lignes,
+   touches assez grandes pour être frappées sans viser, et les
+   couleurs de la maison — bleu nuit et or.
+
+   Le panneau est en « position:fixed » et se déplace à la
+   souris : on calcule en regardant le tableau qu'on est en
+   train de lire, il ne doit donc jamais le recouvrir pour de
+   bon.
+   ============================================================ */
+
+/* --- Le déclencheur, dans la barre latérale --- */
+.calc-declencheur{
+  display:flex;align-items:center;gap:9px;width:100%;
+  padding:9px 12px;border-radius:12px;cursor:pointer;
+  font-family:inherit;font-size:13.5px;font-weight:600;
+  color:var(--gold);
+  background:rgba(212,165,38,.1);border:1px solid rgba(212,165,38,.3);
+  transition:background .16s,border-color .16s,transform .1s}
+.calc-declencheur:hover{background:rgba(212,165,38,.2);border-color:rgba(212,165,38,.55)}
+.calc-declencheur:active{transform:scale(.98)}
+.calc-declencheur .cd-ico{display:grid;place-items:center;flex-shrink:0}
+
+/* --- Le panneau --- */
+.cal-fen{
+  position:fixed;left:min(298px,calc(100vw - 372px));bottom:20px;z-index:1200;
+  width:348px;border-radius:22px;overflow:hidden;
+  background:linear-gradient(170deg,#12294f,#0a1a33);
+  border:1px solid rgba(212,165,38,.42);
+  box-shadow:0 26px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04) inset;
+  opacity:0;transform:translateY(14px) scale(.97);
+  transition:opacity .18s ease, transform .18s cubic-bezier(.2,.9,.3,1.2);
+  user-select:none}
+.cal-fen.ouverte{opacity:1;transform:none}
+.cal-fen[hidden]{display:none}
+
+.cal-tete{display:flex;align-items:center;gap:10px;padding:11px 15px;cursor:grab;
+  background:linear-gradient(90deg,rgba(212,165,38,.2),rgba(212,165,38,.05));
+  border-bottom:1px solid rgba(212,165,38,.24)}
+.cal-tete:active{cursor:grabbing}
+.cal-titre{font-family:var(--font-display);font-weight:700;font-size:13.5px;color:#f3d98b;flex:1}
+.cal-modele{font-size:10px;letter-spacing:.16em;color:rgba(243,217,139,.55);font-weight:700}
+.cal-fermer{width:26px;height:26px;border-radius:50%;border:none;cursor:pointer;
+  background:rgba(255,255,255,.08);color:#f3d98b;font-size:13px;line-height:1}
+.cal-fermer:hover{background:#e0576a;color:#fff}
+
+/* --- L'écran --- */
+.cal-ecran{margin:13px 15px 4px;padding:12px 14px 11px;border-radius:14px;
+  background:linear-gradient(175deg,#05101f,#020812);
+  border:1px solid rgba(212,165,38,.24);
+  box-shadow:0 2px 14px rgba(0,0,0,.5) inset}
+.cal-ind{display:flex;gap:9px;margin-bottom:7px;font-size:9.5px;font-weight:800;letter-spacing:.11em}
+.cal-ind span{color:rgba(160,180,210,.3);transition:color .15s}
+.cal-ind span.on{color:#3edbc1}
+.cal-ind span.on.maj{color:#f0c14b}
+.cal-expr{font-family:var(--font-mono,ui-monospace,'SF Mono',Menlo,monospace);
+  font-size:15px;color:#9db4d4;min-height:20px;line-height:1.3;
+  white-space:nowrap;overflow-x:auto;scrollbar-width:none;direction:ltr}
+.cal-expr::-webkit-scrollbar{display:none}
+.cal-res{font-family:var(--font-mono,ui-monospace,'SF Mono',Menlo,monospace);
+  font-size:30px;font-weight:700;color:#f3d98b;text-align:right;line-height:1.25;
+  margin-top:5px;white-space:nowrap;overflow-x:auto;scrollbar-width:none;
+  text-shadow:0 0 22px rgba(243,217,139,.3);transition:color .15s,opacity .15s}
+.cal-res::-webkit-scrollbar{display:none}
+.cal-res.est-partiel{opacity:.38}          /* l'expression n'est pas finie */
+.cal-res.est-erreur{color:#ff8a9b;font-size:15px;font-weight:600;text-shadow:none;
+  white-space:normal;line-height:1.4}
+.cal-fen.a-repondu .cal-ecran{box-shadow:0 0 0 2px rgba(243,217,139,.5), 0 2px 14px rgba(0,0,0,.5) inset}
+
+/* --- Le clavier --- */
+.cal-clavier{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;padding:11px 15px 15px}
+.cal-t{
+  min-height:44px;border-radius:12px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-family:inherit;color:#e8eefb;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09);
+  transition:background .12s,border-color .12s,transform .06s}
+.cal-t b{font-size:16px;font-weight:700;line-height:1}
+.cal-t small{font-size:9px;font-weight:600;color:rgba(240,193,75,.6);line-height:1}
+.cal-t:hover{background:rgba(255,255,255,.14)}
+.cal-t:active{transform:scale(.94)}
+
+.cal-t.t-nb{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.14)}
+.cal-t.t-nb b{font-size:19px}
+.cal-t.t-nb:hover{background:rgba(255,255,255,.22)}
+
+.cal-t.t-op{background:rgba(212,165,38,.17);border-color:rgba(212,165,38,.35);color:#f3d98b}
+.cal-t.t-op b{font-size:20px}
+.cal-t.t-op:hover{background:rgba(212,165,38,.3)}
+
+.cal-t.t-par b,.cal-t.t-fn small{color:rgba(240,193,75,.62)}
+.cal-t.t-fn b,.cal-t.t-par b{font-size:14px}
+
+.cal-t.t-eg{background:linear-gradient(140deg,#f0c14b,#c8960c);border-color:transparent;color:#0a1f44}
+.cal-t.t-eg b{font-size:24px}
+.cal-t.t-eg:hover{filter:brightness(1.08)}
+
+.cal-t.t-ac{background:rgba(224,87,106,.2);border-color:rgba(224,87,106,.42);color:#ff9dab}
+.cal-t.t-eff{background:rgba(255,255,255,.07);color:#c3cee2}
+.cal-t.t-eff b,.cal-t.t-ac b{font-size:13px}
+.cal-t.t-mode b,.cal-t.t-mem b,.cal-t.t-maj b{font-size:12.5px}
+.cal-t.t-mode{font-size:11px;font-weight:700;color:#8fa3c4;line-height:1.15}
+.cal-t.t-mode small{font-size:9px}
+.cal-t.t-mem small{color:rgba(160,180,210,.5)}
+.cal-t.t-mem.copie{background:rgba(62,219,193,.26);border-color:#3edbc1;color:#3edbc1}
+
+/* La touche Maj s'allume, et les secondes fonctions passent au premier plan :
+   on doit voir ce que la machine va faire avant d'appuyer. */
+.cal-t.t-maj{background:rgba(147,112,219,.2);border-color:rgba(147,112,219,.42);color:#c9b3f5}
+.cal-fen.est-maj .cal-t.t-maj{background:#9370db;color:#fff;border-color:transparent;
+  box-shadow:0 0 16px rgba(147,112,219,.55)}
+/* Seules les touches marquées « t-2 » portent une seconde fonction : la
+   permutation ne doit toucher qu'elles, sinon « Maj », « AC » ou « 7 »
+   rapetissaient eux aussi sans rien avoir à échanger. */
+.cal-fen.est-maj .cal-t.t-2 small{color:#f0c14b;font-size:12.5px;font-weight:700;order:-1}
+.cal-fen.est-maj .cal-t.t-2 b{font-size:10px;color:rgba(200,214,235,.45);order:1}
+
+/* --- Historique et aide --- */
+.cal-tiroir{border-top:1px solid rgba(255,255,255,.09)}
+.cal-tiroir summary{padding:10px 15px;cursor:pointer;font-size:12px;font-weight:600;
+  color:rgba(240,193,75,.75);list-style:none}
+.cal-tiroir summary::-webkit-details-marker{display:none}
+.cal-tiroir summary::before{content:'▸ ';display:inline-block;transition:transform .18s}
+.cal-tiroir[open] summary::before{transform:rotate(90deg)}
+.cal-hist{max-height:170px;overflow-y:auto;padding:0 15px;display:flex;flex-direction:column;gap:5px;
+  scrollbar-width:thin;scrollbar-color:rgba(212,165,38,.32) transparent}
+.cal-hist::-webkit-scrollbar{width:6px}
+.cal-hist::-webkit-scrollbar-thumb{background:rgba(212,165,38,.32);border-radius:3px}
+.cal-hist-vide{font-size:11.5px;color:rgba(160,180,210,.5);line-height:1.5;margin:0 0 4px}
+.cal-h{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;
+  padding:7px 10px;border-radius:10px;cursor:pointer;text-align:left;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);
+  font-family:var(--font-mono,ui-monospace,Menlo,monospace)}
+.cal-h:hover{background:rgba(212,165,38,.14);border-color:rgba(212,165,38,.3)}
+.cal-h .ch-q{font-size:11px;color:#8fa3c4}
+.cal-h .ch-r{font-size:13.5px;font-weight:700;color:#f3d98b}
+.cal-aide{padding:10px 15px 14px}
+.cal-aide .cal-vider{width:100%;min-height:34px;margin-bottom:9px}
+.cal-aide p{font-size:11px;line-height:1.6;color:rgba(160,180,210,.65);margin:0}
+.cal-aide b{color:#f3d98b}
+
+/* Sur téléphone la calculatrice se centre et s'élargit : viser des touches
+   de 44 px avec le pouce, au bord de l'écran, ne marche pas. */
+@media (max-width:720px){
+  .cal-fen{left:50%;right:auto;bottom:12px;top:auto;
+    transform:translateX(-50%) translateY(14px) scale(.97);
+    width:min(370px,calc(100vw - 20px))}
+  .cal-fen.ouverte{transform:translateX(-50%)}
+  .cal-tete{cursor:default}
+  .cal-t{min-height:48px}
+  .cal-hist{max-height:130px}
+}
+@media (max-height:700px){
+  .cal-hist{max-height:110px}
+  .cal-res{font-size:26px}
 }

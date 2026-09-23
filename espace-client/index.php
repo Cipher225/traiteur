@@ -80,7 +80,26 @@ $monAvis = $pdo->prepare("SELECT * FROM temoignages WHERE nom=? ORDER BY id DESC
 $monAvis->execute([$CLIENT['nom']]); $monAvis = $monAvis->fetch();
 
 client_header('Mon espace', 'accueil', $settings, $CLIENT);
+
+/* La salutation change avec l'heure : à 7 h du matin, « bonsoir » sonne faux.
+   L'heure est celle d'Abidjan, fixée dans la configuration. */
+$h = (int)date('G');
+$salut = $h < 5 ? 'Bonne nuit' : ($h < 18 ? 'Bonjour' : 'Bonsoir');
 ?>
+<div class="panel glass accueil-mot">
+  <p class="am-salut"><?= $salut ?>,</p>
+  <h2 class="am-nom"><?= e(client_appellation($CLIENT)) ?></h2>
+  <p class="am-sous">
+    <?php if ($reste_du > 0): ?>
+      Il reste <strong><?= money($reste_du, $devise) ?></strong> à régler sur votre compte.
+    <?php elseif ($nb_fac || $nb_pro): ?>
+      Votre compte est à jour — tout est réglé. Merci de votre confiance.
+    <?php else: ?>
+      Bienvenue dans votre espace. Composez votre première prestation quand vous le souhaitez.
+    <?php endif; ?>
+  </p>
+</div>
+
 <div class="stats">
   <div class="stat glass violet"><div class="s-ico">🧾</div><div class="s-num"><?= $nb_fac ?></div><div class="s-label">Factures</div></div>
   <div class="stat glass gold"><div class="s-ico">📋</div><div class="s-num"><?= $nb_pro ?></div><div class="s-label">Proformas</div></div>
@@ -107,7 +126,11 @@ $sectionClient = function($titre, $icone, $docs, $dateKey, $typeParam) use ($dev
     ?>
     <div class="panel glass">
       <h2><?= $icone ?> <?= e($titre) ?> (<?= count($docs) ?>)</h2>
-      <div class="rng-tree">
+      <?php /* « defilant » borne la hauteur et fait défiler à l'intérieur du
+               panneau. L'arborescence n'est pas touchée : années et mois se
+               déplient exactement comme avant, c'est seulement la fenêtre par
+               laquelle on la regarde qui a une hauteur. */ ?>
+      <div class="rng-tree defilant">
         <?php foreach ($arbre as $annee => $mois): $nbA=0; foreach($mois as $ds) $nbA+=count($ds); ?>
         <details class="rng-annee" open>
           <summary><?= $annee ?><span class="cnt"><?= $nbA ?></span></summary>

@@ -100,6 +100,7 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
       <?php endforeach; ?>
     </nav>
     <div class="side-foot">
+      <?php require_once __DIR__ . '/../../config/calculatrice.php'; calculatrice_bouton(); ?>
       <a href="profil.php" class="btn btn-glass btn-sm" style="width:100%">👤 Mon profil</a>
       <a href="../index.php" target="_blank" class="btn btn-glass btn-sm" style="width:100%">🌐 Voir le site</a>
       <a href="../logout.php" class="btn btn-danger btn-sm" style="width:100%">Déconnexion</a>
@@ -155,6 +156,7 @@ function admin_header(string $titre, string $actif, PDO $pdo, array $settings): 
 function admin_footer(): void { ?>
   </main>
 </div>
+<?php require_once __DIR__ . '/../../config/calculatrice.php'; calculatrice_panneau('..'); ?>
 <script>
 // Sidebar mobile : ouverture / fermeture (style macOS) + overlay
 (function(){

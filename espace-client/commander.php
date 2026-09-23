@@ -103,7 +103,10 @@ client_header('Commander', 'commander', $settings, $CLIENT);
 </div>
 
 <div class="order-layout">
-  <div class="order-menu">
+  <?php /* La liste des formules défile dans sa propre fenêtre : dépliées, dix
+           formules occupaient plusieurs écrans et le récapitulatif de droite
+           se retrouvait hors de vue au moment précis où il sert. */ ?>
+  <div class="order-menu defilant">
     <?php if (!$cats): ?>
     <div class="panel glass" style="text-align:center;color:var(--ink-faint);padding:28px">
       Nos formules ne sont pas encore en ligne. Revenez très bientôt !

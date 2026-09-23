@@ -38,6 +38,20 @@ $stmt->execute([$CLIENT_UID]);
 $CLIENT = $stmt->fetch();
 if (!$CLIENT) { session_destroy(); header('Location: ../login.php'); exit; }
 
+/* ----------------------------------------------------------------------------
+   Sous quel nom saluer le client ?
+   ----------------------------------------------------------------------------
+   Une entreprise se reconnaît à sa raison sociale, pas au nom de la personne
+   qui a ouvert le compte : « Bonjour Yao Événements » est juste, « Bonjour
+   Konan Yao » donne l'impression d'écrire à quelqu'un d'autre. Un particulier,
+   lui, n'a que son nom — on le lui rend.
+---------------------------------------------------------------------------- */
+function client_appellation(array $client): string {
+    $ent = trim((string)($client['entreprise'] ?? ''));
+    if ($ent !== '') return $ent;
+    return trim((string)($client['nom'] ?? '')) ?: 'cher client';
+}
+
 function client_header(string $titre, string $actif, array $settings, array $client): void {
     global $pdo;
     $NOTIF = notifications($pdo, current_user() + ['client_id' => (int)$client['id']]);
@@ -91,6 +105,7 @@ function client_header(string $titre, string $actif, array $settings, array $cli
       <?php endforeach; ?>
     </nav>
     <div class="side-foot">
+      <?php require_once __DIR__ . '/../config/calculatrice.php'; calculatrice_bouton(); ?>
       <a href="../index.php" target="_blank" class="btn btn-glass btn-sm" style="width:100%">🌐 Voir le site</a>
       <a href="../logout.php" class="btn btn-danger btn-sm" style="width:100%">Déconnexion</a>
     </div>
@@ -104,7 +119,7 @@ function client_header(string $titre, string $actif, array $settings, array $cli
         </button>
         <div style="min-width:0">
           <h1><?= e($titre) ?></h1>
-          <p class="crumb">Bonjour, <?= e($client['nom']) ?> 👋 · <span class="badge">Client</span></p>
+          <p class="crumb">Bonjour, <?= e(client_appellation($client)) ?> 👋 · <span class="badge">Client</span></p>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
@@ -137,6 +152,7 @@ function client_header(string $titre, string $actif, array $settings, array $cli
 function client_footer(): void { ?>
   </main>
 </div>
+<?php require_once __DIR__ . '/../config/calculatrice.php'; calculatrice_panneau('..'); ?>
 <script>
 (function(){
   var side=document.querySelector('.sidebar'), ov=document.getElementById('side-overlay');
