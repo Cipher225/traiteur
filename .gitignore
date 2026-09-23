@@ -1,0 +1,33 @@
+# Secrets et configuration locale
+.env
+config/config.local.php
+
+# Fichiers téléversés par les utilisateurs (persistés via volume Docker)
+uploads/*
+!uploads/.htaccess
+!uploads/.gitkeep
+!uploads/tmp/
+!uploads/tmp/.htaccess
+!uploads/tmp/.gitkeep
+!uploads/tmp/attente/
+!uploads/tmp/attente/.htaccess
+!uploads/tmp/attente/.gitkeep
+!uploads/signatures/
+!uploads/signatures/.htaccess
+!uploads/signatures/.gitkeep
+!uploads/coffre/
+!uploads/coffre/.htaccess
+!uploads/coffre/.gitkeep
+
+# Logs et fichiers temporaires
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+
+# Dépendances lourdes régénérables (dompdf est optionnel)
+# lib/dompdf/
+
+# Divers éditeurs
+.vscode/
+.idea/

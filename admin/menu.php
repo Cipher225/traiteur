@@ -2,9 +2,57 @@
 require __DIR__ . '/includes/auth.php';
 require __DIR__ . '/includes/layout.php';
 
+/* ----------------------------------------------------------------------------
+   Publier, ou retirer du site.
+
+   Publier n'est pas une modification de fiche : c'est un geste qu'on fait vingt
+   fois par jour et dont on veut voir l'effet tout de suite. Il n'a donc pas de
+   bouton « Enregistrer » — la bascule vaut enregistrement.
+
+   L'état est envoyé explicitement (publié / retiré) plutôt qu'inversé côté
+   serveur : deux clics rapides sur une connexion lente s'annuleraient l'un
+   l'autre, et l'écran finirait par mentir sur l'état réel.
+   ---------------------------------------------------------------------------- */
+function menu_repondre_json(bool $ok, string $message = '', array $extra = []): void {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo json_encode(['ok' => $ok, 'message' => $message] + $extra, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+/* La page appelle en arrière-plan ; un navigateur sans JavaScript poste
+   normalement et repart sur la liste. */
+function menu_est_json(): bool {
+    return strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'fetch';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
     $retour = 'menu.php';
+
+    /* ---------- Publication immédiate ---------- */
+    if (isset($_POST['cat_publier']) || isset($_POST['art_publier'])) {
+        $estCat = isset($_POST['cat_publier']);
+        $id     = (int)($_POST[$estCat ? 'cat_publier' : 'art_publier']);
+        $etat   = !empty($_POST['publie']) ? 1 : 0;
+        $table  = $estCat ? 'categories' : 'plats';
+
+        try {
+            $pdo->prepare("UPDATE $table SET actif=? WHERE id=?")->execute([$etat, $id]);
+            $ok = true;
+        } catch (Throwable $e) { $ok = false; }
+
+        $quoi = $estCat ? 'Catégorie' : 'Article';
+        $msg  = $ok ? ($quoi . ($etat ? ' publiée sur le site.' : ' retirée du site.'))
+                    : "L'enregistrement n'a pas abouti.";
+        if (!$estCat) $msg = $ok ? ($etat ? 'Article publié.' : 'Article retiré du site.') : $msg;
+
+        if (menu_est_json()) menu_repondre_json($ok, $msg, ['etat' => $etat]);
+
+        flash($msg, $ok ? 'success' : 'error');
+        $cid = $estCat ? $id : (int)$pdo->query("SELECT categorie_id FROM plats WHERE id=" . $id)->fetchColumn();
+        header('Location: menu.php?c=' . $cid); exit;
+    }
 
     /* ---------- CATÉGORIES ---------- */
     if (isset($_POST['cat_save'])) {
@@ -12,13 +60,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nom  = trim($_POST['cat_nom'] ?? '');
         $icone = mb_substr(trim($_POST['cat_icone'] ?? '🍽️'), 0, 10) ?: '🍽️';
         $desc = mb_substr(trim($_POST['cat_desc'] ?? ''), 0, 255);
+        /* À la création seulement : le formulaire de modification n'a plus de
+           case « publier », la publication vivant sur la fiche. Sans ce
+           « isset », une simple correction de nom aurait masqué la catégorie. */
         $actif = isset($_POST['cat_actif']) ? 1 : 0;
         $prixMin = max(0, (int)($_POST['cat_prix_min'] ?? 0));
         $prixMax = max(0, (int)($_POST['cat_prix_max'] ?? 0));
         if ($nom === '') { flash('Le nom de la catégorie est obligatoire.', 'error'); header("Location: $retour"); exit; }
         if ($id) {
-            $pdo->prepare('UPDATE categories SET nom=?, icone=?, description=?, prix_min=?, prix_max=?, actif=? WHERE id=?')
-                ->execute([mb_substr($nom, 0, 100), $icone, $desc, $prixMin, $prixMax, $actif, $id]);
+            $pdo->prepare('UPDATE categories SET nom=?, icone=?, description=?, prix_min=?, prix_max=? WHERE id=?')
+                ->execute([mb_substr($nom, 0, 100), $icone, $desc, $prixMin, $prixMax, $id]);
             flash('Catégorie mise à jour.');
             $retour = 'menu.php?c=' . $id;
         } else {
@@ -66,6 +117,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $desc = mb_substr(trim($_POST['art_desc'] ?? ''), 0, 500);
         $prix = max(0, (float)($_POST['art_prix'] ?? 0));
         $pop  = isset($_POST['art_populaire']) ? 1 : 0;
+        /* Comme pour les catégories : la case n'existe qu'à l'ajout. En
+           modification, on ne touche pas à la publication. */
         $actif = isset($_POST['art_actif']) ? 1 : 0;
         $image = upload_image_redim($_FILES['art_image'] ?? [], UPLOAD_DIR, 600, 600, 'cover');
 
@@ -74,8 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ancImg = $anc->fetchColumn();
             if (!empty($_POST['art_img_suppr']) && $ancImg) { @unlink(UPLOAD_DIR . '/' . $ancImg); $ancImg = null; }
             if ($image && $ancImg) @unlink(UPLOAD_DIR . '/' . $ancImg);
-            $pdo->prepare('UPDATE plats SET categorie_id=?, nom=?, description=?, prix=?, populaire=?, actif=?, image=? WHERE id=?')
-                ->execute([$cid, mb_substr($nom, 0, 150), $desc, $prix, $pop, $actif, $image ?: $ancImg, $id]);
+            $pdo->prepare('UPDATE plats SET categorie_id=?, nom=?, description=?, prix=?, populaire=?, image=? WHERE id=?')
+                ->execute([$cid, mb_substr($nom, 0, 150), $desc, $prix, $pop, $image ?: $ancImg, $id]);
             flash('Article mis à jour.');
         } else {
             $ordre = (int)$pdo->query('SELECT COALESCE(MAX(ordre),0)+1 FROM plats WHERE categorie_id=' . $cid)->fetchColumn();
@@ -116,12 +169,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: menu.php'); exit;
     }
 
-    if (isset($_POST['art_toggle'])) {
-        $id = (int)$_POST['art_toggle'];
-        $pdo->prepare('UPDATE plats SET actif = 1 - actif WHERE id=?')->execute([$id]);
-        $c = $pdo->prepare('SELECT categorie_id FROM plats WHERE id=?'); $c->execute([$id]);
-        header('Location: menu.php?c=' . (int)$c->fetchColumn()); exit;
-    }
+    /* « art_toggle » (bascule aveugle) a été remplacé par « art_publier », qui
+       reçoit l'état voulu. Deux clics rapides donnent ainsi le même résultat
+       qu'un seul, alors qu'une bascule les annulait l'un l'autre. */
 
     header('Location: menu.php'); exit;
 }
@@ -156,6 +206,23 @@ if ($editArt) { foreach ($arts as $a) if ($a['id'] == $editArt) $ouvert = (int)$
 $catsOuvertes = [];
 if ($q !== '') foreach ($arts as $a) $catsOuvertes[(int)$a['categorie_id']] = true;
 if ($editCat) $ouvert = $editCat;
+/* ----------------------------------------------------------------------------
+   Le mode « travail sur une seule catégorie ».
+
+   La page listait toutes les catégories en même temps, et le formulaire de
+   modification s'ouvrait au milieu : on ne savait plus ce qu'on modifiait, ni
+   où l'on était dans la page. Dès qu'on modifie quelque chose, la page ne
+   montre donc plus que cette catégorie-là — et un chemin de retour.
+   ---------------------------------------------------------------------------- */
+$focus = 0;
+if ($editCat) $focus = $editCat;
+elseif ($editArt) { foreach ($arts as $a) if ((int)$a['id'] === $editArt) $focus = (int)$a['categorie_id']; }
+/* La catégorie ciblée existe-t-elle encore ? Sinon on revient à la liste. */
+if ($focus && !array_filter($cats, fn($c) => (int)$c['id'] === $focus)) $focus = 0;
+
+$catFocus = null;
+if ($focus) foreach ($cats as $c) if ((int)$c['id'] === $focus) $catFocus = $c;
+
 $nbCats = count($cats); $nbArts = count($arts);
 $nbInactifs = 0; foreach ($arts as $a) if (!$a['actif']) $nbInactifs++;
 
@@ -163,6 +230,15 @@ admin_header('Menu', 'menu', $pdo, $settings);
 $csrf = csrf_token();
 $devise = $settings['devise'] ?? 'FCFA';
 ?>
+<?php if ($focus): ?>
+<?php /* Le chemin de retour d'abord : on doit toujours savoir comment sortir
+         de ce qu'on est en train de faire. */ ?>
+<div class="menu-focus-barre">
+  <a class="btn btn-glass btn-sm" href="menu.php?c=<?= $focus ?>">← Retour au menu complet</a>
+  <span class="mfb-t"><?= e($catFocus['icone'] ?? '') ?> <?= e($catFocus['nom'] ?? '') ?></span>
+  <span class="mfb-q"><?= $editArt ? 'Modification d’un article' : 'Modification de la catégorie' ?></span>
+</div>
+<?php else: ?>
 <div class="panel glass menu-intro">
   <div class="mi-txt">
     <h2 style="border:0;margin:0;padding:0">🍽️ Le menu de la maison</h2>
@@ -191,12 +267,15 @@ $devise = $settings['devise'] ?? 'FCFA';
     <div class="cf-row">
       <div class="field ic"><label>Icône</label>
         <input class="input icone-input" name="cat_icone" id="cat_icone_new" value="🍽️" maxlength="4">
-        <div class="icone-palette" data-cible="cat_icone_new"></div>
       </div>
       <div class="field"><label>Nom de la catégorie *</label><input class="input" name="cat_nom" placeholder="ex : Pause café du matin" required></div>
       <div class="field"><label>Description (facultatif)</label><input class="input" name="cat_desc" placeholder="ex : Servi de 8h à 10h30"></div>
       <div class="field"><label>Prix indicatif — de (FCFA)</label><input class="input" type="number" name="cat_prix_min" min="0" placeholder="ex : 15000"></div>
       <div class="field"><label>Prix indicatif — à (FCFA)</label><input class="input" type="number" name="cat_prix_max" min="0" placeholder="ex : 25000"></div>
+      <?php /* La palette occupe toute la largeur : serrée dans la colonne de
+               l'icône (76 px), elle s'affichait sur trois icônes de front et
+               il fallait faire défiler pour en voir quatre-vingts. */ ?>
+      <div class="icone-palette" data-cible="cat_icone_new"></div>
     </div>
 
     <div class="pub-bloc">
@@ -212,6 +291,8 @@ $devise = $settings['devise'] ?? 'FCFA';
   </form>
 </details>
 
+<?php endif; /* fin du mode liste */ ?>
+
 <?php if (!$cats): ?>
 <div class="panel glass" style="text-align:center;padding:44px;color:var(--ink-faint)">
   Aucune catégorie pour le moment. Créez la première ci-dessus — par exemple « Pause café du matin ».
@@ -219,12 +300,18 @@ $devise = $settings['devise'] ?? 'FCFA';
 <?php endif; ?>
 
 <?php foreach ($cats as $i => $c):
+  /* En mode travail, les autres catégories ne s'affichent pas : c'est tout
+     l'objet de ce mode. */
+  if ($focus && (int)$c['id'] !== $focus) continue;
   $items = $parCat[$c['id']] ?? [];
-  $isOpen = !empty($catsOuvertes[(int)$c['id']])
+  /* En mode travail, la catégorie est forcément dépliée : elle est la seule
+     chose à l'écran, la replier ne laisserait rien. */
+  $isOpen = $focus
+         || !empty($catsOuvertes[(int)$c['id']])
          || ($ouvert === (int)$c['id'])
          || ($q === '' && !$ouvert && $i === 0);
 ?>
-<details class="panel glass cat-block <?= $c['actif'] ? '' : 'is-off' ?>" <?= $isOpen ? 'open' : '' ?> id="cat<?= $c['id'] ?>">
+<details class="panel glass cat-block <?= $c['actif'] ? '' : 'is-off' ?><?= $focus ? ' cat-focus' : '' ?>" <?= $isOpen ? 'open' : '' ?> id="cat<?= $c['id'] ?>">
   <summary class="cat-sum">
     <span class="cat-ic"><?= e($c['icone']) ?></span>
     <span class="cat-nom">
@@ -237,6 +324,26 @@ $devise = $settings['devise'] ?? 'FCFA';
   </summary>
 
   <div class="cat-body">
+    <?php /* La publication est la seule décision qui se voit immédiatement sur
+             le site : elle a sa ligne, en tête de la catégorie, et s'enregistre
+             toute seule. Elle ne dépend plus d'un bouton « Enregistrer », donc
+             elle ne risque plus d'emporter avec elle un nom à demi modifié. */ ?>
+    <form method="post" class="pub-ligne pub-auto <?= $c['actif'] ? 'est-on' : '' ?>">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="cat_publier" value="<?= $c['id'] ?>">
+      <label class="switch pub-sw">
+        <input type="checkbox" name="publie" value="1" <?= $c['actif'] ? 'checked' : '' ?>><span></span>
+        <b>Visible sur le site</b>
+      </label>
+      <span class="pub-dit"><?= $c['actif']
+        ? 'Cette catégorie et ses articles publiés paraissent sur le site.'
+        : 'Masquée : la catégorie et <strong>tous</strong> ses articles disparaissent du site. Rien n’est supprimé.' ?></span>
+      <button class="btn btn-glass btn-sm pub-valider">Enregistrer</button>
+      <span class="pub-etat" aria-live="polite"></span>
+    </form>
+
+    <?php if (!$focus): /* Déplacer ou supprimer n'a pas de sens pendant qu'on
+                           modifie : ces boutons reviennent après. */ ?>
     <!-- Barre d'actions de la catégorie -->
     <div class="cat-actions">
       <a class="btn btn-glass btn-sm" href="menu.php?c=<?= $c['id'] ?>&edit_cat=<?= $c['id'] ?>">✏️ Modifier la catégorie</a>
@@ -248,6 +355,7 @@ $devise = $settings['devise'] ?? 'FCFA';
         <input type="hidden" name="csrf" value="<?= $csrf ?>">
         <button class="btn btn-danger btn-sm" name="cat_delete" value="<?= $c['id'] ?>">🗑️ Supprimer</button></form>
     </div>
+    <?php endif; ?>
 
     <?php if ($editCat === (int)$c['id']): ?>
     <form method="post" class="cat-form edit-inline">
@@ -256,28 +364,18 @@ $devise = $settings['devise'] ?? 'FCFA';
       <div class="cf-row">
         <div class="field ic"><label>Icône</label>
           <input class="input icone-input" name="cat_icone" id="cat_icone_edit" value="<?= e($c['icone']) ?>" maxlength="4">
-          <div class="icone-palette" data-cible="cat_icone_edit"></div>
         </div>
         <div class="field"><label>Nom *</label><input class="input" name="cat_nom" value="<?= e($c['nom']) ?>" required></div>
         <div class="field"><label>Description</label><input class="input" name="cat_desc" value="<?= e($c['description'] ?? '') ?>"></div>
         <div class="field"><label>Prix indicatif — de (FCFA)</label><input class="input" type="number" name="cat_prix_min" min="0" value="<?= (int)($c['prix_min'] ?? 0) ?>"></div>
         <div class="field"><label>Prix indicatif — à (FCFA)</label><input class="input" type="number" name="cat_prix_max" min="0" value="<?= (int)($c['prix_max'] ?? 0) ?>"></div>
+        <div class="icone-palette" data-cible="cat_icone_edit"></div>
       </div>
 
-      <?php /* La publication ne se range pas avec les champs : ce n'est pas une
-               donnée de la catégorie, c'est une décision qui la fait paraître
-               ou disparaître du site. Au milieu de la rangée, l'interrupteur
-               passait pour un champ de plus. */ ?>
-      <div class="pub-bloc">
-        <span class="pub-titre">🌐 Sur le site public</span>
-        <label class="switch pub-sw">
-          <input type="checkbox" name="cat_actif" <?= $c['actif'] ? 'checked' : '' ?>><span></span>
-          <b>Publier cette catégorie</b></label>
-        <span class="pub-aide">Décochée, la catégorie disparaît du site
-          <strong>avec tous ses articles</strong>, y compris ceux publiés individuellement.
-          Rien n'est supprimé : tout revient en la republiant.</span>
-      </div>
-
+      <?php /* Pas d'interrupteur de publication ici : il est en tête de la
+               catégorie, où il s'enregistre seul. Un même réglage à deux
+               endroits, avec deux façons de le valider, est exactement ce qui
+               rendait cette page confuse. */ ?>
       <div class="cf-actions">
         <button class="btn btn-gold btn-sm">Enregistrer</button>
         <a class="btn btn-glass btn-sm" href="menu.php?c=<?= $c['id'] ?>">Annuler</a>
@@ -288,7 +386,10 @@ $devise = $settings['devise'] ?? 'FCFA';
     <!-- Articles de la catégorie -->
     <?php if ($items): ?>
     <div class="art-list">
-      <?php foreach ($items as $k => $a): $enEdit = ($editArt === (int)$a['id']); ?>
+      <?php foreach ($items as $k => $a): $enEdit = ($editArt === (int)$a['id']);
+        /* Un article en cours de modification s'affiche seul : les vingt
+           autres de la catégorie n'apprennent rien pendant ce temps. */
+        if ($editArt && !$enEdit) continue; ?>
       <div class="art-row <?= $a['actif'] ? '' : 'is-off' ?>">
         <div class="art-thumb"><?php if ($a['image']): ?><img src="../uploads/<?= e($a['image']) ?>" alt=""><?php else: ?><span>🍽️</span><?php endif; ?></div>
         <div class="art-main">
@@ -304,8 +405,19 @@ $devise = $settings['devise'] ?? 'FCFA';
             <button class="ico-btn" name="art_move" value="<?= $a['id'] ?>" title="Monter" <?= $k === 0 ? 'disabled' : '' ?>>↑</button></form>
           <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="sens" value="down">
             <button class="ico-btn" name="art_move" value="<?= $a['id'] ?>" title="Descendre" <?= $k === count($items) - 1 ? 'disabled' : '' ?>>↓</button></form>
-          <form method="post"><input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <button class="ico-btn" name="art_toggle" value="<?= $a['id'] ?>" title="<?= $a['actif'] ? 'Masquer' : 'Afficher' ?>"><?= $a['actif'] ? '👁️' : '🚫' ?></button></form>
+          <?php /* Un œil qui change de dessin n'apprend pas s'il décrit l'état
+                   actuel ou l'action à venir. Un interrupteur, si : allumé =
+                   visible. Il s'enregistre à l'instant où on le bascule. */ ?>
+          <form method="post" class="pub-auto pub-art <?= $a['actif'] ? 'est-on' : '' ?>"
+                title="<?= $a['actif'] ? 'Visible sur le site' : 'Masqué sur le site' ?>">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="art_publier" value="<?= $a['id'] ?>">
+            <label class="switch pub-sw sw-mini">
+              <input type="checkbox" name="publie" value="1" <?= $a['actif'] ? 'checked' : '' ?>><span></span>
+              <b>Visible</b>
+            </label>
+            <button class="btn btn-glass btn-sm pub-valider">OK</button>
+          </form>
           <a class="ico-btn" href="menu.php?c=<?= $c['id'] ?>&edit_art=<?= $a['id'] ?>" title="Modifier">✏️</a>
           <form method="post" data-confirm="Supprimer « <?= e($a['nom']) ?> » ?"><input type="hidden" name="csrf" value="<?= $csrf ?>">
             <button class="ico-btn danger" name="art_delete" value="<?= $a['id'] ?>" title="Supprimer">✕</button></form>
@@ -323,22 +435,13 @@ $devise = $settings['devise'] ?? 'FCFA';
           </div>
           <div class="field full"><label>Description</label><input class="input" name="art_desc" value="<?= e($a['description']) ?>" placeholder="Composition, accompagnement…"></div>
           <div class="field"><label>Photo</label><input class="input" type="file" name="art_image" accept="image/*" data-redim="600x600" data-redim-mode="cover" data-redim-cut></div>
-          <?php /* « Populaire » met en avant, « Retirer la photo » modifie la
-                   fiche : ce sont des réglages. Publier ou non est d'une autre
-                   nature — d'où le bloc à part. */ ?>
+          <?php /* « Populaire » et « Retirer la photo » décrivent l'article :
+                   leur place est dans sa fiche. Publier ou non ne le décrit
+                   pas, cela le montre ou le cache — cet interrupteur-là est
+                   resté sur la ligne de l'article, où il s'enregistre seul. */ ?>
           <div class="af-opts">
             <label class="switch"><input type="checkbox" name="art_populaire" <?= $a['populaire'] ? 'checked' : '' ?>><span></span> Mettre en avant</label>
             <?php if ($a['image']): ?><label class="switch"><input type="checkbox" name="art_img_suppr"><span></span> Retirer la photo</label><?php endif; ?>
-          </div>
-          <div class="pub-bloc full">
-            <span class="pub-titre">🌐 Sur le site public</span>
-            <label class="switch pub-sw">
-              <input type="checkbox" name="art_actif" <?= $a['actif'] ? 'checked' : '' ?>><span></span>
-              <b>Publier cet article</b></label>
-            <?php if (!$c['actif']): ?>
-            <span class="pub-aide alerte">⚠️ La catégorie « <?= e($c['nom']) ?> » est masquée :
-              cet article ne paraîtra pas, même publié.</span>
-            <?php endif; ?>
           </div>
           <div class="full" style="display:flex;gap:8px">
             <button class="btn btn-gold btn-sm">Enregistrer</button>
@@ -349,10 +452,12 @@ $devise = $settings['devise'] ?? 'FCFA';
       <?php endif; ?>
       <?php endforeach; ?>
     </div>
-    <?php else: ?>
+    <?php elseif (!$focus): ?>
     <p class="art-vide">Cette catégorie est vide. Ajoutez son premier article ci-dessous.</p>
     <?php endif; ?>
 
+    <?php if (!$focus): /* On termine une modification avant d'en commencer
+                           une autre : le formulaire d'ajout revient ensuite. */ ?>
     <!-- Ajout rapide d'un article dans CETTE catégorie -->
     <form method="post" enctype="multipart/form-data" class="art-form add">
       <input type="hidden" name="csrf" value="<?= $csrf ?>"><input type="hidden" name="art_save" value="1">
@@ -379,6 +484,7 @@ $devise = $settings['devise'] ?? 'FCFA';
         <div class="full"><button class="btn btn-gold btn-sm">Ajouter au menu</button></div>
       </div>
     </form>
+    <?php endif; /* fin du masquage en mode travail */ ?>
   </div>
 </details>
 <?php endforeach; ?>
@@ -408,6 +514,93 @@ $devise = $settings['devise'] ?? 'FCFA';
         b.classList.add('on');
       });
       pal.appendChild(b);
+    });
+  });
+})();
+
+/* ---------------------------------------------------------------------------
+   Publication : enregistrement automatique
+   ---------------------------------------------------------------------------
+   Le formulaire part complet, avec son bouton « Enregistrer » : sans
+   JavaScript, il fonctionne comme n'importe quel formulaire de la page. Dès
+   que ce script s'exécute, le bouton disparaît et c'est la bascule elle-même
+   qui enregistre. L'utilisateur n'a donc jamais sous les yeux un interrupteur
+   dont il ignore s'il est déjà pris en compte.
+--------------------------------------------------------------------------- */
+(function () {
+  var formulaires = document.querySelectorAll('form.pub-auto');
+  if (!formulaires.length) return;
+
+  formulaires.forEach(function (f) {
+    f.classList.add('auto');                       /* masque le bouton (CSS) */
+    var caseAC = f.querySelector('input[type="checkbox"]');
+    var etat   = f.querySelector('.pub-etat');
+    var dit    = f.querySelector('.pub-dit');
+    var enCours = false;
+
+    function message(txt, erreur) {
+      if (!etat) return;
+      etat.textContent = txt;
+      etat.classList.toggle('erreur', !!erreur);
+      etat.classList.add('vu');
+      clearTimeout(etat._t);
+      /* Le « Enregistré » ne reste pas : ce qui compte ensuite, c'est la
+         position de l'interrupteur, pas le souvenir du clic. */
+      if (!erreur) etat._t = setTimeout(function () { etat.classList.remove('vu'); }, 2600);
+    }
+
+    caseAC.addEventListener('change', function () {
+      if (enCours) return;
+      enCours = true;
+      var voulu = caseAC.checked;
+      f.classList.toggle('est-on', voulu);
+      f.classList.add('occupe');
+      message('Enregistrement…', false);
+
+      var donnees = new FormData(f);
+      /* FormData ignore une case décochée : on pose l'état explicitement,
+         sinon « masquer » n'enverrait rien du tout. */
+      donnees.set('publie', voulu ? '1' : '0');
+
+      fetch(f.action || location.href, {
+        method: 'POST',
+        body: donnees,
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'fetch' }
+      })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (rep) {
+        if (!rep.ok) throw new Error(rep.message || 'refus');
+        /* On se règle sur la réponse du serveur, pas sur ce qu'on croyait
+           avoir envoyé : c'est lui qui détient l'état réel. */
+        var reel = rep.etat === 1;
+        caseAC.checked = reel;
+        f.classList.toggle('est-on', reel);
+        if (dit) dit.innerHTML = reel
+          ? 'Cette catégorie et ses articles publiés paraissent sur le site.'
+          : 'Masquée : la catégorie et <strong>tous</strong> ses articles disparaissent du site. Rien n’est supprimé.';
+        f.setAttribute('title', reel ? 'Visible sur le site' : 'Masqué sur le site');
+        var bloc = f.closest('.cat-block'); if (bloc) bloc.classList.toggle('is-off', !reel);
+        var ligne = f.closest('.art-row');  if (ligne) ligne.classList.toggle('is-off', !reel);
+        var badge = ligne ? ligne.querySelector('.art-main .badge:not(.badge-gold)') : null;
+        if (ligne) {
+          if (!reel && !badge) {
+            var b = document.createElement('span');
+            b.className = 'badge'; b.textContent = 'masqué';
+            ligne.querySelector('.art-main strong').appendChild(document.createTextNode(' '));
+            ligne.querySelector('.art-main strong').appendChild(b);
+          } else if (reel && badge) { badge.remove(); }
+        }
+        message('Enregistré ✓', false);
+      })
+      .catch(function () {
+        /* En cas d'échec, l'interrupteur revient où il était : mieux vaut
+           montrer la vérité de la base qu'un réglage qui n'a pas pris. */
+        caseAC.checked = !voulu;
+        f.classList.toggle('est-on', !voulu);
+        message('Échec — non enregistré', true);
+      })
+      .then(function () { enCours = false; f.classList.remove('occupe'); });
     });
   });
 })();
