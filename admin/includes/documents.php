@@ -71,9 +71,18 @@ function pdf_txt(string $s): string {
 }
 
 function get_recu(PDO $pdo, int $id): ?array {
+    /* Une sortie n'a pas de client : elle a un bénéficiaire, ou à défaut la
+       prestation à laquelle elle se rattache. Sans ces colonnes, le bon de
+       sortie imprimé ne nommait personne — on ne savait pas qui avait été payé. */
     $stmt = $pdo->prepare('SELECT r.*, c.nom AS client_nom, c.entreprise, c.telephone AS client_tel, c.email AS client_email,
-                           f.numero AS facture_num
-                           FROM recus r LEFT JOIN clients c ON c.id=r.client_id LEFT JOIN factures f ON f.id=r.facture_id WHERE r.id=?');
+                           f.numero AS facture_num,
+                           fc.nom AS presta_client, fc.entreprise AS presta_entreprise,
+                           fc.type_client AS presta_type
+                           FROM recus r
+                           LEFT JOIN clients c ON c.id = r.client_id
+                           LEFT JOIN factures f ON f.id = r.facture_id
+                           LEFT JOIN clients fc ON fc.id = f.client_id
+                           WHERE r.id=?');
     $stmt->execute([$id]);
     return $stmt->fetch() ?: null;
 }

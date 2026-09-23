@@ -197,9 +197,18 @@ $devise = $settings['devise'] ?? 'FCFA';
       <div class="field"><label>Description (facultatif)</label><input class="input" name="cat_desc" placeholder="ex : Servi de 8h à 10h30"></div>
       <div class="field"><label>Prix indicatif — de (FCFA)</label><input class="input" type="number" name="cat_prix_min" min="0" placeholder="ex : 15000"></div>
       <div class="field"><label>Prix indicatif — à (FCFA)</label><input class="input" type="number" name="cat_prix_max" min="0" placeholder="ex : 25000"></div>
-      <label class="switch"><input type="checkbox" name="cat_actif" checked><span></span> Visible</label>
-      <button class="btn btn-gold">Créer</button>
     </div>
+
+    <div class="pub-bloc">
+      <span class="pub-titre">🌐 Sur le site public</span>
+      <label class="switch pub-sw">
+        <input type="checkbox" name="cat_actif" checked><span></span>
+        <b>Publier dès la création</b></label>
+      <span class="pub-aide">Décochez pour préparer la catégorie tranquillement
+        et ne la faire paraître qu'une fois ses articles en place.</span>
+    </div>
+
+    <div class="cf-actions"><button class="btn btn-gold">Créer</button></div>
   </form>
 </details>
 
@@ -253,7 +262,23 @@ $devise = $settings['devise'] ?? 'FCFA';
         <div class="field"><label>Description</label><input class="input" name="cat_desc" value="<?= e($c['description'] ?? '') ?>"></div>
         <div class="field"><label>Prix indicatif — de (FCFA)</label><input class="input" type="number" name="cat_prix_min" min="0" value="<?= (int)($c['prix_min'] ?? 0) ?>"></div>
         <div class="field"><label>Prix indicatif — à (FCFA)</label><input class="input" type="number" name="cat_prix_max" min="0" value="<?= (int)($c['prix_max'] ?? 0) ?>"></div>
-        <label class="switch"><input type="checkbox" name="cat_actif" <?= $c['actif'] ? 'checked' : '' ?>><span></span> Visible</label>
+      </div>
+
+      <?php /* La publication ne se range pas avec les champs : ce n'est pas une
+               donnée de la catégorie, c'est une décision qui la fait paraître
+               ou disparaître du site. Au milieu de la rangée, l'interrupteur
+               passait pour un champ de plus. */ ?>
+      <div class="pub-bloc">
+        <span class="pub-titre">🌐 Sur le site public</span>
+        <label class="switch pub-sw">
+          <input type="checkbox" name="cat_actif" <?= $c['actif'] ? 'checked' : '' ?>><span></span>
+          <b>Publier cette catégorie</b></label>
+        <span class="pub-aide">Décochée, la catégorie disparaît du site
+          <strong>avec tous ses articles</strong>, y compris ceux publiés individuellement.
+          Rien n'est supprimé : tout revient en la republiant.</span>
+      </div>
+
+      <div class="cf-actions">
         <button class="btn btn-gold btn-sm">Enregistrer</button>
         <a class="btn btn-glass btn-sm" href="menu.php?c=<?= $c['id'] ?>">Annuler</a>
       </div>
@@ -298,10 +323,22 @@ $devise = $settings['devise'] ?? 'FCFA';
           </div>
           <div class="field full"><label>Description</label><input class="input" name="art_desc" value="<?= e($a['description']) ?>" placeholder="Composition, accompagnement…"></div>
           <div class="field"><label>Photo</label><input class="input" type="file" name="art_image" accept="image/*" data-redim="600x600" data-redim-mode="cover" data-redim-cut></div>
+          <?php /* « Populaire » met en avant, « Retirer la photo » modifie la
+                   fiche : ce sont des réglages. Publier ou non est d'une autre
+                   nature — d'où le bloc à part. */ ?>
           <div class="af-opts">
-            <label class="switch"><input type="checkbox" name="art_actif" <?= $a['actif'] ? 'checked' : '' ?>><span></span> Visible</label>
-            <label class="switch"><input type="checkbox" name="art_populaire" <?= $a['populaire'] ? 'checked' : '' ?>><span></span> Populaire</label>
+            <label class="switch"><input type="checkbox" name="art_populaire" <?= $a['populaire'] ? 'checked' : '' ?>><span></span> Mettre en avant</label>
             <?php if ($a['image']): ?><label class="switch"><input type="checkbox" name="art_img_suppr"><span></span> Retirer la photo</label><?php endif; ?>
+          </div>
+          <div class="pub-bloc full">
+            <span class="pub-titre">🌐 Sur le site public</span>
+            <label class="switch pub-sw">
+              <input type="checkbox" name="art_actif" <?= $a['actif'] ? 'checked' : '' ?>><span></span>
+              <b>Publier cet article</b></label>
+            <?php if (!$c['actif']): ?>
+            <span class="pub-aide alerte">⚠️ La catégorie « <?= e($c['nom']) ?> » est masquée :
+              cet article ne paraîtra pas, même publié.</span>
+            <?php endif; ?>
           </div>
           <div class="full" style="display:flex;gap:8px">
             <button class="btn btn-gold btn-sm">Enregistrer</button>
@@ -327,8 +364,17 @@ $devise = $settings['devise'] ?? 'FCFA';
         <div class="field"><label>Photo (facultatif)</label><input class="input" type="file" name="art_image" accept="image/*" data-redim="600x600" data-redim-mode="cover" data-redim-cut></div>
         <div class="field full"><label>Description (facultatif)</label><input class="input" name="art_desc" placeholder="ex : Pur beurre, cuit sur place chaque matin"></div>
         <div class="af-opts">
-          <label class="switch"><input type="checkbox" name="art_actif" checked><span></span> Visible</label>
-          <label class="switch"><input type="checkbox" name="art_populaire"><span></span> Populaire</label>
+          <label class="switch"><input type="checkbox" name="art_populaire"><span></span> Mettre en avant</label>
+        </div>
+        <div class="pub-bloc full">
+          <span class="pub-titre">🌐 Sur le site public</span>
+          <label class="switch pub-sw">
+            <input type="checkbox" name="art_actif" checked><span></span>
+            <b>Publier dès l'ajout</b></label>
+          <?php if (!$c['actif']): ?>
+          <span class="pub-aide alerte">⚠️ La catégorie « <?= e($c['nom']) ?> » est masquée :
+            l'article ne paraîtra pas tant qu'elle le reste.</span>
+          <?php endif; ?>
         </div>
         <div class="full"><button class="btn btn-gold btn-sm">Ajouter au menu</button></div>
       </div>

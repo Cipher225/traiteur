@@ -310,6 +310,15 @@ function pdf_bloc_simple(string $titre, array $lignes): string {
 function pdf_blocs_infos(array $s, string $type, array $doc): array {
     $nom = trim((string)($doc['entreprise'] ?? '')) !== '' ? $doc['entreprise'] : ($doc['client_nom'] ?? '');
 
+    /* Sur un bon de SORTIE, la contrepartie n'est pas un client mais celui à
+       qui l'argent a été versé. Le bon doit le nommer : c'est la pièce qui
+       justifie la dépense. */
+    if ($type === 'recu' && ($doc['type'] ?? '') === 'sortie') {
+        require_once __DIR__ . '/includes/rangement.php';
+        $n = rangement_nom_sortie($doc);
+        $nom = ($n === 'Charges générales') ? '' : $n;
+    }
+
     if ($type === 'rapport') {
         $l1 = [['Auteur', $doc['auteur'] ?? ''], ['Type', $doc['type_libelle'] ?? 'Rapport'],
                ['Date', !empty($doc['date_rapport']) ? date('d/m/Y', strtotime($doc['date_rapport'])) : '']];
@@ -334,6 +343,23 @@ function pdf_blocs_infos(array $s, string $type, array $doc): array {
             ['Mode de paiement', $doc['mode_paiement'] ?? ''],
             ['Banque', $doc['banque'] ?? ''],
             ['N° de compte', $doc['numero_compte'] ?? '']]];
+    }
+
+    /* Sur une sortie, la carte de gauche cesse de s'appeler « Client » : elle
+       nomme le bénéficiaire, et rappelle la nature de la dépense. */
+    $estSortie = ($type === 'recu' && ($doc['type'] ?? '') === 'sortie');
+    if ($estSortie) {
+        /* Sans bénéficiaire, le bon dit ce qu'il est plutôt qu'un tiret :
+           une pièce comptable doit se justifier d'elle-même. */
+        $l1 = [['Nom / Société', $nom !== '' ? $nom : "Charge générale de l'entreprise"]];
+        if (trim((string)($doc['categorie'] ?? '')) !== '') $l1[] = ['Nature', $doc['categorie']];
+        if (trim((string)($doc['facture_num'] ?? '')) !== '') $l1[] = ['Engagée pour', $doc['facture_num']];
+
+        $l2 = [];
+        if (trim((string)($doc['mode_paiement'] ?? '')) !== '') $l2[] = ['Mode de paiement', $doc['mode_paiement']];
+        if (!empty($doc['date_paiement'])) $l2[] = ['Date', date('d/m/Y', strtotime((string)$doc['date_paiement']))];
+        if (!$l2) $l2[] = ['Devise', $s['devise'] ?? 'FCFA'];
+        return ['Bénéficiaire', $l1, 'Informations', $l2];
     }
 
     $l1 = [['Nom / Société', $nom]];

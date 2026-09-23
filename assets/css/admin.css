@@ -4098,3 +4098,36 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 /* La marque dans un titre de section : à la taille du texte, alignée dessus. */
 .h2-mq{display:inline-grid;place-items:center;vertical-align:-3px;
   font-size:17px;color:var(--gold-light,#f0c14b)}
+
+/* Le bénéficiaire d'une sortie, dans la vue à plat : il nomme la dépense
+   là où l'arborescence ne le fait pas. */
+.rng-doc .qui{font-size:12.5px;color:var(--ink);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rng-doc .qui.gen{color:var(--ink-faint);font-weight:400;font-style:italic}
+
+/* ============================================================
+   MENU — PUBLIER SUR LE SITE
+
+   Publier n'est pas un champ de la fiche : c'est ce qui la fait
+   paraître ou disparaître du site. Rangé au milieu des autres
+   champs, l'interrupteur passait pour un réglage de formulaire
+   de plus. Il a donc son propre encadré, et il dit ce qu'il fait.
+   ============================================================ */
+.pub-bloc{grid-column:1/-1;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  margin-top:12px;padding:12px 16px;border-radius:13px;
+  background:rgba(125,211,252,.06);border:1px solid rgba(125,211,252,.24);
+  border-left:3px solid #7dd3fc}
+.pub-titre{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:#7dd3fc;flex-shrink:0}
+.pub-sw{margin:0;flex-shrink:0}
+.pub-sw b{font-weight:600;color:var(--ink)}
+.pub-aide{flex:1;min-width:210px;font-size:12px;line-height:1.6;color:var(--ink-faint)}
+.pub-aide strong{color:var(--ink)}
+.pub-aide.alerte{color:#f0b429}
+
+.cf-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+
+@media (max-width:640px){
+  .pub-bloc{flex-direction:column;align-items:flex-start;gap:9px}
+  .pub-aide{min-width:0}
+}

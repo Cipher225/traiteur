@@ -61,12 +61,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!charge_rattachable($categorie)) $facture_id = null;
     }
     $lieu     = mb_substr(trim($_POST['lieu'] ?? ''), 0, 255);
+    /* Le bénéficiaire ne concerne que les sorties : c'est la personne ou
+       l'entreprise à qui l'argent est versé. Une entrée, elle, a un client. */
+    $beneficiaire = $TYPE === 'sortie'
+                  ? mb_substr(trim((string)($_POST['beneficiaire'] ?? '')), 0, 160) : '';
 
     if ($montant <= 0) { flash('Le montant doit être supérieur à 0.', 'error'); header('Location: ' . $RETOUR); exit; }
 
     if ($id) {
-        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, nb_jours=?, lieu=?, categorie=? WHERE id=?')
-            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie, $id]);
+        $pdo->prepare('UPDATE recus SET client_id=?, facture_id=?, montant=?, mode_paiement=?, motif=?, date_paiement=?, notes=?, activite=?, date_evenement=?, nb_jours=?, lieu=?, categorie=?, beneficiaire=? WHERE id=?')
+            ->execute([$client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie, $beneficiaire, $id]);
         // L'écriture comptable suit la modification
         $st = $pdo->prepare('SELECT numero FROM recus WHERE id=?');
         $st->execute([$id]);
@@ -76,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash($LIB . ' modifié.');
     } else {
         $numero = next_numero($pdo, 'recus', $PREF);
-        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, nb_jours, lieu, categorie, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
-            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie]);
+        $pdo->prepare('INSERT INTO recus (numero, type, client_id, facture_id, montant, mode_paiement, motif, date_paiement, notes, activite, date_evenement, nb_jours, lieu, categorie, beneficiaire, vu_client) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)')
+            ->execute([$numero, $TYPE, $client_id, $facture_id, $montant, $mode, $motif, $date, $notes, $activite, $date_evt, $nb_jours, $lieu, $categorie, $beneficiaire]);
         $nid = (int)$pdo->lastInsertId();
         // Toute entrée ou sortie de caisse alimente la comptabilité
         ecriture_pour_recu($pdo, $nid, $TYPE, $numero, $montant, $mode, $motif, $date, $client_id, $activite, $categorie, $facture_id);
@@ -106,15 +110,21 @@ $q = trim($_GET['q'] ?? '');
 $typeRecu = $TYPE;
 $motRecherche = 'Numéro, motif, client, catégorie…';
 
-$colonnes  = "r.*, c.nom AS client, f.numero AS facture";
+/* Le client de la prestation à laquelle la dépense est rattachée : c'est lui
+   qui nomme la sortie quand aucun bénéficiaire n'a été saisi. */
+$colonnes  = "r.*, c.nom AS client, f.numero AS facture,
+              fc.nom AS presta_client, fc.entreprise AS presta_entreprise,
+              fc.type_client AS presta_type";
 $jointures = "FROM recus r
               LEFT JOIN clients c ON c.id = r.client_id
-              LEFT JOIN factures f ON f.id = r.facture_id";
+              LEFT JOIN factures f ON f.id = r.facture_id
+              LEFT JOIN clients fc ON fc.id = f.client_id";
 
 if ($q !== '') {
     $where = ' WHERE r.type = ?'; $args = [$TYPE];
     $rch = recherche_sql($q, ['r.numero', 'r.motif', 'r.activite', 'r.lieu', 'r.categorie',
-                              'r.notes', 'c.nom', 'c.entreprise', 'f.numero']);
+                              'r.notes', 'r.beneficiaire', 'c.nom', 'c.entreprise',
+                              'f.numero', 'fc.nom', 'fc.entreprise']);
     $where .= $rch['sql']; $args = array_merge($args, $rch['args']);
 
     $pgDoc = pagination($pdo, "SELECT COUNT(*) $jointures $where", $args, 30);
@@ -200,6 +210,32 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
         Une nature saisie ici sera proposée dans la liste la prochaine fois.
       </span>
     </div>
+    <?php endif; ?>
+    <?php if ($TYPE === 'sortie'): ?>
+    <?php /* À qui l'argent est versé. Sans ce champ, toutes les sorties se
+             rangeaient sous « Client de passage » — un libellé qui ne
+             désignait personne, et surtout pas celui qu'on avait payé.
+             Les bénéficiaires déjà saisis sont proposés : on paie le même
+             fournisseur tous les mois, on ne va pas le retaper à chaque fois. */ ?>
+    <?php
+      $benefs = [];
+      try {
+          $benefs = $pdo->query("SELECT DISTINCT beneficiaire FROM recus
+                                 WHERE type='sortie' AND beneficiaire <> ''
+                                 ORDER BY beneficiaire")->fetchAll(PDO::FETCH_COLUMN);
+      } catch (Throwable $e) {}
+    ?>
+    <div class="field"><label>Bénéficiaire</label>
+      <input class="input" name="beneficiaire" list="liste-benef" maxlength="160"
+             value="<?= e($edit['beneficiaire'] ?? '') ?>"
+             placeholder="ex : Marché de Cocody, SODECI, M. Koné">
+      <?php if ($benefs): ?>
+      <datalist id="liste-benef">
+        <?php foreach ($benefs as $bn): ?><option value="<?= e($bn) ?>"><?php endforeach; ?>
+      </datalist>
+      <?php endif; ?>
+      <span style="display:block;margin-top:4px;font-size:12px;color:var(--ink-faint)">
+        L'entreprise ou la personne payée. Laissez vide pour une charge sans destinataire précis.</span></div>
     <?php endif; ?>
     <div class="field"><label>Montant (<?= e($devise) ?>) *</label><input class="input" type="number" name="montant" min="0" step="100" required value="<?= e($edit['montant'] ?? '') ?>"></div>
     <div class="field"><label>Mode de paiement</label>
@@ -292,6 +328,11 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
   $renderRecu = function($r) use ($devise, $LIB, $TYPE) { ob_start(); ?>
     <div class="rng-doc">
       <span class="num"><?= e($r['numero']) ?></span>
+      <?php /* En vue à plat, l'arborescence ne porte plus le nom : la ligne
+               doit dire d'elle-même à qui l'argent est allé. */ ?>
+      <?php if ($TYPE === 'sortie'): $qui = rangement_nom_sortie($r); ?>
+      <span class="qui<?= $qui === 'Charges générales' ? ' gen' : '' ?>"><?= e($qui) ?></span>
+      <?php endif; ?>
       <span class="dt"><?= date('d/m/Y', strtotime($r['date_paiement'])) ?><?= $r['mode_paiement']?' · '.e($r['mode_paiement']):'' ?></span>
       <span class="mt" style="color:var(--teal)"><?= money($r['montant'], $devise) ?></span>
       <span class="acts">
@@ -312,7 +353,8 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
     <?= pagination_html($pgDoc, 'résultat', $_GET) ?>
     <?php endif; ?>
   <?php else: ?>
-    <?php $arbre = rangement_arbre($recusAff, 'date_paiement', 'client'); ?>
+    <?php $arbre = rangement_arbre($recusAff, 'date_paiement',
+                                   $TYPE === 'sortie' ? '_sortie' : 'client'); ?>
     <div class="rng-tree">
       <?php foreach ($arbre as $annee => $mois): $nbA=0; foreach($mois as $cl) foreach($cl as $ds) $nbA+=count($ds); ?>
       <details class="rng-annee" open>
@@ -322,7 +364,9 @@ admin_header($LIBS, $TYPE === 'entree' ? 'bons_entree' : 'bons_sortie', $pdo, $s
           <summary><?= $moisFr($m) ?><span class="cnt"><?= $nbM ?></span></summary>
           <?php foreach ($clients2 as $client => $docs): ?>
           <details class="rng-client" open>
-            <summary>👤 <?= e($client) ?><span class="cnt"><?= count($docs) ?></span></summary>
+            <summary><?= $TYPE === 'sortie'
+                  ? ($client === 'Charges générales' ? '🏛️' : '🏷️') : '👤' ?>
+              <?= e($client) ?><span class="cnt"><?= count($docs) ?></span></summary>
             <div class="rng-docs"><?php foreach ($docs as $r) echo $renderRecu($r); ?></div>
           </details>
           <?php endforeach; ?>

@@ -26,6 +26,33 @@ function rangement_nom(array $d): string {
     return $nom !== '' ? $nom : 'Client de passage';
 }
 
+/* ----------------------------------------------------------------------------
+   Sous quel nom ranger une SORTIE.
+
+   Une dépense n'a pas de client : elle a quelqu'un qu'on paie. Toutes se
+   rangeaient donc sous « Client de passage », un libellé qui ne désignait
+   personne — surtout pas le fournisseur qu'on venait de régler.
+
+   Trois sources, dans cet ordre :
+     — le bénéficiaire saisi, s'il y en a un ;
+     — à défaut, le client de la prestation à laquelle la dépense est
+       rattachée : sa raison sociale si c'est une entreprise, son nom sinon ;
+     — sinon, c'est une charge de l'entreprise, et elle le dit.
+   ---------------------------------------------------------------------------- */
+function rangement_nom_sortie(array $d): string {
+    $benef = trim((string)($d['beneficiaire'] ?? ''));
+    if ($benef !== '') return $benef;
+
+    $ent  = trim((string)($d['presta_entreprise'] ?? ''));
+    $type = (string)($d['presta_type'] ?? '');
+    if ($ent !== '' && ($type === 'entreprise' || $type === '')) return $ent;
+
+    $nom = trim((string)($d['presta_client'] ?? ''));
+    if ($nom !== '') return $nom;
+
+    return 'Charges générales';
+}
+
 function rangement_arbre(array $docs, string $dateKey = 'date_emission', string $clientKey = 'client'): array {
     $arbre = [];
     foreach ($docs as $d) {
@@ -35,6 +62,8 @@ function rangement_arbre(array $docs, string $dateKey = 'date_emission', string 
         // Si la clé demandée est le classement intelligent, on l'utilise ; sinon la clé fournie
         if ($clientKey === '_rangement') {
             $client = rangement_nom($d);
+        } elseif ($clientKey === '_sortie') {
+            $client = rangement_nom_sortie($d);
         } else {
             $client = trim((string)($d[$clientKey] ?? '')) ?: 'Client de passage';
         }

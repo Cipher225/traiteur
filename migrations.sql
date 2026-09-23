@@ -683,3 +683,12 @@ WHERE role = 'admin';
 ALTER TABLE echeances ADD COLUMN IF NOT EXISTS suivi_depuis DATE DEFAULT NULL;
 UPDATE echeances SET suivi_depuis = DATE(created_at)
 WHERE suivi_depuis IS NULL AND created_at IS NOT NULL;
+
+-- ============================================================================
+--  SORTIES — LE BÉNÉFICIAIRE
+--  Une sortie n'a pas de client : elle a quelqu'un qu'on paie — un
+--  fournisseur, un bailleur, un prestataire. Faute de ce champ, toutes les
+--  sorties se rangeaient sous « Client de passage », ce qui ne désignait
+--  personne.
+-- ============================================================================
+ALTER TABLE recus ADD COLUMN IF NOT EXISTS beneficiaire VARCHAR(160) DEFAULT '';
