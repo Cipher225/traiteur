@@ -678,7 +678,7 @@ $maxTend = $tendance ? max(1, max(array_column($tendance, 'val'))) : 1;
   <a class="stat glass gold" href="commandes-client.php"><div class="s-ico">📥</div><div class="s-num"><?= $stats['nouveaux'] ?></div><div class="s-label">Nouvelles demandes</div></a>
   <a class="stat glass violet" href="calendrier.php"><div class="s-ico">🔄</div><div class="s-num"><?= $stats['en_cours'] ?></div><div class="s-label">Événements en cours</div></a>
   <a class="stat glass teal" href="clients.php"><div class="s-ico">👥</div><div class="s-num"><?= $nb_clients ?></div><div class="s-label">Clients enregistrés</div></a>
-  <a class="stat glass rose" href="menu.php"><div class="s-ico">🍛</div><div class="s-num"><?= $stats['plats'] ?></div><div class="s-label">Plats actifs au menu</div></a>
+  <a class="stat glass rose" href="menu.php"><div class="s-ico">🍛</div><div class="s-num"><?= $stats['plats'] ?></div><div class="s-label">Plats visibles sur le site</div></a>
 </div>
 
 <?php if (can('comptabilite') || can('factures')): ?>

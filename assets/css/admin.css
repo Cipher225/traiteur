@@ -397,6 +397,17 @@ td strong { color: var(--ink); }
 .cmd-detail h4{font-size:13px;color:var(--ink-faint);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
 .cmd-plats{list-style:none;display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .cmd-plats li{font-size:14px}
+/* Une demande client se lit formule par formule, comme il l'a composée. */
+.cmd-formule{margin-bottom:12px;padding:11px 13px;border-radius:13px;
+  background:var(--glass-border-soft);border:1px solid var(--glass-border)}
+.cmd-formule .cf-tete{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+.cmd-formule .cf-ico{font-size:19px}
+.cmd-formule .cf-tete strong{font-size:14.5px}
+.cmd-formule .cf-pers{font-size:12px;font-weight:700;color:var(--gold)}
+.cmd-formule .cf-part{margin-left:auto;font-size:11px}
+.cmd-formule .cmd-plats{margin:0}
+.cmd-formule .cmd-plats li{font-size:13px;color:var(--ink-dim);padding-left:14px;position:relative}
+.cmd-formule .cmd-plats li::before{content:'✓';position:absolute;left:0;color:#3edbc1;font-size:11px}
 .devis-ready{text-align:center;padding:18px;border-radius:16px;border:1px solid var(--glass-border)}
 .devis-ready strong{font-size:15px}
 .devis-wait{text-align:center;padding:14px}
@@ -2528,6 +2539,142 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .fo-vide{padding:11px 15px;font-size:12.5px;color:var(--ink-faint);border-top:1px solid var(--glass-border)}
 
 /* ============================================================
+   FORMULES À LA CARTE — espace client
+   ------------------------------------------------------------
+   La formule complète est la proposition de la maison : elle
+   arrive tout cochée, et le client retire. Ce qu'il écarte reste
+   sous ses yeux, barré : il voit ce qu'il a laissé de côté au
+   lieu de le voir disparaître.
+   ============================================================ */
+.cmd-intro h2{margin-bottom:10px}
+.cmd-etapes{margin:0 0 4px;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.cmd-etapes li{font-size:13.5px;line-height:1.55;color:var(--ink-dim)}
+.cmd-etapes b{color:var(--ink)}
+.cmd-pers{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:15px;
+  padding:13px 16px;border-radius:14px;
+  background:rgba(212,165,38,.09);border:1px solid rgba(212,165,38,.28)}
+.cmd-pers label{font-weight:700;font-size:14px;flex-shrink:0}
+.cmd-pers .input{width:130px;flex-shrink:0;font-weight:700;text-align:center;font-size:16px}
+.cmd-pers-aide{font-size:12px;color:var(--ink-faint);flex:1;min-width:180px}
+
+.order-menu{display:flex;flex-direction:column;gap:14px}
+
+.pk{border-radius:18px;overflow:hidden;background:var(--glass);
+  border:1px solid var(--glass-border);transition:border-color .18s,box-shadow .18s}
+.pk:hover{border-color:rgba(212,165,38,.34)}
+.pk.est-pris{border-color:rgba(212,165,38,.6);box-shadow:0 0 0 1px rgba(212,165,38,.24)}
+.pk.est-vide{border-color:rgba(240,180,41,.55)}
+
+.pk-tete{display:flex;align-items:center;gap:14px;padding:16px 18px}
+.pk-ico{font-size:30px;flex-shrink:0;line-height:1}
+.pk-id{flex:1;min-width:0}
+.pk-id h3{font-family:var(--font-display);font-size:17px;margin:0}
+.pk-sous{font-size:12.5px;color:var(--ink-faint);margin:3px 0 0;line-height:1.45}
+
+/* Un seul des deux boutons s'affiche : prendre la formule, ou la retirer.
+   Deux boutons visibles en même temps posent une question au client à
+   chaque carte, et c'est une question de trop. */
+.pk .pk-retirer{display:none}
+.pk.est-pris .pk-prendre{display:none}
+.pk.est-pris .pk-retirer{display:inline-flex}
+
+/* Tant que la formule n'est pas prise, son contenu n'encombre pas la page :
+   c'est le nom et la promesse qui décident, pas la liste. */
+.pk-corps{display:none;border-top:1px solid var(--glass-border);padding:15px 18px 17px}
+.pk.est-pris .pk-corps{display:block}
+
+.pk-reglage{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-bottom:14px}
+.pk-reglage label{font-size:13px;font-weight:600;color:var(--ink-dim)}
+.pk-qte{display:flex;align-items:center;gap:8px}
+.pk-pers{width:86px;text-align:center;font-weight:700;font-size:15px;padding:7px 4px;
+  border-radius:11px;border:1px solid var(--glass-border);background:var(--glass-strong);color:var(--ink)}
+
+.pk-barre{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.pk-titre-liste{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold)}
+.pk-actions{margin-left:auto;display:flex;gap:12px}
+.lien-mini{border:none;background:none;padding:0;cursor:pointer;font-size:12px;
+  color:var(--ink-faint);text-decoration:underline;text-underline-offset:3px}
+.lien-mini:hover{color:var(--gold)}
+
+.pk-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.pk-el{display:flex;align-items:flex-start;gap:11px;padding:9px 11px;border-radius:12px;
+  cursor:pointer;transition:background .15s}
+.pk-el:hover{background:var(--glass-border-soft)}
+.pk-el input{position:absolute;opacity:0;width:0;height:0}
+
+/* La case : cochée = doré plein avec sa coche, décochée = contour vide.
+   On doit pouvoir lire l'état d'un coup d'œil, de loin. */
+.pk-coche{flex-shrink:0;width:21px;height:21px;margin-top:1px;border-radius:7px;
+  border:2px solid var(--glass-border);background:transparent;position:relative;
+  transition:background .15s,border-color .15s}
+.pk-el input:checked + .pk-coche{background:var(--gold);border-color:var(--gold)}
+.pk-coche::after{content:'';position:absolute;left:6px;top:2px;width:5px;height:10px;
+  border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg) scale(.4);
+  opacity:0;transition:opacity .15s,transform .15s}
+.pk-el input:checked + .pk-coche::after{opacity:1;transform:rotate(45deg) scale(1)}
+.pk-el input:focus-visible + .pk-coche{outline:2px solid var(--gold);outline-offset:2px}
+
+.pk-txt{min-width:0}
+.pk-txt strong{display:block;font-size:14px;font-weight:600;line-height:1.35}
+.pk-desc{display:block;font-size:12px;color:var(--ink-faint);line-height:1.45;margin-top:2px}
+
+/* Écarté : toujours là, visiblement mis de côté. */
+.pk-el.est-hors{opacity:.45}
+.pk-el.est-hors .pk-txt strong{text-decoration:line-through}
+
+.pk-bilan{margin:13px 0 0;padding:9px 12px;border-radius:11px;font-size:12.5px;font-weight:600;
+  background:rgba(62,219,193,.09);border:1px solid rgba(62,219,193,.24);color:#3edbc1}
+.pk-bilan:empty{display:none}
+.pk-bilan.alerte{background:rgba(240,180,41,.1);border-color:rgba(240,180,41,.3);color:#f0b429}
+/* Le vert clair du thème sombre pâlit sur fond blanc : en mode clair, le
+   bilan prend le vert soutenu utilisé partout ailleurs dans l'application. */
+[data-theme="light"] .pk-bilan{color:#047857;background:rgba(4,120,87,.07);border-color:rgba(4,120,87,.2)}
+[data-theme="light"] .pk-bilan.alerte{color:#a16207;background:rgba(161,98,7,.08);border-color:rgba(161,98,7,.22)}
+[data-theme="light"] .recap-l li::before{color:#047857}
+
+/* --- Récapitulatif : ce que le client s'apprête à envoyer --- */
+.recap{display:flex;flex-direction:column;gap:10px;margin:10px 0 4px}
+.recap-vide{font-size:13px;color:var(--ink-faint);line-height:1.55;margin:0}
+.recap-pk{padding:11px 12px;border-radius:13px;background:var(--glass-border-soft);
+  border:1px solid var(--glass-border)}
+.recap-t{display:flex;align-items:baseline;gap:9px}
+.recap-t b{font-size:13.5px;flex:1;min-width:0}
+.recap-p{font-size:11.5px;font-weight:700;color:var(--gold);white-space:nowrap}
+.recap-l{list-style:none;margin:7px 0 0;padding:0}
+.recap-l li{font-size:12.5px;color:var(--ink-dim);line-height:1.5;padding-left:14px;position:relative}
+.recap-l li::before{content:'✓';position:absolute;left:0;color:#3edbc1;font-size:11px}
+.recap-sans{margin:7px 0 0;font-size:11.5px;color:var(--ink-faint);line-height:1.45;font-style:italic}
+.cart-note{color:var(--ink-faint);font-size:12px;text-align:center;margin-top:9px;line-height:1.5}
+
+/* La barre de rappel n'existe que sur téléphone : sur grand écran, le
+   récapitulatif est déjà en permanence sous les yeux, à droite. */
+.cmd-barre{display:none}
+@media (max-width:860px){
+  .cmd-barre{display:flex;align-items:center;gap:12px;
+    position:fixed;left:12px;right:12px;bottom:12px;z-index:60;
+    padding:11px 14px;border-radius:15px;
+    background:rgba(10,31,68,.94);border:1px solid rgba(212,165,38,.4);
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    backdrop-filter:blur(10px)}
+  .cmd-barre[hidden]{display:none}
+  .cmd-barre .cb-txt{flex:1;min-width:0;font-size:13px;color:#e7ecf5}
+  .cmd-barre .cb-txt b{color:#f0c14b;font-size:15px}
+  /* La barre flotte au-dessus du contenu : on rend sa hauteur au bas de page,
+     sinon elle recouvre le bouton d'envoi. */
+  .order-layout{padding-bottom:70px}
+}
+
+@media (max-width:640px){
+  .cmd-pers{flex-direction:column;align-items:stretch;gap:9px}
+  .cmd-pers .input{width:100%}
+  .pk-tete{flex-wrap:wrap;gap:11px;padding:14px}
+  .pk-ico{font-size:26px}
+  .pk-tete .btn{width:100%}
+  .pk-corps{padding:14px}
+  .pk-actions{margin-left:0;width:100%}
+}
+
+/* ============================================================
    MODE CLAIR — lisibilité des panneaux sombres
    ------------------------------------------------------------
    Certains éléments gardent volontairement un fond foncé, quel
@@ -2556,11 +2703,16 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 [data-theme="light"] .tb-swatches{ background:#141a28 }
 
 /* Bandeaux et en-têtes à fond marine : le texte y est toujours blanc */
+/* « thead th » ne figure plus dans cette liste, et c'est une correction.
+   Cette règle existait pour les en-têtes restés sombres en mode clair — or
+   un seul cas l'était vraiment (les tableaux défilants, dont le fond n'avait
+   pas d'équivalent clair, voir « --fond-tete » plus bas). En l'appliquant à
+   « thead th », on écrivait en blanc sur le fond #fafbfc de TOUS les autres
+   tableaux : les intitulés de colonnes y étaient invisibles. */
 [data-theme="light"] .chat-pdf-foot,
 [data-theme="light"] .chat-pdf-foot *,
 [data-theme="light"] .doc-page th,
-[data-theme="light"] .bl-box .hd,
-[data-theme="light"] thead th{
+[data-theme="light"] .bl-box .hd{
   color:#fff;
 }
 [data-theme="light"] .bl-box .hd{ color:#b8870f }   /* sauf les cartes de document, en doré sur blanc */
@@ -2589,11 +2741,19 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 .tone-blue h2,
 .tone-blue h3,
 .tone-blue p,
+.tone-blue li,
+.tone-blue label,
 .tone-blue .tb-txt,
 .tone-blue strong,
+.tone-blue b,
 .tone-blue span{ color:#e7ecf5 !important }
-.tone-blue .tb-txt{ color:#c3cee2 !important }
+.tone-blue .tb-txt,
+.tone-blue li{ color:#c3cee2 !important }
+.tone-blue li b{ color:#e7ecf5 !important }
 .tone-blue strong{ color:#f0c14b !important }
+/* L'aide en petits caractères doit rester lisible sur le bleu nuit, sans
+   pour autant peser autant que le texte principal. */
+.tone-blue .cmd-pers-aide{ color:#9fb0cc !important }
 
 /* ============================================================
    RENTABILITÉ PAR ACTIVITÉ
@@ -3059,8 +3219,12 @@ h2 .cnt{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;marg
 
   /* Un tableau garde ses en-têtes visibles pendant le défilement :
      sans cela, on perd le nom des colonnes au bout de dix lignes. */
+  /* Le fond doit être opaque, sinon les lignes défilent au travers. En mode
+     clair il reprend celui des autres en-têtes, sans quoi ce tableau-là
+     gardait un bandeau bleu nuit au milieu d'une page blanche. */
   .defilant table thead th{position:sticky;top:0;z-index:2;
     background:var(--fond-tete, #101c33)}
+  [data-theme="light"] .defilant table thead th{background:#fafbfc}
 
   /* Plus court là où le contenu est dense ou la carte partagée. */
   .defilant.court{max-height:46vh}

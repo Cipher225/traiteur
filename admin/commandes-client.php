@@ -45,26 +45,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lg = $pdo->prepare('SELECT ccl.*, cat.nom AS cat_nom, cat.ordre AS cat_ordre FROM commandes_client_lignes ccl LEFT JOIN plats p ON p.id=ccl.plat_id LEFT JOIN categories cat ON cat.id=p.categorie_id WHERE ccl.commande_id=?'); $lg->execute([$id]);
             $lignesCmd = $lg->fetchAll();
 
-            /* Regrouper les plats par catégorie : la catégorie devient la prestation,
-               les plats deviennent les éléments inclus (détails), comme en saisie manuelle. */
+            /* Regrouper les plats par catégorie : la formule devient la
+               prestation facturée, les plats qu'il a gardés en deviennent les
+               éléments inclus. */
             $groupes = [];
             foreach ($lignesCmd as $l) {
                 $cat = trim((string)($l['cat_nom'] ?? '')) ?: 'Prestations';
-                if (!isset($groupes[$cat])) $groupes[$cat] = ['ordre' => (int)($l['cat_ordre'] ?? 999), 'plats' => []];
-                /* On liste chaque plat (avec sa quantité) comme élément inclus. */
-                $q = (int)$l['quantite'];
-                $groupes[$cat]['plats'][] = ($q > 1 ? $q . '× ' : '') . $l['designation'];
+                if (!isset($groupes[$cat])) $groupes[$cat] = [
+                    'ordre' => (int)($l['cat_ordre'] ?? 999),
+                    'pers'  => max(1, (int)$l['quantite']),
+                    'plats' => [],
+                ];
+                $groupes[$cat]['plats'][] = $l['designation'];
             }
             /* Tri par ordre de catégorie */
             uasort($groupes, fn($a, $b) => $a['ordre'] <=> $b['ordre']);
 
-            $ins = $pdo->prepare('INSERT INTO facture_lignes (facture_id,designation,categorie,details,quantite,prix_unitaire) VALUES (?,?,?,?,1,0)');
+            /* Le nombre de personnes est la QUANTITÉ de la prestation, pas un
+               préfixe collé à chaque élément : la proforma se lit alors
+               « Cocktail dînatoire — 150 × prix par personne », ce qui est la
+               façon dont ces prestations se chiffrent réellement. Il ne reste
+               plus qu'à saisir le prix unitaire. */
+            $ins = $pdo->prepare('INSERT INTO facture_lignes (facture_id,designation,categorie,details,quantite,prix_unitaire) VALUES (?,?,?,?,?,0)');
             foreach ($groupes as $catNom => $g) {
-                /* designation = nom de la prestation (la catégorie),
-                   categorie = même libellé (titre de section),
-                   details = un plat par ligne (éléments inclus, sans prix). */
                 $details = implode("\n", $g['plats']);
-                $ins->execute([$fid, $catNom, $catNom, $details]);
+                $ins->execute([$fid, $catNom, $catNom, $details, $g['pers']]);
             }
             $pdo->prepare("UPDATE commandes_client SET proforma_id=?, statut='en_traitement', vu_client=0 WHERE id=?")->execute([$fid, $id]);
             flash('Devis créé à partir de la commande. Renseignez les prix, puis passez le statut à « Proforma envoyé » pour que le client le voie.');
@@ -224,7 +229,28 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
 </div>
 
 <?php foreach ($cmds as $cmd):
-  $lignes = $pdo->prepare("SELECT * FROM commandes_client_lignes WHERE commande_id=?"); $lignes->execute([$cmd['id']]); $lignes = $lignes->fetchAll();
+  /* Le client compose par formule : on la lui rend telle qu'il l'a composée,
+     formule par formule, avec le nombre de personnes de chacune. Une liste
+     de plats à plat ne dirait plus ce qu'il a demandé. */
+  $lignes = $pdo->prepare("SELECT ccl.*, cat.nom AS cat_nom, cat.icone AS cat_icone, cat.ordre AS cat_ordre,
+                                  (SELECT COUNT(*) FROM plats WHERE categorie_id = cat.id) AS cat_total
+                           FROM commandes_client_lignes ccl
+                           LEFT JOIN plats p ON p.id = ccl.plat_id
+                           LEFT JOIN categories cat ON cat.id = p.categorie_id
+                           WHERE ccl.commande_id=? ORDER BY cat.ordre, p.ordre, ccl.id");
+  $lignes->execute([$cmd['id']]); $lignes = $lignes->fetchAll();
+  $formules = [];
+  foreach ($lignes as $l) {
+    $cle = (string)($l['cat_nom'] ?? '') ?: '_autres';
+    if (!isset($formules[$cle])) $formules[$cle] = [
+        'nom'   => $l['cat_nom'] ?: 'Éléments demandés',
+        'icone' => $l['cat_icone'] ?: '🍽️',
+        'pers'  => (int)$l['quantite'],
+        'total' => (int)$l['cat_total'],
+        'plats' => [],
+    ];
+    $formules[$cle]['plats'][] = $l['designation'];
+  }
   $nouvelle = $cmd['statut']==='nouvelle';
 ?>
 <details class="cmd-card"<?= $nouvelle?' open':'' ?>>
@@ -246,10 +272,26 @@ admin_header('Commandes clients', 'commandes_client', $pdo, $settings);
     </p>
     <div class="cmd-detail">
       <div>
-        <h4>Plats demandés</h4>
-        <ul class="cmd-plats">
-          <?php foreach ($lignes as $l): ?><li><span class="cart-q"><?= (int)$l['quantite'] ?>×</span> <?= e($l['designation']) ?></li><?php endforeach; ?>
-        </ul>
+        <h4>Formules demandées</h4>
+        <?php foreach ($formules as $f): ?>
+        <div class="cmd-formule">
+          <div class="cf-tete">
+            <span class="cf-ico"><?= e($f['icone']) ?></span>
+            <strong><?= e($f['nom']) ?></strong>
+            <span class="cf-pers">👥 <?= $f['pers'] ?> pers.</span>
+            <?php /* Le client a-t-il pris la formule entière ou trié ? C'est la
+                     première chose à savoir avant de chiffrer. */
+                  if ($f['total'] > 0 && count($f['plats']) < $f['total']): ?>
+            <span class="badge cf-part"><?= count($f['plats']) ?>/<?= $f['total'] ?> éléments</span>
+            <?php elseif ($f['total'] > 0): ?>
+            <span class="badge badge-gold cf-part">formule complète</span>
+            <?php endif; ?>
+          </div>
+          <ul class="cmd-plats">
+            <?php foreach ($f['plats'] as $nomPlat): ?><li><?= e($nomPlat) ?></li><?php endforeach; ?>
+          </ul>
+        </div>
+        <?php endforeach; ?>
         <?php if (trim((string)$cmd['notes'])!==''): ?><p style="color:var(--ink-dim);font-size:13.5px"><strong>Précisions client :</strong> <?= e($cmd['notes']) ?></p><?php endif; ?>
       </div>
       <div style="display:flex;flex-direction:column;gap:10px">
